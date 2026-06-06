@@ -87,10 +87,11 @@ export default function MasterPageContent() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
-  const cloudReady = isPilotCloudConfigured();
+  const [cloudReady, setCloudReady] = useState(false);
 
   useEffect(() => {
     setAuthed(isMasterAuthenticated());
+    setCloudReady(isPilotCloudConfigured());
   }, []);
 
   const refresh = useCallback(async () => {
