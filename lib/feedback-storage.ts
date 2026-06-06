@@ -1,4 +1,5 @@
 import { getAllBuildingIds, isValidBuildingId } from "./buildings";
+import { savePilotFeedback } from "./pilot-cloud";
 import type { FeedbackSubmissionInput, PilotFeedback } from "./types";
 
 export const FEEDBACK_STORAGE_PREFIX = "forte-feedback";
@@ -166,6 +167,7 @@ export function saveFeedbackAndNotify(
   const feedback = buildFeedbackFromInput(input, buildingId, buildingName);
   saveFeedback(feedback, localStorage);
   notifyFeedbackUpdated(buildingId);
+  void savePilotFeedback(input, buildingId, buildingName);
   return feedback;
 }
 

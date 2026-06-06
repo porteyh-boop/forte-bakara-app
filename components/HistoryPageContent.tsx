@@ -6,6 +6,7 @@ import PageHeader from "@/components/PageHeader";
 import { useBuilding } from "@/components/BuildingProvider";
 import { useRuntimeBuildingContext } from "@/hooks/useRuntimeBuildingContext";
 import { isOpenFault } from "@/lib/fault-lifecycle";
+import { closePilotFaultByTicket } from "@/lib/pilot-cloud";
 import { closeFault } from "@/lib/report-storage";
 import type { Fault } from "@/lib/types";
 
@@ -22,6 +23,7 @@ export default function HistoryPageContent() {
   function handleCloseFault(fault: Fault) {
     setClosingFaultId(fault.id);
     closeFault(fault, buildingId);
+    void closePilotFaultByTicket(fault.ticketNumber, buildingId);
     refreshReports();
     setTimeout(() => setClosingFaultId(null), 400);
   }

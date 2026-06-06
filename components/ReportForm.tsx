@@ -18,6 +18,7 @@ import {
   REPORT_SAVED_HEADLINE,
   REPORT_SAVED_INFO,
 } from "@/lib/pilot-copy";
+import { savePilotFaultFromLocalFault } from "@/lib/pilot-cloud";
 import type { ReportImageAttachment } from "@/lib/report-image";
 
 function elevatorStatusLabel(status: string): string {
@@ -25,7 +26,7 @@ function elevatorStatusLabel(status: string): string {
 }
 
 export default function ReportForm() {
-  const { buildingId } = useBuilding();
+  const { buildingId, ctx } = useBuilding();
   const { elevators, ready } = useRuntimeBuildingContext();
   const [elevatorId, setElevatorId] = useState("");
   const [faultType, setFaultType] = useState("");
@@ -74,6 +75,7 @@ export default function ReportForm() {
     );
 
     saveSubmittedReport(fault, buildingId);
+    savePilotFaultFromLocalFault(fault, buildingId, ctx.building.name);
 
     setTimeout(() => {
       setTicketNumber(fault.ticketNumber ?? fault.id);

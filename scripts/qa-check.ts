@@ -87,6 +87,13 @@ import {
   MAX_STORED_IMAGE_BYTES,
   type ReportImageAttachment,
 } from "../lib/report-image";
+import {
+  getMasterCode,
+  isPilotCloudConfigured,
+  PILOT_FAULTS_TABLE,
+  PILOT_FEEDBACK_TABLE,
+  verifyMasterCode,
+} from "../lib/pilot-cloud";
 import type { FeedbackSubmissionInput } from "../lib/types";
 
 let passed = 0;
@@ -120,7 +127,7 @@ const defaultCtx = getBuildingDataset(DEFAULT_BUILDING_ID);
 
 // 1. Client has no expert imports on home (structural check)
 assert(faults.length === 10, "נתוני דוגמה: 10 תקלות קיימות (ברירת מחדל)");
-assert(getAllBuildingIds().length >= 5, "ריבוי בניינים: לפחות 5 בנייני דמו");
+assert(getAllBuildingIds().length === 6, "ריבוי בניינים: 6 בנייני פיילוט");
 assert(
   getLiveBuildingListItems({}, true).every((b) => b.name.length > 0),
   "ריבוי בניינים: לכל בניין יש שם"
@@ -128,7 +135,11 @@ assert(
 getAllBuildingIds().forEach((id) => {
   const ctx = getBuildingDataset(id);
   assert(ctx.building.elevatorCount > 0, `בניין ${id}: מעליות קיימות`);
-  assert(ctx.faults.length > 0, `בניין ${id}: תקלות קיימות`);
+  if (id === "ys34") {
+    assert(ctx.faults.length === 0, "בניין ys34: ללא תקלות התחלתיות");
+  } else {
+    assert(ctx.faults.length > 0, `בניין ${id}: תקלות קיימות`);
+  }
   assert(
     ctx.building.buildingCode.length > 0,
     `בניין ${id}: קוד בניין קיים`
@@ -160,6 +171,44 @@ assert(
 assert(
   getBuildingDataset("mn64").elevators[0].stations === 10,
   "פיילוט: מבצע נחשון — 10 תחנות"
+);
+
+const ys34Ctx = getBuildingDataset("ys34");
+assert(ys34Ctx.building.buildingCode === "YS34", "פיילוט: קוד YS34");
+assert(ys34Ctx.building.name === "ישורון 34", "פיילוט: שם ישורון 34");
+assert(ys34Ctx.building.city === "הוד השרון", "פיילוט: עיר הוד השרון");
+assert(
+  ys34Ctx.building.elevatorCompany === "אלקטרה",
+  "פיילוט: YS34 — חברת מעליות אלקטרה"
+);
+assert(
+  ys34Ctx.building.managementCompany === "ועד בית",
+  "פיילוט: YS34 — ועד בית"
+);
+assert(
+  ys34Ctx.building.contactPerson === "אלונה באום",
+  "פיילוט: YS34 — איש קשר"
+);
+assert(ys34Ctx.elevators.length === 1, "פיילוט: YS34 — מעלית אחת");
+assert(
+  ys34Ctx.elevators[0].id === "ys34-main" &&
+    ys34Ctx.elevators[0].name === "מעלית ראשית" &&
+    ys34Ctx.elevators[0].stations === 5 &&
+    ys34Ctx.elevators[0].status === "פעילה",
+  "פיילוט: YS34 — מעלית ראשית 5 תחנות פעילה"
+);
+assert(ys34Ctx.faults.length === 0, "פיילוט: YS34 — 0 תקלות");
+const ys34Stats = getClientStats(ys34Ctx);
+assert(ys34Stats.openFaults === 0, "פיילוט: YS34 — 0 תקלות פתוחות");
+assert(ys34Stats.closedFaults === 0, "פיילוט: YS34 — 0 תקלות סגורות");
+assert(ys34Stats.disabledElevators === 0, "פיילוט: YS34 — 0 מעליות מושבתות");
+assert(
+  getLiveBuildingListItems({}, true).some((b) => b.id === "ys34"),
+  "פיילוט: YS34 מופיע ברשימת בניינים"
+);
+assert(
+  fs.existsSync(path.join(process.cwd(), "supabase/migrations/002_seed_pilot_buildings.sql")),
+  "פיילוט: seed עתידי Supabase ל-YS34 קיים"
 );
 
 // 2. Role gating (דמו ציבורי = client)
@@ -1270,6 +1319,110 @@ assert(
   REPORT_PAGE_SUBTITLE.includes("יישמר במערכת"),
   "פיילוט UX: נוסח כותרת משנה תקין"
 );
+
+// פיילוט ענן — Supabase מינימלי + /master
+assert(
+  fs.existsSync(path.join(process.cwd(), "lib/pilot-cloud.ts")),
+  "ענן פיילוט: lib/pilot-cloud.ts קיים"
+);
+assert(
+  fs.existsSync(path.join(process.cwd(), "supabase/migrations/001_pilot_tables.sql")),
+  "ענן פיילוט: migration SQL קיים"
+);
+assert(
+  fs.existsSync(path.join(process.cwd(), "app/master/page.tsx")),
+  "ענן פיילוט: מסך /master קיים"
+);
+assert(
+  PILOT_FAULTS_TABLE === "pilot_faults" &&
+    PILOT_FEEDBACK_TABLE === "pilot_feedback",
+  "ענן פיילוט: שמות טבלאות תקינים"
+);
+assert(
+  typeof isPilotCloudConfigured() === "boolean",
+  "ענן פיילוט: isPilotCloudConfigured מחזיר boolean"
+);
+assert(
+  !process.env.NEXT_PUBLIC_SUPABASE_URL || isPilotCloudConfigured(),
+  "ענן פיילוט: כאשר Supabase מוגדר — isPilotCloudConfigured פעיל"
+);
+
+const reportFormCloudSource = fs.readFileSync(
+  path.join(process.cwd(), "components/ReportForm.tsx"),
+  "utf8"
+);
+assert(
+  reportFormCloudSource.includes("saveSubmittedReport") &&
+    reportFormCloudSource.includes("savePilotFaultFromLocalFault"),
+  "ענן פיילוט: דיווח נשמר מקומית + נשלח לענן"
+);
+
+const feedbackStorageSource = fs.readFileSync(
+  path.join(process.cwd(), "lib/feedback-storage.ts"),
+  "utf8"
+);
+assert(
+  feedbackStorageSource.includes("saveFeedback") &&
+    feedbackStorageSource.includes("savePilotFeedback"),
+  "ענן פיילוט: משוב נשמר מקומית + נשלח לענן"
+);
+
+const pilotCloudSource = fs.readFileSync(
+  path.join(process.cwd(), "lib/pilot-cloud.ts"),
+  "utf8"
+);
+assert(
+  pilotCloudSource.includes("savePilotFault") &&
+    pilotCloudSource.includes("savePilotFeedback") &&
+    pilotCloudSource.includes("getAllPilotFaults") &&
+    pilotCloudSource.includes("getAllPilotFeedback") &&
+    pilotCloudSource.includes("closePilotFault") &&
+    pilotCloudSource.includes("reopenPilotFault") &&
+    pilotCloudSource.includes("deletePilotFault") &&
+    pilotCloudSource.includes("resetPilotCloudData"),
+  "ענן פיילוט: כל פונקציות pilot-cloud מוגדרות"
+);
+assert(
+  pilotCloudSource.includes("if (!client) return null") ||
+    pilotCloudSource.includes("if (!client) return false") ||
+    pilotCloudSource.includes("if (!client) return []"),
+  "ענן פיילוט: ללא Supabase — פונקציות לא קורסות"
+);
+
+const masterSource = fs.readFileSync(
+  path.join(process.cwd(), "components/MasterPageContent.tsx"),
+  "utf8"
+);
+assert(
+  masterSource.includes("verifyMasterCode") &&
+    masterSource.includes("קוד גישה שגוי"),
+  "ענן פיילוט: /master דורש קוד — שגוי חוסם"
+);
+assert(
+  masterSource.includes("setMasterAuthenticated(true)"),
+  "ענן פיילוט: קוד נכון מאפשר צפייה"
+);
+assert(
+  masterSource.includes("getAllPilotFaults") &&
+    masterSource.includes("getAllPilotFeedback") &&
+    masterSource.includes("resetPilotCloudData"),
+  "ענן פיילוט: מסך master מציג ומנהל נתוני ענן"
+);
+
+const bottomNavMasterCheck = fs.readFileSync(
+  path.join(process.cwd(), "components/BottomNav.tsx"),
+  "utf8"
+);
+assert(
+  !bottomNavMasterCheck.includes("/master"),
+  "ענן פיילוט: אין קישור ל-/master בתפריט לקוח"
+);
+
+const masterCode = getMasterCode();
+if (masterCode) {
+  assert(verifyMasterCode(masterCode), "ענן פיילוט: verifyMasterCode — קוד מ-env תקין");
+  assert(!verifyMasterCode("wrong-code-xyz"), "ענן פיילוט: קוד שגוי נדחה");
+}
 
 // Branding scan
 const SCAN_DIRS = ["app", "components", "lib", "public"];

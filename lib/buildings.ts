@@ -639,6 +639,37 @@ const yk20Faults: Fault[] = [
   },
 ];
 
+// ─── 6. ישורון 34, הוד השרון ───────────────────────────────────────────────
+
+const ys34Building: Building = {
+  buildingCode: "YS34",
+  name: "ישורון 34",
+  address: "ישורון 34, הוד השרון",
+  city: "הוד השרון",
+  elevatorCount: 1,
+  elevatorCompany: "אלקטרה",
+  contactPerson: "אלונה באום",
+  phone: "דמו",
+  managementCompany: "ועד בית",
+  units: 24,
+  contractNumber: "DEMO-YS34-001",
+  serviceLevel: "כסף",
+  serviceStartDate: "2025-01-01",
+  lastInspectionDate: "2026-04-01",
+};
+
+const ys34Elevators: Elevator[] = [
+  {
+    id: "ys34-main",
+    name: "מעלית ראשית",
+    status: "פעילה",
+    stations: 5,
+    floor: "5 תחנות",
+  },
+];
+
+const ys34Faults: Fault[] = [];
+
 // ─── מאגר בניינים ──────────────────────────────────────────────────────────
 
 const datasets: Record<string, BuildingDataContext> = {
@@ -693,6 +724,13 @@ const datasets: Record<string, BuildingDataContext> = {
       "YK20-3": 0,
       "YK20-4": 0,
     },
+  },
+  ys34: {
+    id: "ys34",
+    building: ys34Building,
+    elevators: ys34Elevators,
+    faults: ys34Faults,
+    activeFaultDowntime: {},
   },
 };
 
