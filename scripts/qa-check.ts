@@ -1379,8 +1379,13 @@ assert(
     pilotCloudSource.includes("closePilotFault") &&
     pilotCloudSource.includes("reopenPilotFault") &&
     pilotCloudSource.includes("deletePilotFault") &&
-    pilotCloudSource.includes("resetPilotCloudData"),
+    pilotCloudSource.includes("resetPilotCloudData") &&
+    pilotCloudSource.includes("resetPilotCloudDataByBuilding"),
   "ענן פיילוט: כל פונקציות pilot-cloud מוגדרות"
+);
+assert(
+  pilotCloudSource.includes('.eq("building_id", buildingId)'),
+  "ענן פיילוט: איפוס לפי בניין מסנן building_id בלבד"
 );
 assert(
   pilotCloudSource.includes("if (!client) return null") ||
@@ -1405,8 +1410,14 @@ assert(
 assert(
   masterSource.includes("getAllPilotFaults") &&
     masterSource.includes("getAllPilotFeedback") &&
-    masterSource.includes("resetPilotCloudData"),
+    masterSource.includes("resetPilotCloudData") &&
+    masterSource.includes("resetPilotCloudDataByBuilding"),
   "ענן פיילוט: מסך master מציג ומנהל נתוני ענן"
+);
+assert(
+  masterSource.includes("איפוס לבניין הנבחר") &&
+    masterSource.includes("נתוני בניינים אחרים לא יושפעו"),
+  "ענן פיילוט: /master — איפוס לפי בניין עם אישור ברור"
 );
 
 const bottomNavMasterCheck = fs.readFileSync(

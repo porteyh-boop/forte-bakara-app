@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { isValidBuildingId } from "./buildings";
 import { getOrCreatePilotDeviceId } from "./pilot-device";
 import type { Fault } from "./types";
 import type { FeedbackSubmissionInput } from "./types";
@@ -335,6 +336,41 @@ export async function resetPilotCloudData(): Promise<boolean> {
 
   if (feedbackError) {
     console.warn("[pilot-cloud] reset feedback failed:", feedbackError.message);
+    return false;
+  }
+
+  return true;
+}
+
+export async function resetPilotCloudDataByBuilding(
+  buildingId: string
+): Promise<boolean> {
+  const client = getPilotSupabaseClient();
+  if (!client || !isValidBuildingId(buildingId)) return false;
+
+  const { error: faultsError } = await client
+    .from(PILOT_FAULTS_TABLE)
+    .delete()
+    .eq("building_id", buildingId);
+
+  if (faultsError) {
+    console.warn(
+      "[pilot-cloud] reset faults by building failed:",
+      faultsError.message
+    );
+    return false;
+  }
+
+  const { error: feedbackError } = await client
+    .from(PILOT_FEEDBACK_TABLE)
+    .delete()
+    .eq("building_id", buildingId);
+
+  if (feedbackError) {
+    console.warn(
+      "[pilot-cloud] reset feedback by building failed:",
+      feedbackError.message
+    );
     return false;
   }
 

@@ -13,6 +13,7 @@ import {
   logPilotCloudConfigDebug,
   reopenPilotFault,
   resetPilotCloudData,
+  resetPilotCloudDataByBuilding,
   setMasterAuthenticated,
   verifyMasterCode,
   type PilotCloudFault,
@@ -89,6 +90,9 @@ export default function MasterPageContent() {
   const [dateTo, setDateTo] = useState("");
 
   const [cloudReady, setCloudReady] = useState(false);
+  const [resetBuildingId, setResetBuildingId] = useState(
+    () => getAllBuildingIds()[0] ?? ""
+  );
 
   useEffect(() => {
     setAuthed(isMasterAuthenticated());
@@ -176,13 +180,42 @@ export default function MasterPageContent() {
   async function handleReset() {
     if (
       !window.confirm(
-        "לאפס את כל נתוני הפיילוט בענן? פעולה זו תמחק את כל הדיווחים והמשובים."
+        "לאפס את כל נתוני הפיילוט בענן? פעולה זו תמחק את כל הדיווחים והמשובים מכל הבניינים."
       )
     ) {
       return;
     }
     setLoading(true);
     await resetPilotCloudData();
+    await refresh();
+  }
+
+  async function handleResetByBuilding() {
+    if (!resetBuildingId) return;
+
+    const ctx = getBuildingDataset(resetBuildingId);
+    const buildingLabel = `${ctx.building.name} (${ctx.building.buildingCode})`;
+    const faultCount = faults.filter((f) => f.building_id === resetBuildingId).length;
+    const feedbackCount = feedback.filter(
+      (f) => f.building_id === resetBuildingId
+    ).length;
+
+    if (
+      !window.confirm(
+        `לאפס נתוני פיילוט בענן לבניין "${buildingLabel}"?\n\n` +
+          `יימחקו לצמיתות מ-Supabase:\n` +
+          `• ${faultCount} דיווחים (pilot_faults)\n` +
+          `• ${feedbackCount} משובים (pilot_feedback)\n\n` +
+          `רק רשומות שבהן building_id = "${resetBuildingId}".\n` +
+          `נתוני בניינים אחרים לא יושפעו.\n\n` +
+          `האם להמשיך?`
+      )
+    ) {
+      return;
+    }
+
+    setLoading(true);
+    await resetPilotCloudDataByBuilding(resetBuildingId);
     await refresh();
   }
 
@@ -274,7 +307,7 @@ export default function MasterPageContent() {
               disabled={!cloudReady || loading}
               className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
             >
-              איפוס נתוני פיילוט בענן
+              איפוס כל הבניינים
             </button>
             <button
               type="button"
@@ -285,6 +318,32 @@ export default function MasterPageContent() {
               className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-text hover:bg-gray-50"
             >
               יציאה
+            </button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-100">
+            <p className="text-xs font-semibold text-gray-text w-full">
+              איפוס לפי בניין (Supabase בלבד)
+            </p>
+            <select
+              value={resetBuildingId}
+              onChange={(e) => setResetBuildingId(e.target.value)}
+              className="form-input flex-1 min-w-[12rem]"
+              disabled={!cloudReady || loading}
+            >
+              {buildingOptions.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => void handleResetByBuilding()}
+              disabled={!cloudReady || loading || !resetBuildingId}
+              className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
+            >
+              איפוס לבניין הנבחר
             </button>
           </div>
         </div>
