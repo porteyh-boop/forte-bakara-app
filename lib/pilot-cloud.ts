@@ -72,6 +72,18 @@ export function isPilotCloudConfigured(): boolean {
   return Boolean(getSupabaseUrl() && getSupabaseAnonKey());
 }
 
+/** לוג זמני לדיבוג — לא מדפיס ערכי מפתחות */
+export function logPilotCloudConfigDebug(): void {
+  const hasUrl = Boolean(getSupabaseUrl());
+  const hasKey = Boolean(getSupabaseAnonKey());
+  const configured = isPilotCloudConfigured();
+  console.log("[forte-pilot-cloud-debug]", {
+    NEXT_PUBLIC_SUPABASE_URL: hasUrl ? "קיים" : "חסר",
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: hasKey ? "קיים" : "חסר",
+    isPilotCloudConfigured: configured,
+  });
+}
+
 export function getPilotSupabaseClient(): SupabaseClient | null {
   if (supabaseClient !== undefined) return supabaseClient;
   const url = getSupabaseUrl();

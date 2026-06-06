@@ -10,6 +10,7 @@ import {
   isMasterAuthenticated,
   isMasterCodeConfigured,
   isPilotCloudConfigured,
+  logPilotCloudConfigDebug,
   reopenPilotFault,
   resetPilotCloudData,
   setMasterAuthenticated,
@@ -91,6 +92,7 @@ export default function MasterPageContent() {
 
   useEffect(() => {
     setAuthed(isMasterAuthenticated());
+    logPilotCloudConfigDebug();
     setCloudReady(isPilotCloudConfigured());
   }, []);
 
