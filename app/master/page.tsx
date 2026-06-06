@@ -6,6 +6,9 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
+/** מסך ניהול פיילוט פנימי — /master */
+export const dynamic = "force-static";
+
 export default function MasterPage() {
   return <MasterPageContent />;
 }
