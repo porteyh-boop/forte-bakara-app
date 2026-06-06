@@ -1,0 +1,236 @@
+.print-page {
+  background: #f4f5f7;
+  min-height: 100vh;
+}
+
+.print-report {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 1.5rem;
+  padding-bottom: 3rem;
+  background: #fff;
+  font-family: var(--font-heebo), Arial, sans-serif;
+  color: #0d1b3e;
+}
+
+.print-header {
+  background: #0d1b3e;
+  color: #fff;
+  padding: 1.5rem;
+  border-radius: 0 0 1rem 1rem;
+  margin: -1.5rem -1.5rem 1.25rem;
+}
+
+.print-forte {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #c9a962;
+  letter-spacing: 0.25em;
+  margin: 0;
+}
+
+.print-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0.5rem 0 0;
+}
+
+.print-meta {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(201, 169, 98, 0.3);
+}
+
+.print-meta-label {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.55);
+  margin: 0.5rem 0 0.15rem;
+}
+
+.print-meta-value {
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin: 0;
+  color: #fff;
+}
+
+.print-meta-sub {
+  font-size: 0.8rem;
+  color: #c9a962;
+  margin: 0.15rem 0 0;
+}
+
+.print-meta-date {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin: 0.75rem 0 0;
+}
+
+.print-badge {
+  background: #dc2626;
+  color: #fff;
+  text-align: center;
+  font-size: 0.85rem;
+  font-weight: 700;
+  padding: 0.6rem 1rem;
+  border-radius: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.print-section {
+  margin-bottom: 1.25rem;
+  break-inside: avoid;
+}
+
+.print-section-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #0d1b3e;
+  border-bottom: 2px solid #c9a962;
+  padding-bottom: 0.35rem;
+  margin-bottom: 0.5rem;
+}
+
+.print-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid #f4f5f7;
+  font-size: 0.875rem;
+}
+
+.print-label {
+  color: #6b7280;
+}
+
+.print-value {
+  font-weight: 600;
+  color: #0d1b3e;
+}
+
+.print-note {
+  font-size: 0.8rem;
+  color: #0d1b3e;
+  margin-top: 0.5rem;
+  line-height: 1.5;
+}
+
+.print-empty {
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+.print-alert {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+}
+
+.print-insight {
+  background: #f4f5f7;
+  border-right: 3px solid #c9a962;
+  padding: 0.6rem 0.75rem;
+  margin-bottom: 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.print-insight-cat {
+  font-size: 0.7rem;
+  color: #6b7280;
+  display: block;
+  margin-bottom: 0.2rem;
+}
+
+.print-list {
+  margin: 0.5rem 0;
+  padding-right: 1.25rem;
+  font-size: 0.85rem;
+}
+
+.print-actions {
+  margin: 0;
+  padding-right: 1.25rem;
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.print-actions li {
+  margin-bottom: 0.4rem;
+}
+
+.print-footer {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e2e4e9;
+  text-align: center;
+  font-size: 0.8rem;
+  color: #0d1b3e;
+}
+
+.print-signature-greeting {
+  margin: 0;
+  color: #6b7280;
+}
+
+.print-signature-name {
+  margin: 0.35rem 0 0;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.print-signature-title {
+  margin: 0.15rem 0 0;
+  color: #6b7280;
+  font-size: 0.8rem;
+}
+
+.print-signature-forte {
+  margin: 0.75rem 0 0;
+  color: #c9a962;
+  font-weight: 800;
+  letter-spacing: 0.25em;
+  font-size: 1rem;
+}
+
+.print-badge-inline {
+  color: #dc2626;
+  font-weight: 700;
+  margin-top: 1rem;
+  font-size: 0.75rem;
+}
+
+@media print {
+  body {
+    background: #fff !important;
+  }
+
+  nav {
+    display: none !important;
+  }
+
+  .print-toolbar {
+    display: none !important;
+  }
+
+  .print-page {
+    background: #fff;
+  }
+
+  .print-report {
+    max-width: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  .print-header {
+    margin: 0 0 1rem;
+    border-radius: 0;
+  }
+}
