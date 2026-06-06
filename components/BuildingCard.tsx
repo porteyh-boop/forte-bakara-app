@@ -1,21 +1,24 @@
 import Link from "next/link";
 import StatusBadge from "./StatusBadge";
+import { getBuildingAggregateStatus } from "@/lib/elevator-status";
 import type { Building, Elevator } from "@/lib/types";
 
 interface BuildingCardProps {
   building: Building;
   elevators: Elevator[];
+  openFaultCount?: number;
+  closedFaultCount?: number;
 }
 
-export default function BuildingCard({ building, elevators }: BuildingCardProps) {
+export default function BuildingCard({
+  building,
+  elevators,
+  openFaultCount,
+  closedFaultCount,
+}: BuildingCardProps) {
   const activeCount = elevators.filter((e) => e.status === "פעילה").length;
-  const hasDisabled = elevators.some((e) => e.status === "מושבתת");
-  const hasInTreatment = elevators.some((e) => e.status === "בטיפול");
-  const buildingStatus = hasDisabled
-    ? ("מושבתת" as const)
-    : hasInTreatment
-      ? ("בטיפול" as const)
-      : ("פעילה" as const);
+  const disabledCount = elevators.filter((e) => e.status === "מושבתת").length;
+  const buildingStatus = getBuildingAggregateStatus(elevators);
 
   return (
     <Link
@@ -63,6 +66,11 @@ export default function BuildingCard({ building, elevators }: BuildingCardProps)
             <span className="font-semibold text-emerald-600">{activeCount}</span>
             <span>פעילות</span>
           </div>
+          <div className="w-px h-4 bg-gray-200" />
+          <div className="flex items-center gap-1.5 text-sm text-navy/70">
+            <span className="font-semibold text-red-600">{disabledCount}</span>
+            <span>מושבתות</span>
+          </div>
           <div className="mr-auto">
             <StatusBadge
               status={buildingStatus}
@@ -71,6 +79,20 @@ export default function BuildingCard({ building, elevators }: BuildingCardProps)
             />
           </div>
         </div>
+        {(openFaultCount != null || closedFaultCount != null) && (
+          <div className="flex items-center gap-4 mt-2 text-xs text-gray-text">
+            {openFaultCount != null && (
+              <span>
+                <strong className="text-navy">{openFaultCount}</strong> פתוחות
+              </span>
+            )}
+            {closedFaultCount != null && (
+              <span>
+                <strong className="text-navy">{closedFaultCount}</strong> סגורות
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </Link>
   );

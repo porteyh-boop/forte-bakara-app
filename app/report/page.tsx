@@ -1,12 +1,13 @@
 import PageHeader from "@/components/PageHeader";
 import ReportForm from "@/components/ReportForm";
+import { REPORT_PAGE_SUBTITLE } from "@/lib/pilot-copy";
 
 export default function ReportPage() {
   return (
     <div className="min-h-screen bg-gray-light">
       <PageHeader
         title="דיווח תקלה"
-        subtitle="מלאו את פרטי התקלה — הדיווח יועבר ישירות לחברת המעליות"
+        subtitle={REPORT_PAGE_SUBTITLE}
         badge="דיווח חדש"
       />
 

@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Heebo } from "next/font/google";
+import ActiveBuildingBar from "@/components/ActiveBuildingBar";
 import AppFooter from "@/components/AppFooter";
+import { BuildingProvider } from "@/components/BuildingProvider";
 import BottomNav from "@/components/BottomNav";
 import {
   BRAND_APP,
@@ -67,9 +69,12 @@ export default function RootLayout({
   return (
     <html lang="he" dir="rtl" className={`${heebo.variable} h-full`}>
       <body className="min-h-full antialiased">
-        {children}
-        <AppFooter />
-        <BottomNav />
+        <BuildingProvider>
+          <ActiveBuildingBar />
+          {children}
+          <AppFooter />
+          <BottomNav />
+        </BuildingProvider>
       </body>
     </html>
   );

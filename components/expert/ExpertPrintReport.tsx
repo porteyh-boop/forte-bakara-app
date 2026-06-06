@@ -37,7 +37,7 @@ function Row({ label, value }: { label: string; value: string | number }) {
 }
 
 export default function ExpertPrintReport({ data }: ExpertPrintReportProps) {
-  const { building: b, faultSummary, analytics: a } = data;
+  const { building: b, faultSummary, lifecycleStats, analytics: a, feedbackSummary: fb } = data;
   const recurringElevators = a.recurringByElevator.filter((e) => e.isRecurring);
   const recurringTypes = a.recurringByType.filter((t) => t.isRecurring);
 
@@ -70,6 +70,39 @@ export default function ExpertPrintReport({ data }: ExpertPrintReportProps) {
         <Row label="סה״כ תקלות" value={faultSummary.total} />
         <Row label="תקלות פתוחות" value={faultSummary.open} />
         <Row label="תקלות סגורות" value={faultSummary.closed} />
+      </Section>
+
+      <Section title="סיכום משובי פיילוט">
+        <Row label="מספר משובים" value={fb.total} />
+        <Row
+          label="דירוג ממוצע"
+          value={fb.total > 0 ? fb.avgRating : "—"}
+        />
+        <Row
+          label="שימוש שוטף — כן / אולי / לא"
+          value={`${fb.wouldUseCounts.כן} / ${fb.wouldUseCounts.אולי} / ${fb.wouldUseCounts.לא}`}
+        />
+        <Row
+          label="המלצה לבניינים נוספים — כן / אולי / לא"
+          value={`${fb.recommendCounts.כן} / ${fb.recommendCounts.אולי} / ${fb.recommendCounts.לא}`}
+        />
+      </Section>
+
+      <Section title="מחזור חיים וסטטיסטיקות">
+        <Row
+          label="זמן טיפול ממוצע"
+          value={`${lifecycleStats.avgTreatmentHours} שעות`}
+        />
+        <Row
+          label="זמן השבתה ממוצע"
+          value={`${lifecycleStats.avgDowntimeHours} שעות`}
+        />
+        <Row label="אחוז זמינות" value={`${lifecycleStats.availabilityPercent}%`} />
+        <Row label="נסגרו החודש" value={lifecycleStats.closedThisMonth} />
+        <Row
+          label="נפתרו תוך 24 שעות"
+          value={`${lifecycleStats.resolvedWithin24hPercent}%`}
+        />
       </Section>
 
       <Section title="מדדים עיקריים">

@@ -1,6 +1,8 @@
 import { getExpertAnalytics } from "./analytics";
-import { building, faults } from "./data";
-import type { ExpertAnalytics } from "./types";
+import { getFeedbackStats } from "./feedback-stats";
+import { getFaultLifecycleStats } from "./fault-stats";
+import { DEFAULT_BUILDING_ID, getBuildingDataset } from "./buildings";
+import type { BuildingDataContext, ExpertAnalytics, PilotFeedback } from "./types";
 
 export interface ExpertPdfReportData {
   generatedAt: string;
@@ -17,13 +19,24 @@ export interface ExpertPdfReportData {
     open: number;
     closed: number;
   };
+  lifecycleStats: ReturnType<typeof getFaultLifecycleStats>;
   analytics: ExpertAnalytics;
+  feedbackSummary: ReturnType<typeof getFeedbackStats>;
 }
 
-export function getExpertPdfData(): ExpertPdfReportData {
-  const analytics = getExpertAnalytics();
-  const open = faults.filter((f) => f.status !== "טופלה").length;
-  const closed = faults.filter((f) => f.status === "טופלה").length;
+export function getExpertPdfData(
+  ctxOrId?: BuildingDataContext | string,
+  feedback: PilotFeedback[] = []
+): ExpertPdfReportData {
+  const ctx =
+    typeof ctxOrId === "string"
+      ? getBuildingDataset(ctxOrId)
+      : ctxOrId ?? getBuildingDataset(DEFAULT_BUILDING_ID);
+  const analytics = getExpertAnalytics(ctx);
+  const lifecycleStats = getFaultLifecycleStats(ctx, ctx.faults);
+  const open = lifecycleStats.openFaults;
+  const closed = lifecycleStats.closedFaults;
+  const feedbackSummary = getFeedbackStats(feedback);
 
   return {
     generatedAt: new Intl.DateTimeFormat("he-IL", {
@@ -34,18 +47,20 @@ export function getExpertPdfData(): ExpertPdfReportData {
       minute: "2-digit",
     }).format(new Date()),
     building: {
-      name: building.name,
-      address: building.address,
-      city: building.city,
-      elevatorCount: building.elevatorCount,
-      elevatorCompany: building.elevatorCompany,
-      managementCompany: building.managementCompany,
+      name: ctx.building.name,
+      address: ctx.building.address,
+      city: ctx.building.city,
+      elevatorCount: ctx.building.elevatorCount,
+      elevatorCompany: ctx.building.elevatorCompany,
+      managementCompany: ctx.building.managementCompany,
     },
     faultSummary: {
-      total: faults.length,
+      total: ctx.faults.length,
       open,
       closed,
     },
+    lifecycleStats,
     analytics,
+    feedbackSummary,
   };
 }

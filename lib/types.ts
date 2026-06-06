@@ -2,7 +2,7 @@ export type UserRole = "client" | "expert";
 
 export type Status = "פעילה" | "בטיפול" | "מושבתת";
 
-export type FaultStatus = Status | "טופלה";
+export type FaultStatus = Status | "פתוחה" | "סגורה" | "טופלה";
 
 export type FaultType =
   | "תקועה בין קומות"
@@ -22,10 +22,13 @@ export interface Elevator {
   id: string;
   name: string;
   status: Status;
+  /** מספר תחנות */
+  stations: number;
   floor?: string;
 }
 
 export interface Building {
+  buildingCode: string;
   name: string;
   address: string;
   city: string;
@@ -35,10 +38,42 @@ export interface Building {
   phone: string;
   managementCompany: string;
   units: number;
+  /** שדות עתידיים — לא מוצגים כרגע בממשק */
+  contractNumber?: string;
+  serviceLevel?: string;
+  serviceStartDate?: string;
+  lastInspectionDate?: string;
+}
+
+export interface BuildingDataContext {
+  id: string;
+  building: Building;
+  elevators: Elevator[];
+  faults: Fault[];
+  activeFaultDowntime: Record<string, number>;
+}
+
+export type BuildingStatusTone = "good" | "warning" | "alert";
+
+export interface BuildingListItem {
+  id: string;
+  buildingCode: string;
+  name: string;
+  address: string;
+  city: string;
+  elevatorCount: number;
+  faultCount: number;
+  openFaultCount: number;
+  closedFaultCount: number;
+  disabledElevatorCount: number;
+  buildingStatus: Status;
+  statusLabel: string;
+  statusTone: BuildingStatusTone;
 }
 
 export interface Fault {
   id: string;
+  ticketNumber?: string;
   elevatorId: string;
   elevatorName: string;
   type: FaultType;
@@ -48,7 +83,19 @@ export interface Fault {
   reportedAt: string;
   reportedBy?: string;
   resolvedAt?: string;
+  /** משך זמן מפתיחה עד סגירה (שעות) */
+  durationHours?: number;
   downtimeHours?: number;
+  isUserSubmitted?: boolean;
+  /** נשמר בדיווחי משתמש — האם המעלית מושבתת */
+  isDisabled?: boolean;
+  /** תמונה מצורפת לדיווח — נשמרת ב-localStorage כ-data URL */
+  image?: {
+    dataUrl: string;
+    name: string;
+    sizeBytes: number;
+    mimeType: string;
+  };
 }
 
 export interface ExpertInsight {
@@ -176,4 +223,49 @@ export interface ExpertAnalytics {
   alerts: AnomalyAlert[];
   riskAssessment: RiskAssessment;
   actions: string[];
+}
+
+export type FeedbackSenderRole =
+  | "ועד בית"
+  | "חברת ניהול"
+  | "אחזקה"
+  | "דייר"
+  | "אחר";
+
+export type FeedbackRating = 1 | 2 | 3 | 4 | 5;
+
+export type FeedbackYesMaybeNo = "כן" | "אולי" | "לא";
+
+export interface PilotFeedback {
+  id: string;
+  buildingId: string;
+  buildingName: string;
+  senderName: string;
+  senderRole: FeedbackSenderRole;
+  rating: FeedbackRating;
+  wouldUseRegularly: FeedbackYesMaybeNo;
+  unclearOrMissing: string;
+  expectedFeature: string;
+  wouldRecommend: FeedbackYesMaybeNo;
+  createdAt: string;
+}
+
+export interface FeedbackSubmissionInput {
+  senderName: string;
+  senderRole: FeedbackSenderRole;
+  rating: FeedbackRating;
+  wouldUseRegularly: FeedbackYesMaybeNo;
+  unclearOrMissing: string;
+  expectedFeature: string;
+  wouldRecommend: FeedbackYesMaybeNo;
+}
+
+export interface FeedbackStats {
+  total: number;
+  avgRating: number;
+  wouldUseYes: number;
+  wouldRecommendYes: number;
+  wouldUseCounts: Record<FeedbackYesMaybeNo, number>;
+  recommendCounts: Record<FeedbackYesMaybeNo, number>;
+  recent: PilotFeedback[];
 }

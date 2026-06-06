@@ -1,12 +1,9 @@
-import {
-  ACTIVE_FAULT_DOWNTIME,
-  building,
-  elevators,
-  faults,
-} from "./data";
+import { isClosedFault, isOpenFault } from "./fault-lifecycle";
+import { DEFAULT_BUILDING_ID, getBuildingDataset } from "./buildings";
 import { formatHours, safePercent } from "./utils";
 import type {
   AnomalyAlert,
+  BuildingDataContext,
   DowntimeAnalysis,
   ElevatorAvailability,
   ExpertAnalytics,
@@ -26,6 +23,12 @@ import type {
   TrendDirection,
   InsightSeverity,
 } from "./types";
+
+function resolveCtx(ctxOrId?: BuildingDataContext | string): BuildingDataContext {
+  if (typeof ctxOrId === "string") return getBuildingDataset(ctxOrId);
+  if (ctxOrId) return ctxOrId;
+  return getBuildingDataset(DEFAULT_BUILDING_ID);
+}
 
 const RESPONSE_TARGET_HOURS = 2;
 const ANALYSIS_WINDOW_DAYS = 60;
@@ -56,9 +59,9 @@ function getResponseHours(fault: Fault): number {
   return priorityHours[fault.priority];
 }
 
-function getDowntimeHours(fault: Fault): number {
+function getDowntimeHours(fault: Fault, ctx: BuildingDataContext): number {
   if (fault.downtimeHours !== undefined) return fault.downtimeHours;
-  if (fault.status === "מושבתת") return ACTIVE_FAULT_DOWNTIME[fault.id] ?? 6;
+  if (fault.status === "מושבתת") return ctx.activeFaultDowntime[fault.id] ?? 6;
   if (fault.status === "בטיפול") return 2;
   return 0;
 }
@@ -74,17 +77,19 @@ function trendFromChange(change: number): TrendDirection {
   return "יציב";
 }
 
-export function getRecurringFaultsByElevator(): RecurringElevatorFault[] {
-  const total = faults.length;
+export function getRecurringFaultsByElevator(
+  ctx: BuildingDataContext
+): RecurringElevatorFault[] {
+  const total = ctx.faults.length;
   const byElevator = new Map<string, Fault[]>();
 
-  for (const fault of faults) {
+  for (const fault of ctx.faults) {
     const list = byElevator.get(fault.elevatorId) ?? [];
     list.push(fault);
     byElevator.set(fault.elevatorId, list);
   }
 
-  return elevators.map((elevator) => {
+  return ctx.elevators.map((elevator) => {
     const elevatorFaults = byElevator.get(elevator.id) ?? [];
     const typeCounts = new Map<FaultType, number>();
     for (const f of elevatorFaults) {
@@ -108,11 +113,13 @@ export function getRecurringFaultsByElevator(): RecurringElevatorFault[] {
   }).sort((a, b) => b.faultCount - a.faultCount);
 }
 
-export function getRecurringFaultsByType(): RecurringTypeFault[] {
-  const total = faults.length;
+export function getRecurringFaultsByType(
+  ctx: BuildingDataContext
+): RecurringTypeFault[] {
+  const total = ctx.faults.length;
   const byType = new Map<FaultType, Fault[]>();
 
-  for (const fault of faults) {
+  for (const fault of ctx.faults) {
     const list = byType.get(fault.type) ?? [];
     list.push(fault);
     byType.set(fault.type, list);
@@ -129,16 +136,18 @@ export function getRecurringFaultsByType(): RecurringTypeFault[] {
     .sort((a, b) => b.count - a.count);
 }
 
-export function getFaultTypeBreakdown(): FaultTypeBreakdown[] {
-  return getRecurringFaultsByType().map(({ type, count, percentage }) => ({
+export function getFaultTypeBreakdown(
+  ctx: BuildingDataContext
+): FaultTypeBreakdown[] {
+  return getRecurringFaultsByType(ctx).map(({ type, count, percentage }) => ({
     type,
     count,
     percentage,
   }));
 }
 
-export function getAverageDowntime(): DowntimeAnalysis {
-  const allDowntime = faults.map(getDowntimeHours);
+export function getAverageDowntime(ctx: BuildingDataContext): DowntimeAnalysis {
+  const allDowntime = ctx.faults.map((f) => getDowntimeHours(f, ctx));
   const totalHours = allDowntime.reduce((s, h) => s + h, 0);
   const withDowntime = allDowntime.filter((h) => h > 0);
   const averageHours =
@@ -147,16 +156,19 @@ export function getAverageDowntime(): DowntimeAnalysis {
       : 0;
 
   const now = new Date();
-  const monthFaults = faults.filter((f) => {
+  const monthFaults = ctx.faults.filter((f) => {
     const d = new Date(f.reportedAt);
     return (
       d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
     );
   });
-  const monthHours = monthFaults.reduce((s, f) => s + getDowntimeHours(f), 0);
+  const monthHours = monthFaults.reduce(
+    (s, f) => s + getDowntimeHours(f, ctx),
+    0
+  );
 
   const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const prevMonthFaults = faults.filter((f) => {
+  const prevMonthFaults = ctx.faults.filter((f) => {
     const d = new Date(f.reportedAt);
     return (
       d.getMonth() === prevMonth.getMonth() &&
@@ -164,13 +176,13 @@ export function getAverageDowntime(): DowntimeAnalysis {
     );
   });
   const prevMonthHours = prevMonthFaults.reduce(
-    (s, f) => s + getDowntimeHours(f),
+    (s, f) => s + getDowntimeHours(f, ctx),
     0
   );
   const trendPercent = percentChange(monthHours, prevMonthHours);
 
-  const longest = faults
-    .map((f) => ({ fault: f, hours: getDowntimeHours(f) }))
+  const longest = ctx.faults
+    .map((f) => ({ fault: f, hours: getDowntimeHours(f, ctx) }))
     .sort((a, b) => b.hours - a.hours)[0];
 
   const longestEvent =
@@ -188,8 +200,10 @@ export function getAverageDowntime(): DowntimeAnalysis {
   };
 }
 
-export function getAverageResponseTime(): ResponseTimeAnalysis {
-  const closedFaults = faults.filter((f) => f.status === "טופלה");
+export function getAverageResponseTime(
+  ctx: BuildingDataContext
+): ResponseTimeAnalysis {
+  const closedFaults = ctx.faults.filter((f) => isClosedFault(f));
   const responseHours = closedFaults.map(getResponseHours);
   const averageHours =
     responseHours.length > 0
@@ -246,13 +260,17 @@ export function getAverageResponseTime(): ResponseTimeAnalysis {
   };
 }
 
-export function getElevatorAvailability(): ElevatorAvailability[] {
+export function getElevatorAvailability(
+  ctx: BuildingDataContext
+): ElevatorAvailability[] {
   const windowHours = ANALYSIS_WINDOW_DAYS * 24;
 
-  return elevators.map((elevator) => {
-    const elevatorFaults = faults.filter((f) => f.elevatorId === elevator.id);
+  return ctx.elevators.map((elevator) => {
+    const elevatorFaults = ctx.faults.filter(
+      (f) => f.elevatorId === elevator.id
+    );
     const downtimeHours = elevatorFaults.reduce(
-      (s, f) => s + getDowntimeHours(f),
+      (s, f) => s + getDowntimeHours(f, ctx),
       0
     );
     const availabilityPercent = Math.max(
@@ -270,11 +288,13 @@ export function getElevatorAvailability(): ElevatorAvailability[] {
   });
 }
 
-export function getMostProblematicElevator(): ProblematicElevator {
-  const byElevator = getRecurringFaultsByElevator();
+export function getMostProblematicElevator(
+  ctx: BuildingDataContext
+): ProblematicElevator {
+  const byElevator = getRecurringFaultsByElevator(ctx);
 
-  if (byElevator.length === 0 || faults.length === 0) {
-    const fallback = elevators[0];
+  if (byElevator.length === 0 || ctx.faults.length === 0) {
+    const fallback = ctx.elevators[0];
     return {
       elevatorId: fallback?.id ?? "",
       name: fallback?.name ?? "אין נתונים",
@@ -286,7 +306,7 @@ export function getMostProblematicElevator(): ProblematicElevator {
   }
 
   const top = byElevator[0];
-  const availability = getElevatorAvailability().find(
+  const availability = getElevatorAvailability(ctx).find(
     (a) => a.elevatorId === top.elevatorId
   );
 
@@ -300,13 +320,17 @@ export function getMostProblematicElevator(): ProblematicElevator {
   };
 }
 
-export function getServiceCompanyRating(): ServiceCompanyRating {
-  const response = getAverageResponseTime();
-  const recurring = getRecurringFaultsByType().filter((t) => t.isRecurring).length;
-  const downtime = getAverageDowntime();
-  const breakdownLen = getFaultTypeBreakdown().length;
+export function getServiceCompanyRating(
+  ctx: BuildingDataContext
+): ServiceCompanyRating {
+  const response = getAverageResponseTime(ctx);
+  const recurring = getRecurringFaultsByType(ctx).filter(
+    (t) => t.isRecurring
+  ).length;
+  const downtime = getAverageDowntime(ctx);
+  const breakdownLen = getFaultTypeBreakdown(ctx).length;
   const recurringRate =
-    faults.length > 0 && breakdownLen > 0
+    ctx.faults.length > 0 && breakdownLen > 0
       ? (recurring / breakdownLen) * 100
       : 0;
 
@@ -339,20 +363,20 @@ export function getServiceCompanyRating(): ServiceCompanyRating {
   );
 
   return {
-    company: building.elevatorCompany,
+    company: ctx.building.elevatorCompany,
     score,
     breakdown,
   };
 }
 
-export function getTrendAnalysis(): TrendAnalysis {
+export function getTrendAnalysis(ctx: BuildingDataContext): TrendAnalysis {
   const now = new Date();
-  const thisMonthFaults = faults.filter((f) => {
+  const thisMonthFaults = ctx.faults.filter((f) => {
     const d = new Date(f.reportedAt);
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
   });
   const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const prevMonthFaults = faults.filter((f) => {
+  const prevMonthFaults = ctx.faults.filter((f) => {
     const d = new Date(f.reportedAt);
     return (
       d.getMonth() === prevMonthDate.getMonth() &&
@@ -364,8 +388,14 @@ export function getTrendAnalysis(): TrendAnalysis {
     thisMonthFaults.length,
     prevMonthFaults.length
   );
-  const thisDowntime = thisMonthFaults.reduce((s, f) => s + getDowntimeHours(f), 0);
-  const prevDowntime = prevMonthFaults.reduce((s, f) => s + getDowntimeHours(f), 0);
+  const thisDowntime = thisMonthFaults.reduce(
+    (s, f) => s + getDowntimeHours(f, ctx),
+    0
+  );
+  const prevDowntime = prevMonthFaults.reduce(
+    (s, f) => s + getDowntimeHours(f, ctx),
+    0
+  );
   const downtimeChangePercent = percentChange(thisDowntime, prevDowntime);
 
   const direction = trendFromChange(
@@ -387,33 +417,36 @@ export function getTrendAnalysis(): TrendAnalysis {
 }
 
 function detectRecurringWithinDays(
+  ctx: BuildingDataContext,
   elevatorId: string,
   type: FaultType,
   days: number
 ): number {
-  const matching = faults
+  const matching = ctx.faults
     .filter((f) => f.elevatorId === elevatorId && f.type === type)
     .filter((f) => isInWindow(f.reportedAt, days));
   return matching.length;
 }
 
-export function getInsufficientTreatmentAnalysis(): InsufficientTreatmentAnalysis {
+export function getInsufficientTreatmentAnalysis(
+  ctx: BuildingDataContext
+): InsufficientTreatmentAnalysis {
   let suspiciousCases = 0;
   const details: string[] = [];
 
-  for (const elevator of elevators) {
-    for (const type of [...new Set(faults.map((f) => f.type))]) {
-      const count = detectRecurringWithinDays(elevator.id, type, 30);
+  for (const elevator of ctx.elevators) {
+    for (const type of [...new Set(ctx.faults.map((f) => f.type))]) {
+      const count = detectRecurringWithinDays(ctx, elevator.id, type, 30);
       if (count >= 2) {
         suspiciousCases++;
-        const name = elevators.find((e) => e.id === elevator.id)?.name;
+        const name = ctx.elevators.find((e) => e.id === elevator.id)?.name;
         details.push(`${name}: ${type} חזרה ${count} פעמים ב-30 יום`);
       }
     }
   }
 
   return {
-    company: building.elevatorCompany,
+    company: ctx.building.elevatorCompany,
     suspiciousCases,
     detail:
       suspiciousCases > 0
@@ -422,9 +455,9 @@ export function getInsufficientTreatmentAnalysis(): InsufficientTreatmentAnalysi
   };
 }
 
-export function getFailurePatterns(): string[] {
+export function getFailurePatterns(ctx: BuildingDataContext): string[] {
   const patterns: string[] = [];
-  const byElevator = getRecurringFaultsByElevator();
+  const byElevator = getRecurringFaultsByElevator(ctx);
 
   for (const elevator of byElevator) {
     if (!elevator.isRecurring) continue;
@@ -439,7 +472,7 @@ export function getFailurePatterns(): string[] {
     }
   }
 
-  const doorRecurring = getRecurringFaultsByType().find(
+  const doorRecurring = getRecurringFaultsByType(ctx).find(
     (t) => t.type === DOOR_FAULT_TYPE && t.isRecurring
   );
   if (doorRecurring) {
@@ -451,14 +484,16 @@ export function getFailurePatterns(): string[] {
   return patterns;
 }
 
-export function getRiskAssessment(): RiskAssessment {
-  const problematic = getMostProblematicElevator();
-  const openFaults = faults.filter((f) => f.status !== "טופלה").length;
-  const urgentOpen = faults.filter(
-    (f) => f.status !== "טופלה" && f.priority === "דחופה"
+export function getRiskAssessment(ctx: BuildingDataContext): RiskAssessment {
+  const problematic = getMostProblematicElevator(ctx);
+  const openFaults = ctx.faults.filter((f) => isOpenFault(f)).length;
+  const urgentOpen = ctx.faults.filter(
+    (f) => isOpenFault(f) && f.priority === "דחופה"
   ).length;
-  const trend = getTrendAnalysis();
-  const recurringTypes = getRecurringFaultsByType().filter((t) => t.isRecurring);
+  const trend = getTrendAnalysis(ctx);
+  const recurringTypes = getRecurringFaultsByType(ctx).filter(
+    (t) => t.isRecurring
+  );
 
   const factors: string[] = [];
   if (problematic.percentage >= 30) {
@@ -488,12 +523,12 @@ export function getRiskAssessment(): RiskAssessment {
   return { level, factors, prediction };
 }
 
-export function getAnomalyAlerts(): AnomalyAlert[] {
+export function getAnomalyAlerts(ctx: BuildingDataContext): AnomalyAlert[] {
   const alerts: AnomalyAlert[] = [];
-  const problematic = getMostProblematicElevator();
-  const downtime = getAverageDowntime();
-  const response = getAverageResponseTime();
-  const service = getServiceCompanyRating();
+  const problematic = getMostProblematicElevator(ctx);
+  const downtime = getAverageDowntime(ctx);
+  const response = getAverageResponseTime(ctx);
+  const service = getServiceCompanyRating(ctx);
 
   if (problematic.percentage >= 35) {
     alerts.push({
@@ -527,7 +562,9 @@ export function getAnomalyAlerts(): AnomalyAlert[] {
     });
   }
 
-  const doorPct = getRecurringFaultsByType().find((t) => t.type === DOOR_FAULT_TYPE);
+  const doorPct = getRecurringFaultsByType(ctx).find(
+    (t) => t.type === DOOR_FAULT_TYPE
+  );
   if (doorPct && doorPct.percentage >= 15 && doorPct.isRecurring) {
     alerts.push({
       id: "door-recurring",
@@ -539,11 +576,11 @@ export function getAnomalyAlerts(): AnomalyAlert[] {
   return alerts;
 }
 
-export function generateInsights(): ExpertInsight[] {
+export function generateInsights(ctx: BuildingDataContext): ExpertInsight[] {
   const insights: ExpertInsight[] = [];
   let id = 1;
 
-  if (faults.length === 0) {
+  if (ctx.faults.length === 0) {
     return [
       {
         id: "1",
@@ -560,7 +597,7 @@ export function generateInsights(): ExpertInsight[] {
     ];
   }
 
-  const problematic = getMostProblematicElevator();
+  const problematic = getMostProblematicElevator(ctx);
   if (problematic.percentage > 0) {
     insights.push({
       id: String(id++),
@@ -570,7 +607,9 @@ export function generateInsights(): ExpertInsight[] {
     });
   }
 
-  const doorStats = getRecurringFaultsByType().find((t) => t.type === DOOR_FAULT_TYPE);
+  const doorStats = getRecurringFaultsByType(ctx).find(
+    (t) => t.type === DOOR_FAULT_TYPE
+  );
   if (doorStats) {
     insights.push({
       id: String(id++),
@@ -588,7 +627,7 @@ export function generateInsights(): ExpertInsight[] {
     }
   }
 
-  const downtime = getAverageDowntime();
+  const downtime = getAverageDowntime(ctx);
   if (downtime.trendPercent !== 0) {
     const dir = downtime.trendPercent > 0 ? "עלה" : "ירד";
     insights.push({
@@ -599,7 +638,7 @@ export function generateInsights(): ExpertInsight[] {
     });
   }
 
-  const insufficient = getInsufficientTreatmentAnalysis();
+  const insufficient = getInsufficientTreatmentAnalysis(ctx);
   if (insufficient.suspiciousCases > 0) {
     insights.push({
       id: String(id++),
@@ -615,7 +654,9 @@ export function generateInsights(): ExpertInsight[] {
     });
   }
 
-  const recurringElevators = getRecurringFaultsByElevator().filter((e) => e.isRecurring);
+  const recurringElevators = getRecurringFaultsByElevator(ctx).filter(
+    (e) => e.isRecurring
+  );
   for (const e of recurringElevators.slice(0, 1)) {
     const topType = e.topTypes[0];
     if (topType && topType.count >= 2) {
@@ -653,8 +694,8 @@ export function generateInsights(): ExpertInsight[] {
   return insights;
 }
 
-export function generateActions(): string[] {
-  if (faults.length === 0) {
+export function generateActions(ctx: BuildingDataContext): string[] {
+  if (ctx.faults.length === 0) {
     return [
       "אין תקלות רשומות — המשך ניטור שוטף",
       "לא להציג ללקוח ממצאים עד השלמת בדיקה מקצועית בשטח",
@@ -662,9 +703,9 @@ export function generateActions(): string[] {
   }
 
   const actions: string[] = [];
-  const problematic = getMostProblematicElevator();
-  const insufficient = getInsufficientTreatmentAnalysis();
-  const doorRecurring = getRecurringFaultsByType().find(
+  const problematic = getMostProblematicElevator(ctx);
+  const insufficient = getInsufficientTreatmentAnalysis(ctx);
+  const doorRecurring = getRecurringFaultsByType(ctx).find(
     (t) => t.type === DOOR_FAULT_TYPE && t.isRecurring
   );
 
@@ -686,11 +727,11 @@ export function generateActions(): string[] {
   return actions;
 }
 
-export function generateMetrics(): ExpertMetric[] {
-  const response = getAverageResponseTime();
-  const downtime = getAverageDowntime();
-  const service = getServiceCompanyRating();
-  const risk = getRiskAssessment();
+export function generateMetrics(ctx: BuildingDataContext): ExpertMetric[] {
+  const response = getAverageResponseTime(ctx);
+  const downtime = getAverageDowntime(ctx);
+  const service = getServiceCompanyRating(ctx);
+  const risk = getRiskAssessment(ctx);
 
   return [
     {
@@ -714,7 +755,7 @@ export function generateMetrics(): ExpertMetric[] {
     {
       label: "הערכת סיכון עתידי",
       value: risk.level,
-      trend: `↑ ${getMostProblematicElevator().name}`,
+      trend: `↑ ${getMostProblematicElevator(ctx).name}`,
       trendUp: risk.level !== "נמוך",
     },
   ];
@@ -754,23 +795,26 @@ export function validateAnalyticsOutput(data: ExpertAnalytics): string[] {
   return errors;
 }
 
-export function getExpertAnalytics(): ExpertAnalytics {
+export function getExpertAnalytics(
+  ctxOrId?: BuildingDataContext | string
+): ExpertAnalytics {
+  const ctx = resolveCtx(ctxOrId);
   return {
-    insights: generateInsights(),
-    metrics: generateMetrics(),
-    recurringByElevator: getRecurringFaultsByElevator(),
-    recurringByType: getRecurringFaultsByType(),
-    faultTypeBreakdown: getFaultTypeBreakdown(),
-    failurePatterns: getFailurePatterns(),
-    problematicElevator: getMostProblematicElevator(),
-    insufficientTreatment: getInsufficientTreatmentAnalysis(),
-    responseTime: getAverageResponseTime(),
-    downtime: getAverageDowntime(),
-    elevatorAvailability: getElevatorAvailability(),
-    serviceRating: getServiceCompanyRating(),
-    trend: getTrendAnalysis(),
-    alerts: getAnomalyAlerts(),
-    riskAssessment: getRiskAssessment(),
-    actions: generateActions(),
+    insights: generateInsights(ctx),
+    metrics: generateMetrics(ctx),
+    recurringByElevator: getRecurringFaultsByElevator(ctx),
+    recurringByType: getRecurringFaultsByType(ctx),
+    faultTypeBreakdown: getFaultTypeBreakdown(ctx),
+    failurePatterns: getFailurePatterns(ctx),
+    problematicElevator: getMostProblematicElevator(ctx),
+    insufficientTreatment: getInsufficientTreatmentAnalysis(ctx),
+    responseTime: getAverageResponseTime(ctx),
+    downtime: getAverageDowntime(ctx),
+    elevatorAvailability: getElevatorAvailability(ctx),
+    serviceRating: getServiceCompanyRating(ctx),
+    trend: getTrendAnalysis(ctx),
+    alerts: getAnomalyAlerts(ctx),
+    riskAssessment: getRiskAssessment(ctx),
+    actions: generateActions(ctx),
   };
 }
