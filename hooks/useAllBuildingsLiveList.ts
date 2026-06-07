@@ -16,20 +16,20 @@ function loadAllSubmittedReports(): Record<string, Fault[]> {
 }
 
 export function useAllBuildingsLiveList() {
-  const { ready: buildingReady } = useBuilding();
+  const { ready: buildingReady, catalogReady } = useBuilding();
   const [reportsByBuilding, setReportsByBuilding] = useState<
     Record<string, Fault[]>
   >({});
   const [ready, setReady] = useState(false);
 
   const refresh = useCallback(() => {
-    if (!buildingReady) return;
+    if (!buildingReady || !catalogReady) return;
     setReportsByBuilding(loadAllSubmittedReports());
     setReady(true);
-  }, [buildingReady]);
+  }, [buildingReady, catalogReady]);
 
   useEffect(() => {
-    if (!buildingReady) {
+    if (!buildingReady || !catalogReady) {
       setReportsByBuilding({});
       setReady(false);
       return;
@@ -52,20 +52,20 @@ export function useAllBuildingsLiveList() {
       window.removeEventListener("forte-reports-updated", onReportsUpdated);
       window.removeEventListener("forte-building-changed", onBuildingChanged);
     };
-  }, [buildingReady, refresh]);
+  }, [buildingReady, catalogReady, refresh]);
 
   const buildings = useMemo(
     () =>
       getLiveBuildingListItems(
         reportsByBuilding,
-        buildingReady && ready
+        buildingReady && catalogReady && ready
       ),
-    [reportsByBuilding, buildingReady, ready]
+    [reportsByBuilding, buildingReady, catalogReady, ready]
   );
 
   return {
     buildings,
-    ready: buildingReady && ready,
+    ready: buildingReady && catalogReady && ready,
     refresh,
   };
 }

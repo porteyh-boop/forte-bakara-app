@@ -1,3 +1,11 @@
+import {
+  ensureBuildingCatalogLoaded,
+  refreshBuildingCatalog,
+  resolveAllBuildingIds,
+  resolveAllBuildingIdsForMaster,
+  resolveBuildingDataset,
+  resolveIsValidBuildingId,
+} from "./buildings-catalog";
 import type {
   Building,
   BuildingDataContext,
@@ -5,6 +13,12 @@ import type {
   Fault,
   FaultType,
 } from "./types";
+
+export {
+  ensureBuildingCatalogLoaded,
+  refreshBuildingCatalog,
+  resolveAllBuildingIdsForMaster,
+} from "./buildings-catalog";
 
 export const DEFAULT_BUILDING_ID = "md25";
 
@@ -734,14 +748,18 @@ const datasets: Record<string, BuildingDataContext> = {
   },
 };
 
+export function getDemoDatasets(): Record<string, BuildingDataContext> {
+  return datasets;
+}
+
 export function getBuildingDataset(id: string): BuildingDataContext {
-  return datasets[id] ?? datasets[DEFAULT_BUILDING_ID];
+  return resolveBuildingDataset(id, datasets, DEFAULT_BUILDING_ID);
 }
 
 export function getAllBuildingIds(): string[] {
-  return Object.keys(datasets);
+  return resolveAllBuildingIds(datasets);
 }
 
 export function isValidBuildingId(id: string): boolean {
-  return id in datasets;
+  return resolveIsValidBuildingId(id, datasets);
 }

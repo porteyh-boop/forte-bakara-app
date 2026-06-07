@@ -1,5 +1,4 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { isValidBuildingId } from "./buildings";
 import { getOrCreatePilotDeviceId } from "./pilot-device";
 import type { Fault } from "./types";
 import type { FeedbackSubmissionInput } from "./types";
@@ -346,7 +345,7 @@ export async function resetPilotCloudDataByBuilding(
   buildingId: string
 ): Promise<boolean> {
   const client = getPilotSupabaseClient();
-  if (!client || !isValidBuildingId(buildingId)) return false;
+  if (!client || !buildingId.trim()) return false;
 
   const { error: faultsError } = await client
     .from(PILOT_FAULTS_TABLE)

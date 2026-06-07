@@ -28,6 +28,7 @@ import {
   DEFAULT_BUILDING_ID,
   getAllBuildingIds,
   getBuildingDataset,
+  getDemoDatasets,
 } from "../lib/buildings";
 import { faults } from "../lib/data";
 import { isExpert } from "../lib/roles";
@@ -102,6 +103,19 @@ import {
   detectRecurringFaults,
   generateClientReportDraft,
 } from "../lib/master-analytics";
+import {
+  canDeleteBuilding,
+  canDeleteElevator,
+  normalizeBuildingId,
+  type CloudBuildingRow,
+  type CloudElevatorRow,
+} from "../lib/buildings-cloud";
+import {
+  buildCloudCatalogSnapshot,
+  buildDemoCatalogSnapshot,
+  setCatalogSnapshot,
+} from "../lib/buildings-catalog";
+import { DEFAULT_ELEVATOR_COMPANIES } from "../lib/elevator-companies";
 import type { FeedbackSubmissionInput } from "../lib/types";
 
 let passed = 0;
@@ -1601,6 +1615,128 @@ assert(
   scopedAnalytics.kpis.totalFaults === 4,
   "ניתוח master: סינון לפי בניין"
 );
+
+assert(
+  fs.existsSync(
+    path.join(process.cwd(), "supabase/migrations/003_buildings_elevators.sql")
+  ),
+  "ניהול בניינים: migration SQL קיים"
+);
+
+const buildingsCloudSource = fs.readFileSync(
+  path.join(process.cwd(), "lib/buildings-cloud.ts"),
+  "utf8"
+);
+assert(
+  buildingsCloudSource.includes("createCloudBuilding") &&
+    buildingsCloudSource.includes("updateCloudBuilding") &&
+    buildingsCloudSource.includes("setCloudBuildingActive") &&
+    buildingsCloudSource.includes("deleteCloudBuilding") &&
+    buildingsCloudSource.includes("createCloudElevator") &&
+    buildingsCloudSource.includes("updateCloudElevator") &&
+    buildingsCloudSource.includes("setCloudElevatorActive") &&
+    buildingsCloudSource.includes("deleteCloudElevator"),
+  "ניהול בניינים: כל פונקציות CRUD מוגדרות"
+);
+
+const masterBuildingsUi = fs.readFileSync(
+  path.join(process.cwd(), "components/MasterBuildingsSection.tsx"),
+  "utf8"
+);
+assert(
+  masterSource.includes("MasterBuildingsSection") &&
+    masterSource.includes("ניהול בניינים") &&
+    masterBuildingsUi.includes("הוסף בניין") &&
+    masterBuildingsUi.includes("הוסף מעלית"),
+  "ניהול בניינים: טאב ו-UI ב-/master בלבד"
+);
+assert(
+  !bottomNavMasterCheck.includes("ניהול בניינים"),
+  "ניהול בניינים: אין קישור בתפריט לקוח"
+);
+
+assert(
+  DEFAULT_ELEVATOR_COMPANIES.includes("KONE") &&
+    DEFAULT_ELEVATOR_COMPANIES.includes("אלקטרה") &&
+    DEFAULT_ELEVATOR_COMPANIES.includes("אחר"),
+  "ניהול בניינים: רשימת חברות מעליות"
+);
+
+assert(
+  normalizeBuildingId(" MD25 ") === "md25",
+  "ניהול בניינים: נרמול מזהה בניין"
+);
+
+const deleteBuildingGuard = canDeleteBuilding("md25", [
+  { building_id: "md25" },
+]);
+assert(
+  !deleteBuildingGuard.allowed,
+  "ניהול בניינים: מניעת מחיקת בניין עם דיווחים"
+);
+assert(
+  canDeleteBuilding("ys34", [{ building_id: "md25" }]).allowed,
+  "ניהול בניינים: מחיקת בניין ללא דיווחים מותרת"
+);
+
+const deleteElevatorGuard = canDeleteElevator("md25", "md25-right", [
+  { building_id: "md25", elevator_id: "md25-right" },
+]);
+assert(
+  !deleteElevatorGuard.allowed,
+  "ניהול בניינים: מניעת מחיקת מעלית עם דיווחים"
+);
+assert(
+  canDeleteElevator("md25", "md25-left", [
+    { building_id: "md25", elevator_id: "md25-right" },
+  ]).allowed,
+  "ניהול בניינים: מחיקת מעלית ללא דיווחים מותרת"
+);
+
+const demoCatalog = buildDemoCatalogSnapshot(getDemoDatasets());
+assert(
+  demoCatalog.source === "demo" && demoCatalog.allBuildingIds.length === 6,
+  "ניהול בניינים: fallback לרשימת דמו"
+);
+
+const cloudBuildingRow: CloudBuildingRow = {
+  id: "uuid-1",
+  building_id: "test01",
+  name: "בניין בדיקה",
+  city: "תל אביב",
+  address: "רחוב 1",
+  management_company: "ניהול",
+  elevator_company: "KONE",
+  contact_name: "ישראל",
+  contact_phone: "050",
+  floors_count: 10,
+  is_active: true,
+  created_at: "2026-01-01T00:00:00Z",
+};
+const cloudElevatorRow: CloudElevatorRow = {
+  id: "uuid-2",
+  building_id: "test01",
+  elevator_id: "el-1",
+  elevator_name: "מעלית א",
+  floors_count: 10,
+  elevator_type: "נוסעים",
+  is_active: true,
+  status: "פעילה",
+  created_at: "2026-01-01T00:00:00Z",
+};
+const cloudCatalog = buildCloudCatalogSnapshot(
+  [cloudBuildingRow],
+  [cloudElevatorRow],
+  getDemoDatasets()
+);
+assert(
+  cloudCatalog.source === "cloud" &&
+    cloudCatalog.buildings.test01?.building.name === "בניין בדיקה" &&
+    cloudCatalog.buildings.test01?.elevators.length === 1,
+  "ניהול בניינים: מיפוי נתוני Supabase לקטלוג"
+);
+
+setCatalogSnapshot(null);
 
 const masterCode = getMasterCode();
 if (masterCode) {

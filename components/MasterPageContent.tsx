@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import MasterAnalyticsSection from "@/components/MasterAnalyticsSection";
+import MasterBuildingsSection from "@/components/MasterBuildingsSection";
 import PageHeader from "@/components/PageHeader";
 import {
   closePilotFault,
@@ -21,7 +22,7 @@ import {
   type PilotCloudFeedback,
 } from "@/lib/pilot-cloud";
 import { getAllBuildingIds, getBuildingDataset } from "@/lib/buildings";
-type Tab = "faults" | "feedback";
+type Tab = "faults" | "feedback" | "buildings";
 
 function formatCloudDate(iso: string): string {
   return new Intl.DateTimeFormat("he-IL", {
@@ -349,11 +350,11 @@ export default function MasterPageContent() {
           </div>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
             onClick={() => setTab("faults")}
-            className={`flex-1 rounded-xl py-2.5 text-sm font-semibold transition-colors ${
+            className={`flex-1 min-w-[7rem] rounded-xl py-2.5 text-sm font-semibold transition-colors ${
               tab === "faults"
                 ? "bg-navy text-white"
                 : "bg-white border border-gray-200 text-navy"
@@ -364,13 +365,24 @@ export default function MasterPageContent() {
           <button
             type="button"
             onClick={() => setTab("feedback")}
-            className={`flex-1 rounded-xl py-2.5 text-sm font-semibold transition-colors ${
+            className={`flex-1 min-w-[7rem] rounded-xl py-2.5 text-sm font-semibold transition-colors ${
               tab === "feedback"
                 ? "bg-navy text-white"
                 : "bg-white border border-gray-200 text-navy"
             }`}
           >
             משובים ({filteredFeedback.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("buildings")}
+            className={`flex-1 min-w-[7rem] rounded-xl py-2.5 text-sm font-semibold transition-colors ${
+              tab === "buildings"
+                ? "bg-navy text-white"
+                : "bg-white border border-gray-200 text-navy"
+            }`}
+          >
+            ניהול בניינים
           </button>
         </div>
 
@@ -514,6 +526,10 @@ export default function MasterPageContent() {
               ))
             )}
           </div>
+        )}
+
+        {tab === "buildings" && (
+          <MasterBuildingsSection cloudReady={cloudReady} faults={faults} />
         )}
       </main>
     </div>
