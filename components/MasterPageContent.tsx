@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import MasterAnalyticsSection from "@/components/MasterAnalyticsSection";
 import PageHeader from "@/components/PageHeader";
 import {
   closePilotFault,
@@ -453,6 +454,15 @@ export default function MasterPageContent() {
                 </article>
               ))
             )}
+
+            <MasterAnalyticsSection
+              faults={faults}
+              buildingOptions={buildingOptions}
+              buildingFilter={buildingFilter}
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              cloudReady={cloudReady}
+            />
           </div>
         )}
 

@@ -93,7 +93,15 @@ import {
   PILOT_FAULTS_TABLE,
   PILOT_FEEDBACK_TABLE,
   verifyMasterCode,
+  type PilotCloudFault,
 } from "../lib/pilot-cloud";
+import {
+  buildMasterAnalytics,
+  calculateBuildingHealthScore,
+  calculateBuildingKpis,
+  detectRecurringFaults,
+  generateClientReportDraft,
+} from "../lib/master-analytics";
 import type { FeedbackSubmissionInput } from "../lib/types";
 
 let passed = 0;
@@ -1427,6 +1435,171 @@ const bottomNavMasterCheck = fs.readFileSync(
 assert(
   !bottomNavMasterCheck.includes("/master"),
   "ענן פיילוט: אין קישור ל-/master בתפריט לקוח"
+);
+
+function makePilotFault(
+  overrides: Partial<PilotCloudFault> & {
+    building_id: string;
+    elevator_id: string;
+    fault_type: string;
+  }
+): PilotCloudFault {
+  return {
+    id: overrides.id ?? `fault-${Math.random().toString(36).slice(2)}`,
+    building_id: overrides.building_id,
+    building_name: overrides.building_name ?? "בניין בדיקה",
+    elevator_id: overrides.elevator_id,
+    elevator_name: overrides.elevator_name ?? "מעלית 1",
+    fault_type: overrides.fault_type,
+    description: overrides.description ?? "תיאור",
+    is_disabled: overrides.is_disabled ?? false,
+    status: overrides.status ?? "פתוחה",
+    ticket_number: overrides.ticket_number ?? null,
+    image_data: overrides.image_data ?? null,
+    image_url: overrides.image_url ?? null,
+    created_at: overrides.created_at ?? "2026-01-15T10:00:00.000Z",
+    closed_at: overrides.closed_at ?? null,
+    source_device_id: overrides.source_device_id ?? null,
+  };
+}
+
+const analyticsFaults: PilotCloudFault[] = [
+  makePilotFault({
+    building_id: "md25",
+    elevator_id: "e1",
+    fault_type: "תקלת דלת",
+    status: "פתוחה",
+  }),
+  makePilotFault({
+    building_id: "md25",
+    elevator_id: "e1",
+    fault_type: "תקלת דלת",
+    status: "סגורה",
+  }),
+  makePilotFault({
+    building_id: "md25",
+    elevator_id: "e1",
+    fault_type: "תקלת דלת",
+    status: "סגורה",
+  }),
+  makePilotFault({
+    building_id: "md25",
+    elevator_id: "e2",
+    fault_type: "רעש",
+    status: "סגורה",
+  }),
+  makePilotFault({
+    building_id: "or02",
+    elevator_id: "e3",
+    fault_type: "עצירה",
+    status: "פתוחה",
+  }),
+];
+
+const analyticsKpis = calculateBuildingKpis(analyticsFaults);
+assert(analyticsKpis.totalFaults === 5, "ניתוח master: סך תקלות נכון");
+assert(analyticsKpis.openFaults === 2, "ניתוח master: תקלות פתוחות נכון");
+assert(analyticsKpis.closedFaults === 3, "ניתוח master: תקלות סגורות נכון");
+assert(analyticsKpis.doorFaultCount === 3, "ניתוח master: תקלות דלת נכון");
+
+const recurringOnly = detectRecurringFaults(analyticsFaults);
+assert(
+  recurringOnly.length === 1 &&
+    recurringOnly[0].occurrences === 3 &&
+    recurringOnly[0].faultType === "תקלת דלת" &&
+    recurringOnly[0].riskLevel === "בינונית",
+  "ניתוח master: זיהוי תקלה חוזרת (3 הופעות = בינונית)"
+);
+
+const heavyRecurringFaults = [
+  ...Array.from({ length: 5 }, (_, i) =>
+    makePilotFault({
+      id: `heavy-${i}`,
+      building_id: "md25",
+      elevator_id: "e9",
+      fault_type: "כשל חשמלי",
+      status: "פתוחה",
+    })
+  ),
+  ...Array.from({ length: 6 }, (_, i) =>
+    makePilotFault({
+      id: `open-${i}`,
+      building_id: "md25",
+      elevator_id: `e-open-${i}`,
+      fault_type: `סוג-${i}`,
+      status: "פתוחה",
+    })
+  ),
+  makePilotFault({
+    building_id: "md25",
+    elevator_id: "e-dis",
+    fault_type: "מושבתת",
+    status: "מושבתת",
+    is_disabled: true,
+  }),
+];
+
+const heavyRecurring = detectRecurringFaults(heavyRecurringFaults);
+assert(
+  heavyRecurring.some((r) => r.occurrences >= 5 && r.riskLevel === "גבוהה"),
+  "ניתוח master: סיכון גבוהה מ-5 הופעות"
+);
+
+const heavyHealth = calculateBuildingHealthScore(
+  heavyRecurringFaults,
+  heavyRecurring
+);
+assert(heavyHealth.score >= 0, "ניתוח master: ציון בריאות לא יורד מתחת ל-0");
+
+const emptyReport = generateClientReportDraft({
+  buildingLabel: "בניין ריק",
+  periodLabel: "כל התקופה",
+  kpis: calculateBuildingKpis([]),
+  health: calculateBuildingHealthScore([], []),
+  recurring: [],
+  insights: ["לא נרשמו דיווחי תקלות בתקופה הנבחרת."],
+});
+assert(
+  emptyReport.fullText.includes("דוח בקרת שירות מעליות") &&
+    emptyReport.fullText.includes("בניין ריק"),
+  "ניתוח master: דוח נוצר גם ללא תקלות"
+);
+
+const masterAnalyticsSource = fs.readFileSync(
+  path.join(process.cwd(), "lib/master-analytics.ts"),
+  "utf8"
+);
+assert(
+  masterAnalyticsSource.includes("calculateBuildingKpis") &&
+    masterAnalyticsSource.includes("calculateBuildingHealthScore") &&
+    masterAnalyticsSource.includes("detectRecurringFaults") &&
+    masterAnalyticsSource.includes("generateProfessionalInsights") &&
+    masterAnalyticsSource.includes("generateClientReportDraft"),
+  "ניתוח master: כל פונקציות החישוב ב-lib/master-analytics.ts"
+);
+
+const masterAnalyticsUi = fs.readFileSync(
+  path.join(process.cwd(), "components/MasterAnalyticsSection.tsx"),
+  "utf8"
+);
+assert(
+  masterAnalyticsSource.includes("buildMasterAnalytics") &&
+    masterAnalyticsUi.includes("ניתוח מקצועי לבניין") &&
+    masterAnalyticsUi.includes("העתק דוח"),
+  "ניתוח master: UI מקצועי ב-/master בלבד"
+);
+assert(
+  masterSource.includes("MasterAnalyticsSection") &&
+    masterSource.includes("ניתוח מקצועי לבניין") === false,
+  "ניתוח master: לוגיקה לא ב-MasterPageContent"
+);
+
+const scopedAnalytics = buildMasterAnalytics(analyticsFaults, {
+  buildingId: "md25",
+});
+assert(
+  scopedAnalytics.kpis.totalFaults === 4,
+  "ניתוח master: סינון לפי בניין"
 );
 
 const masterCode = getMasterCode();
