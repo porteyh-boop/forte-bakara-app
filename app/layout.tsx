@@ -4,6 +4,7 @@ import ActiveBuildingBar from "@/components/ActiveBuildingBar";
 import AppFooter from "@/components/AppFooter";
 import { BuildingProvider } from "@/components/BuildingProvider";
 import BottomNav from "@/components/BottomNav";
+import MasterReturnButton from "@/components/MasterReturnButton";
 import {
   BRAND_APP,
   BRAND_EDITOR_NAME,
@@ -73,6 +74,7 @@ export default function RootLayout({
           <ActiveBuildingBar />
           {children}
           <AppFooter />
+          <MasterReturnButton />
           <BottomNav />
         </BuildingProvider>
       </body>

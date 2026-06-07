@@ -1451,6 +1451,30 @@ assert(
   "ענן פיילוט: אין קישור ל-/master בתפריט לקוח"
 );
 
+const masterReturnSource = fs.readFileSync(
+  path.join(process.cwd(), "components/MasterReturnButton.tsx"),
+  "utf8"
+);
+const rootLayoutSource = fs.readFileSync(
+  path.join(process.cwd(), "app/layout.tsx"),
+  "utf8"
+);
+assert(
+  masterReturnSource.includes("isMasterAuthenticated") &&
+    masterReturnSource.includes("חזרה למאסטר") &&
+    masterReturnSource.includes('href="/master"') &&
+    masterReturnSource.includes('pathname.startsWith("/master")'),
+  "מאסטר: כפתור חזרה מותנה באימות session"
+);
+assert(
+  rootLayoutSource.includes("MasterReturnButton"),
+  "מאסטר: כפתור חזרה משולב ב-layout הראשי"
+);
+assert(
+  !bottomNavMasterCheck.includes("חזרה למאסטר"),
+  "מאסטר: כפתור חזרה לא בתפריט התחתון הציבורי"
+);
+
 function makePilotFault(
   overrides: Partial<PilotCloudFault> & {
     building_id: string;
