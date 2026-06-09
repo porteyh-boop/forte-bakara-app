@@ -491,7 +491,6 @@ export default function MasterPageContent() {
             <MasterAnalyticsSection
               faults={faults}
               buildingOptions={buildingOptions}
-              buildingFilter={buildingFilter}
               dateFrom={dateFrom}
               dateTo={dateTo}
               cloudReady={cloudReady}

@@ -34,6 +34,44 @@ export interface RecurringFault {
   riskLevel: RiskLevel;
 }
 
+export interface BuildingReportDetails {
+  name: string;
+  city: string;
+  address: string;
+  elevatorCompany: string;
+  elevatorCount: number;
+}
+
+export interface ElevatorAnalyticsLine {
+  elevatorId: string;
+  elevatorName: string;
+  faultCount: number;
+  openFaultCount: number;
+  statusLabel: string;
+}
+
+export interface FaultTypeSummary {
+  faultType: string;
+  count: number;
+}
+
+export interface BuildingRankingEntry {
+  buildingId: string;
+  buildingName: string;
+  faultCount: number;
+  healthScore: number;
+  healthLevel: HealthLevel;
+}
+
+export interface PortfolioAnalytics {
+  buildingCount: number;
+  elevatorCount: number;
+  totalFaults: number;
+  rankings: BuildingRankingEntry[];
+  problematicBuildings: BuildingRankingEntry[];
+  healthyBuildings: BuildingRankingEntry[];
+}
+
 export interface ClientReportDraft {
   title: string;
   buildingLabel: string;
@@ -43,6 +81,13 @@ export interface ClientReportDraft {
   recurringSection: string;
   conclusions: string[];
   recommendations: string[];
+  fullText: string;
+}
+
+export interface PortfolioReportDraft {
+  title: string;
+  periodLabel: string;
+  summary: PortfolioAnalytics;
   fullText: string;
 }
 
@@ -214,6 +259,157 @@ export function getHealthLevelClasses(level: HealthLevel): {
   }
 }
 
+export function countFaultsByElevator(
+  faults: PilotCloudFault[]
+): ElevatorAnalyticsLine[] {
+  const map = new Map<string, ElevatorAnalyticsLine>();
+  for (const f of faults) {
+    const existing = map.get(f.elevator_id);
+    if (existing) {
+      existing.faultCount += 1;
+      if (isOpenFault(f)) existing.openFaultCount += 1;
+    } else {
+      map.set(f.elevator_id, {
+        elevatorId: f.elevator_id,
+        elevatorName: f.elevator_name,
+        faultCount: 1,
+        openFaultCount: isOpenFault(f) ? 1 : 0,
+        statusLabel: "—",
+      });
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => b.faultCount - a.faultCount);
+}
+
+export function summarizeFaultTypes(
+  faults: PilotCloudFault[],
+  limit = 5
+): FaultTypeSummary[] {
+  const map = new Map<string, number>();
+  for (const f of faults) {
+    map.set(f.fault_type, (map.get(f.fault_type) ?? 0) + 1);
+  }
+  return Array.from(map.entries())
+    .map(([faultType, count]) => ({ faultType, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, limit);
+}
+
+export function generateAnalyticsAlerts(
+  faults: PilotCloudFault[],
+  kpis: BuildingKpis,
+  health: BuildingHealthScore,
+  recurring: RecurringFault[]
+): string[] {
+  const alerts: string[] = [];
+
+  if (health.level === "red") {
+    alerts.push(`ציון בריאות נמוך (${health.score}/100) — נדרש מעקב מיידי.`);
+  } else if (health.level === "yellow") {
+    alerts.push(`ציון בריאות בינוני (${health.score}/100) — מומלץ מעקב.`);
+  }
+
+  if (kpis.openFaults >= 3) {
+    alerts.push(`${kpis.openFaults} תקלות פתוחות בבניין.`);
+  }
+
+  if (recurring.length > 0) {
+    alerts.push(`זוהו ${recurring.length} דפוסי תקלה חוזרים.`);
+  }
+
+  if (faults.some((f) => f.is_disabled && isOpenFault(f))) {
+    alerts.push("קיימת מעלית מושבתת עם תקלה פתוחה.");
+  }
+
+  if (kpis.doorFaultCount >= 5) {
+    alerts.push(`ריבוי תקלות דלת (${kpis.doorFaultCount}).`);
+  }
+
+  return alerts;
+}
+
+export function mergeElevatorStatusFromCatalog(
+  lines: ElevatorAnalyticsLine[],
+  catalogElevators: { id: string; name: string; status: string }[] = []
+): ElevatorAnalyticsLine[] {
+  if (catalogElevators.length === 0) return lines;
+
+  const byId = new Map(lines.map((l) => [l.elevatorId, l]));
+  const merged: ElevatorAnalyticsLine[] = [];
+
+  for (const e of catalogElevators) {
+    const existing = byId.get(e.id);
+    merged.push({
+      elevatorId: e.id,
+      elevatorName: e.name,
+      faultCount: existing?.faultCount ?? 0,
+      openFaultCount: existing?.openFaultCount ?? 0,
+      statusLabel: e.status,
+    });
+    byId.delete(e.id);
+  }
+
+  for (const rest of byId.values()) {
+    merged.push(rest);
+  }
+
+  return merged.sort((a, b) => b.faultCount - a.faultCount);
+}
+
+export function buildPortfolioAnalytics(
+  faults: PilotCloudFault[],
+  scope: Omit<MasterAnalyticsScope, "buildingId">,
+  buildingIds: string[],
+  resolveBuildingName: (id: string) => string,
+  resolveElevatorCount: (id: string) => number
+): PortfolioAnalytics {
+  const dateScope: MasterAnalyticsScope = { ...scope, buildingId: "all" };
+  const scoped = filterFaultsForScope(faults, dateScope);
+
+  const ids = new Set<string>(buildingIds);
+  scoped.forEach((f) => ids.add(f.building_id));
+
+  const rankings: BuildingRankingEntry[] = Array.from(ids).map((buildingId) => {
+    const buildingFaults = scoped.filter((f) => f.building_id === buildingId);
+    const recurring = detectRecurringFaults(buildingFaults);
+    const health = calculateBuildingHealthScore(buildingFaults, recurring);
+    return {
+      buildingId,
+      buildingName: resolveBuildingName(buildingId),
+      faultCount: buildingFaults.length,
+      healthScore: health.score,
+      healthLevel: health.level,
+    };
+  });
+
+  rankings.sort((a, b) => b.faultCount - a.faultCount);
+
+  const problematicBuildings = rankings.filter(
+    (r) =>
+      r.healthLevel !== "green" ||
+      r.faultCount >= 5 ||
+      scoped.some((f) => f.building_id === r.buildingId && isOpenFault(f))
+  );
+
+  const healthyBuildings = rankings.filter(
+    (r) => r.healthLevel === "green" && r.faultCount <= 2
+  );
+
+  const elevatorCount = Array.from(ids).reduce(
+    (sum, id) => sum + resolveElevatorCount(id),
+    0
+  );
+
+  return {
+    buildingCount: ids.size,
+    elevatorCount,
+    totalFaults: scoped.length,
+    rankings,
+    problematicBuildings,
+    healthyBuildings,
+  };
+}
+
 export function generateProfessionalInsights(
   faults: PilotCloudFault[],
   kpis: BuildingKpis,
@@ -254,6 +450,37 @@ export function formatAnalyticsPeriodLabel(
   return "כל התקופה";
 }
 
+function formatElevatorStatusSection(lines: ElevatorAnalyticsLine[]): string {
+  if (lines.length === 0) {
+    return "לא נרשמו מעליות או תקלות בבניין בתקופה שנבחרה.";
+  }
+  return lines
+    .map(
+      (e) =>
+        `• ${e.elevatorName} — ${e.faultCount} תקלות (${e.openFaultCount} פתוחות) · סטטוס: ${e.statusLabel}`
+    )
+    .join("\n");
+}
+
+function formatFaultsByElevatorSection(lines: ElevatorAnalyticsLine[]): string {
+  if (lines.length === 0) {
+    return "לא נרשמו תקלות לפי מעלית בתקופה שנבחרה.";
+  }
+  return lines
+    .map(
+      (e) =>
+        `• ${e.elevatorName}: ${e.faultCount} תקלות (${e.openFaultCount} פתוחות)`
+    )
+    .join("\n");
+}
+
+function formatFaultTypesSection(types: FaultTypeSummary[]): string {
+  if (types.length === 0) {
+    return "לא נרשמו סוגי תקלות בתקופה שנבחרה.";
+  }
+  return types.map((t) => `• ${t.faultType}: ${t.count} תקלות`).join("\n");
+}
+
 export function generateClientReportDraft(params: {
   buildingLabel: string;
   periodLabel: string;
@@ -261,14 +488,28 @@ export function generateClientReportDraft(params: {
   health: BuildingHealthScore;
   recurring: RecurringFault[];
   insights: string[];
+  details?: BuildingReportDetails;
+  elevatorLines?: ElevatorAnalyticsLine[];
+  faultTypes?: FaultTypeSummary[];
 }): ClientReportDraft {
-  const { buildingLabel, periodLabel, kpis, health, recurring, insights } =
-    params;
+  const {
+    buildingLabel,
+    periodLabel,
+    kpis,
+    health,
+    recurring,
+    insights,
+    details,
+    elevatorLines = [],
+    faultTypes = [],
+  } = params;
+
+  const buildingName = details?.name ?? buildingLabel;
 
   const executiveSummary =
     kpis.totalFaults === 0
-      ? `בתקופה שנבחרה לא נרשמו דיווחי תקלות עבור ${buildingLabel}.`
-      : `בתקופה ${periodLabel} נרשמו ${kpis.totalFaults} תקלות ב-${buildingLabel}, מתוכן ${kpis.openFaults} פתוחות ו-${kpis.closedFaults} סגורות. ציון בריאות הבניין: ${health.score}/100.`;
+      ? `בתקופה שנבחרה לא נרשמו דיווחי תקלות עבור ${buildingName}.`
+      : `בתקופה ${periodLabel} נרשמו ${kpis.totalFaults} תקלות ב-${buildingName}, מתוכן ${kpis.openFaults} פתוחות ו-${kpis.closedFaults} סגורות. ציון בריאות הבניין: ${health.score}/100.`;
 
   const keyFindings: string[] = [];
   if (kpis.topElevatorByFaults) {
@@ -286,13 +527,17 @@ export function generateClientReportDraft(params: {
     keyFindings.push("לא נרשמו ממצאים מהותיים בתקופה שנבחרה.");
   }
 
+  const elevatorStatusSection = formatElevatorStatusSection(elevatorLines);
+  const faultsByElevatorSection = formatFaultsByElevatorSection(elevatorLines);
+  const faultTypesSection = formatFaultTypesSection(faultTypes);
+
   const recurringSection =
     recurring.length === 0
       ? "לא זוהו תקלות חוזרות (3 פעמים ומעלה לאותה מעלית וסוג תקלה)."
       : recurring
           .map(
             (r) =>
-              `• ${r.buildingName} · ${r.elevatorName} · ${r.faultType} — ${r.occurrences} הופעות (סיכון ${r.riskLevel})`
+              `• ${r.elevatorName} · ${r.faultType} — ${r.occurrences} הופעות (סיכון ${r.riskLevel})`
           )
           .join("\n");
 
@@ -313,30 +558,51 @@ export function generateClientReportDraft(params: {
     recommendations.push("להמשיך מעקב שוטף לפי נהלי הבקרה.");
   }
 
+  const detailsBlock = details
+    ? [
+        "פרטי הבניין",
+        "-----------",
+        `שם הבניין: ${details.name}`,
+        `עיר: ${details.city || "—"}`,
+        `כתובת: ${details.address || "—"}`,
+        `חברת מעליות: ${details.elevatorCompany || "—"}`,
+        `מספר מעליות: ${details.elevatorCount}`,
+        "",
+      ]
+    : [];
+
   const fullText = [
     "דוח בקרת שירות מעליות",
-    "========================",
-    `בניין: ${buildingLabel}`,
-    `תקופה: ${periodLabel}`,
+    buildingName,
+    periodLabel,
     "",
-    "סיכום מנהלים",
-    "-------------",
+    ...detailsBlock,
+    "א. סיכום מנהלים",
+    "----------------",
     executiveSummary,
     "",
-    "ממצאים עיקריים",
-    "---------------",
-    ...keyFindings.map((line) => `• ${line}`),
+    "ב. מצב המעליות בבניין",
+    "----------------------",
+    elevatorStatusSection,
     "",
-    "תקלות חוזרות",
-    "--------------",
+    "ג. ניתוח תקלות לפי מעלית",
+    "-------------------------",
+    faultsByElevatorSection,
+    "",
+    "ד. תקלות חוזרות",
+    "----------------",
     recurringSection,
     "",
-    "מסקנות",
-    "--------",
+    "ה. סוגי תקלות עיקריים",
+    "----------------------",
+    faultTypesSection,
+    "",
+    "ו. הערכת מצב מקצועית",
+    "---------------------",
     ...conclusions.map((line) => `• ${line}`),
     "",
-    "המלצות ראשוניות",
-    "----------------",
+    "ז. המלצות",
+    "---------",
     ...recommendations.map((line) => `• ${line}`),
     "",
     "— טיוטה אוטומטית · פורטה בקרה · לשימוש פנימי",
@@ -344,7 +610,7 @@ export function generateClientReportDraft(params: {
 
   return {
     title: "דוח בקרת שירות מעליות",
-    buildingLabel,
+    buildingLabel: buildingName,
     periodLabel,
     executiveSummary,
     keyFindings,
@@ -355,12 +621,93 @@ export function generateClientReportDraft(params: {
   };
 }
 
+export function generatePortfolioReportDraft(params: {
+  periodLabel: string;
+  portfolio: PortfolioAnalytics;
+}): PortfolioReportDraft {
+  const { periodLabel, portfolio } = params;
+
+  const rankingSection =
+    portfolio.rankings.length === 0
+      ? "לא נרשמו בניינים לדירוג."
+      : portfolio.rankings
+          .map(
+            (r, i) =>
+              `${i + 1}. ${r.buildingName} — ${r.faultCount} תקלות · ציון ${r.healthScore}/100`
+          )
+          .join("\n");
+
+  const problematicSection =
+    portfolio.problematicBuildings.length === 0
+      ? "לא זוהו בניינים בעייתיים בתקופה שנבחרה."
+      : portfolio.problematicBuildings
+          .map(
+            (r) =>
+              `• ${r.buildingName} — ${r.faultCount} תקלות · ציון ${r.healthScore}/100`
+          )
+          .join("\n");
+
+  const healthySection =
+    portfolio.healthyBuildings.length === 0
+      ? "לא זוהו בניינים במצב תקין מלא בתקופה שנבחרה."
+      : portfolio.healthyBuildings
+          .map(
+            (r) =>
+              `• ${r.buildingName} — ${r.faultCount} תקלות · ציון ${r.healthScore}/100`
+          )
+          .join("\n");
+
+  const fullText = [
+    "דוח ניהולי — כל הבניינים",
+    periodLabel,
+    "",
+    "סיכום כללי",
+    "-----------",
+    `מספר בניינים: ${portfolio.buildingCount}`,
+    `מספר מעליות: ${portfolio.elevatorCount}`,
+    `מספר תקלות: ${portfolio.totalFaults}`,
+    "",
+    "דירוג בניינים לפי כמות תקלות",
+    "--------------------------------",
+    rankingSection,
+    "",
+    "בניינים בעייתיים",
+    "------------------",
+    problematicSection,
+    "",
+    "בניינים תקינים",
+    "----------------",
+    healthySection,
+    "",
+    "— טיוטה אוטומטית · פורטה בקרה · לשימוש פנימי",
+  ].join("\n");
+
+  return {
+    title: "דוח ניהולי — כל הבניינים",
+    periodLabel,
+    summary: portfolio,
+    fullText,
+  };
+}
+
 export function buildMasterAnalytics(faults: PilotCloudFault[], scope: MasterAnalyticsScope) {
   const scoped = filterFaultsForScope(faults, scope);
   const recurring = detectRecurringFaults(scoped);
   const kpis = calculateBuildingKpis(scoped);
   const health = calculateBuildingHealthScore(scoped, recurring);
   const insights = generateProfessionalInsights(scoped, kpis, recurring);
+  const alerts = generateAnalyticsAlerts(scoped, kpis, health, recurring);
+  const elevatorLines = countFaultsByElevator(scoped);
+  const faultTypes = summarizeFaultTypes(scoped);
 
-  return { scopedFaults: scoped, kpis, health, recurring, insights };
+  return {
+    scopedFaults: scoped,
+    kpis,
+    health,
+    recurring,
+    insights,
+    alerts,
+    elevatorLines,
+    faultTypes,
+  };
 }

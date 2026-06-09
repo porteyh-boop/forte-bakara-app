@@ -103,10 +103,13 @@ import {
 } from "../lib/master-feedback-view";
 import {
   buildMasterAnalytics,
+  buildPortfolioAnalytics,
   calculateBuildingHealthScore,
   calculateBuildingKpis,
   detectRecurringFaults,
   generateClientReportDraft,
+  generatePortfolioReportDraft,
+  summarizeFaultTypes,
 } from "../lib/master-analytics";
 import {
   canDeleteBuilding,
@@ -1651,8 +1654,68 @@ const emptyReport = generateClientReportDraft({
 });
 assert(
   emptyReport.fullText.includes("דוח בקרת שירות מעליות") &&
-    emptyReport.fullText.includes("בניין ריק"),
-  "ניתוח master: דוח נוצר גם ללא תקלות"
+    emptyReport.fullText.includes("בניין ריק") &&
+    emptyReport.fullText.includes("א. סיכום מנהלים") &&
+    emptyReport.fullText.includes("ז. המלצות"),
+  "ניתוח master: דוח בניין נוצר גם ללא תקלות"
+);
+
+const buildingReportWithDetails = generateClientReportDraft({
+  buildingLabel: "מגדל דוד 25",
+  periodLabel: "2026-01-01 עד 2026-06-01",
+  kpis: analyticsKpis,
+  health: calculateBuildingHealthScore(analyticsFaults, recurringOnly),
+  recurring: recurringOnly,
+  insights: ["בדיקה"],
+  details: {
+    name: "מגדל דוד 25",
+    city: "מודיעין",
+    address: "דוד 25",
+    elevatorCompany: "צום",
+    elevatorCount: 2,
+  },
+  elevatorLines: [
+    {
+      elevatorId: "e1",
+      elevatorName: "מעלית 1",
+      faultCount: 3,
+      openFaultCount: 1,
+      statusLabel: "פעילה",
+    },
+  ],
+  faultTypes: summarizeFaultTypes(analyticsFaults),
+});
+assert(
+  buildingReportWithDetails.fullText.includes("פרטי הבניין") &&
+    buildingReportWithDetails.fullText.includes("מודיעין") &&
+    buildingReportWithDetails.fullText.includes("ב. מצב המעליות בבניין") &&
+    buildingReportWithDetails.fullText.includes("ה. סוגי תקלות עיקריים"),
+  "ניתוח master: דוח בניין כולל פרטים וסעיפים"
+);
+
+const portfolioSummary = buildPortfolioAnalytics(
+  analyticsFaults,
+  {},
+  ["md25", "or02"],
+  (id) => (id === "md25" ? "מגדל דוד 25" : "בניין אור"),
+  (id) => (id === "md25" ? 2 : 1)
+);
+assert(
+  portfolioSummary.buildingCount === 2 &&
+    portfolioSummary.totalFaults === 5 &&
+    portfolioSummary.rankings[0].buildingId === "md25",
+  "ניתוח master: דוח ניהולי — סיכום ודירוג"
+);
+
+const portfolioReport = generatePortfolioReportDraft({
+  periodLabel: "כל התקופה",
+  portfolio: portfolioSummary,
+});
+assert(
+  portfolioReport.fullText.includes("דוח ניהולי — כל הבניינים") &&
+    portfolioReport.fullText.includes("דירוג בניינים") &&
+    portfolioReport.fullText.includes("בניינים בעייתיים"),
+  "ניתוח master: דוח ניהולי נוצר"
 );
 
 const masterAnalyticsSource = fs.readFileSync(
@@ -1674,8 +1737,12 @@ const masterAnalyticsUi = fs.readFileSync(
 );
 assert(
   masterAnalyticsSource.includes("buildMasterAnalytics") &&
+    masterAnalyticsSource.includes("buildPortfolioAnalytics") &&
+    masterAnalyticsSource.includes("generatePortfolioReportDraft") &&
     masterAnalyticsUi.includes("ניתוח מקצועי לבניין") &&
-    masterAnalyticsUi.includes("העתק דוח"),
+    masterAnalyticsUi.includes("בניין לניתוח") &&
+    masterAnalyticsUi.includes("הפק דוח לבניין") &&
+    masterAnalyticsUi.includes("העתק דוח ניהולי"),
   "ניתוח master: UI מקצועי ב-/master בלבד"
 );
 assert(
