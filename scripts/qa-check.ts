@@ -91,11 +91,16 @@ import {
 import {
   getMasterCode,
   isPilotCloudConfigured,
+  mapPilotFeedbackRow,
   PILOT_FAULTS_TABLE,
   PILOT_FEEDBACK_TABLE,
   verifyMasterCode,
   type PilotCloudFault,
 } from "../lib/pilot-cloud";
+import {
+  formatFeedbackNotes,
+  getMasterFeedbackEmptyMessage,
+} from "../lib/master-feedback-view";
 import {
   buildMasterAnalytics,
   calculateBuildingHealthScore,
@@ -1445,6 +1450,48 @@ assert(
   masterSource.includes("איפוס לבניין הנבחר") &&
     masterSource.includes("נתוני בניינים אחרים לא יושפעו"),
   "ענן פיילוט: /master — איפוס לפי בניין עם אישור ברור"
+);
+assert(
+  pilotCloudSource.includes("logPilotFeedbackLoadDebug") &&
+    pilotCloudSource.includes("mapPilotFeedbackRow"),
+  "משוב master: לוג ומיפוי שדות pilot_feedback"
+);
+assert(
+  masterSource.includes("getMasterFeedbackEmptyMessage") &&
+    masterSource.includes("pilot_feedback") &&
+    masterSource.includes("sender_name"),
+  "משוב master: טאב משובים טוען ומציג pilot_feedback"
+);
+
+const mappedFeedback = mapPilotFeedbackRow({
+  id: "fb-1",
+  building_id: "md25",
+  building_name: "מגדל דוד 25",
+  sender_name: "ישראל",
+  sender_role: "ועד",
+  rating: 5,
+  would_use_regularly: "כן",
+  unclear_or_missing: "חסר X",
+  expected_feature: "Y",
+  would_recommend: "כן",
+  created_at: "2026-06-01T10:00:00.000Z",
+});
+assert(
+  mappedFeedback?.sender_name === "ישראל" &&
+    mappedFeedback?.would_recommend === "כן",
+  "משוב master: מיפוי שדות Supabase"
+);
+assert(
+  getMasterFeedbackEmptyMessage(3, 0, true).includes("אין תוצאות לאחר הסינון"),
+  "משוב master: הודעה כשסינון מסתיר משובים"
+);
+assert(
+  getMasterFeedbackEmptyMessage(0, 0, true) === "אין משובים בענן",
+  "משוב master: הודעה כשאין משובים"
+);
+assert(
+  formatFeedbackNotes("חסר", "פיצ'ר") === "חסר/לא ברור: חסר · פעולה מצופה: פיצ'ר",
+  "משוב master: עיצוב הערות"
 );
 
 const bottomNavMasterCheck = fs.readFileSync(

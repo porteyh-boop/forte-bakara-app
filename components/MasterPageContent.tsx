@@ -21,6 +21,10 @@ import {
   type PilotCloudFault,
   type PilotCloudFeedback,
 } from "@/lib/pilot-cloud";
+import {
+  formatFeedbackNotes,
+  getMasterFeedbackEmptyMessage,
+} from "@/lib/master-feedback-view";
 import { getAllBuildingIds, getBuildingDataset } from "@/lib/buildings";
 type Tab = "faults" | "feedback" | "buildings";
 
@@ -118,6 +122,12 @@ export default function MasterPageContent() {
     if (authed && cloudReady) void refresh();
   }, [authed, cloudReady, refresh]);
 
+  useEffect(() => {
+    if (authed && cloudReady && tab === "feedback") {
+      void refresh();
+    }
+  }, [tab, authed, cloudReady, refresh]);
+
   const buildingOptions = useMemo(() => {
     const ids = new Set<string>();
     getAllBuildingIds().forEach((id) => ids.add(id));
@@ -156,6 +166,17 @@ export default function MasterPageContent() {
       }),
     [feedback, buildingFilter, dateFrom, dateTo]
   );
+
+  const feedbackEmptyMessage = getMasterFeedbackEmptyMessage(
+    feedback.length,
+    filteredFeedback.length,
+    cloudReady
+  );
+
+  const feedbackTabLabel =
+    feedback.length === filteredFeedback.length
+      ? `משובים (${feedback.length})`
+      : `משובים (${filteredFeedback.length}/${feedback.length})`;
 
   async function handleClose(id: string) {
     setActionId(id);
@@ -243,7 +264,7 @@ export default function MasterPageContent() {
         )}
 
         <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
-          <p className="text-xs font-semibold text-gold">סינון</p>
+          <p className="text-xs font-semibold text-gold">סינון (דיווחים ומשובים)</p>
           <div className="grid grid-cols-1 gap-3">
             <select
               value={buildingFilter}
@@ -371,7 +392,7 @@ export default function MasterPageContent() {
                 : "bg-white border border-gray-200 text-navy"
             }`}
           >
-            משובים ({filteredFeedback.length})
+            {feedbackTabLabel}
           </button>
           <button
             type="button"
@@ -480,50 +501,66 @@ export default function MasterPageContent() {
 
         {tab === "feedback" && (
           <div className="space-y-3">
+            {cloudReady && feedback.length > 0 && (
+              <p className="text-xs text-gray-text bg-gray-light rounded-xl px-3 py-2">
+                נטענו {feedback.length} משובים מ-pilot_feedback
+                {filteredFeedback.length !== feedback.length
+                  ? ` · מוצגים ${filteredFeedback.length} לאחר סינון`
+                  : ""}
+              </p>
+            )}
+
             {filteredFeedback.length === 0 ? (
               <p className="text-sm text-gray-text text-center py-8 bg-white rounded-2xl border border-gray-200">
-                {cloudReady ? "אין משובים בענן" : "Supabase לא מחובר"}
+                {feedbackEmptyMessage}
               </p>
             ) : (
-              filteredFeedback.map((fb) => (
-                <article
-                  key={fb.id}
-                  className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm"
-                >
-                  <div className="flex justify-between gap-2 mb-1">
-                    <p className="font-semibold text-navy text-sm">{fb.sender_name}</p>
-                    <span className="text-xs font-semibold text-gold bg-gold/10 px-2 py-0.5 rounded-lg">
-                      {fb.rating}/5
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-text">
-                    {fb.building_name} · {fb.sender_role}
-                  </p>
-                  <div className="flex flex-wrap gap-2 text-xs mt-2">
-                    <span className="bg-gray-light px-2 py-1 rounded-lg">
-                      שימוש שוטף: {fb.would_use_regularly}
-                    </span>
-                    <span className="bg-gray-light px-2 py-1 rounded-lg">
-                      המלצה: {fb.would_recommend}
-                    </span>
-                  </div>
-                  {fb.unclear_or_missing && (
-                    <p className="text-sm text-navy/80 mt-2">
-                      <span className="font-semibold">חסר/לא ברור: </span>
-                      {fb.unclear_or_missing}
-                    </p>
-                  )}
-                  {fb.expected_feature && (
-                    <p className="text-sm text-navy/80 mt-1">
-                      <span className="font-semibold">פעולה מצופה: </span>
-                      {fb.expected_feature}
-                    </p>
-                  )}
-                  <p className="text-xs text-gray-text mt-2">
-                    {formatCloudDate(fb.created_at)}
-                  </p>
-                </article>
-              ))
+              <div className="bg-white rounded-2xl border border-gray-200 p-4 overflow-x-auto">
+                <table className="w-full min-w-[44rem] text-sm">
+                  <thead>
+                    <tr className="text-xs text-gray-text border-b border-gray-200">
+                      <th className="text-right py-2 px-2 font-semibold">תאריך</th>
+                      <th className="text-right py-2 px-2 font-semibold">בניין</th>
+                      <th className="text-right py-2 px-2 font-semibold">שם שולח</th>
+                      <th className="text-right py-2 px-2 font-semibold">תפקיד</th>
+                      <th className="text-right py-2 px-2 font-semibold">דירוג</th>
+                      <th className="text-right py-2 px-2 font-semibold">המלצה</th>
+                      <th className="text-right py-2 px-2 font-semibold">שימוש שוטף</th>
+                      <th className="text-right py-2 px-2 font-semibold">הערות</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredFeedback.map((fb) => (
+                      <tr
+                        key={fb.id}
+                        className="border-b border-gray-100 align-top"
+                      >
+                        <td className="py-2 px-2 text-xs whitespace-nowrap">
+                          {formatCloudDate(fb.created_at)}
+                        </td>
+                        <td className="py-2 px-2 text-xs">{fb.building_name}</td>
+                        <td className="py-2 px-2 text-xs font-semibold text-navy">
+                          {fb.sender_name}
+                        </td>
+                        <td className="py-2 px-2 text-xs">{fb.sender_role}</td>
+                        <td className="py-2 px-2 text-xs font-semibold text-gold">
+                          {fb.rating}/5
+                        </td>
+                        <td className="py-2 px-2 text-xs">{fb.would_recommend}</td>
+                        <td className="py-2 px-2 text-xs">
+                          {fb.would_use_regularly}
+                        </td>
+                        <td className="py-2 px-2 text-xs text-navy/80 max-w-[14rem]">
+                          {formatFeedbackNotes(
+                            fb.unclear_or_missing,
+                            fb.expected_feature
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         )}

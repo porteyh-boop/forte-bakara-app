@@ -84,6 +84,40 @@ export function logPilotCloudConfigDebug(): void {
   });
 }
 
+/** לוג זמני — מספר משובים מ-Supabase */
+export function logPilotFeedbackLoadDebug(
+  count: number,
+  errorMessage?: string
+): void {
+  console.log("[forte-pilot-feedback-debug]", {
+    pilotFeedbackCount: count,
+    loadError: errorMessage ?? null,
+  });
+}
+
+export function mapPilotFeedbackRow(
+  row: Record<string, unknown>
+): PilotCloudFeedback | null {
+  if (!row.id || !row.building_id) return null;
+
+  return {
+    id: String(row.id),
+    building_id: String(row.building_id),
+    building_name: String(row.building_name ?? ""),
+    sender_name: String(row.sender_name ?? ""),
+    sender_role: String(row.sender_role ?? ""),
+    rating: Number(row.rating) || 0,
+    would_use_regularly: String(row.would_use_regularly ?? ""),
+    unclear_or_missing: String(row.unclear_or_missing ?? ""),
+    expected_feature: String(row.expected_feature ?? ""),
+    would_recommend: String(row.would_recommend ?? ""),
+    created_at: String(row.created_at ?? new Date().toISOString()),
+    source_device_id: row.source_device_id
+      ? String(row.source_device_id)
+      : null,
+  };
+}
+
 export function getPilotSupabaseClient(): SupabaseClient | null {
   if (supabaseClient !== undefined) return supabaseClient;
   const url = getSupabaseUrl();
@@ -236,7 +270,10 @@ export async function getAllPilotFaults(): Promise<PilotCloudFault[]> {
 
 export async function getAllPilotFeedback(): Promise<PilotCloudFeedback[]> {
   const client = getPilotSupabaseClient();
-  if (!client) return [];
+  if (!client) {
+    logPilotFeedbackLoadDebug(0, "Supabase client unavailable");
+    return [];
+  }
 
   const { data, error } = await client
     .from(PILOT_FEEDBACK_TABLE)
@@ -245,10 +282,16 @@ export async function getAllPilotFeedback(): Promise<PilotCloudFeedback[]> {
 
   if (error) {
     console.warn("[pilot-cloud] getAllPilotFeedback failed:", error.message);
+    logPilotFeedbackLoadDebug(0, error.message);
     return [];
   }
 
-  return (data ?? []) as PilotCloudFeedback[];
+  const mapped = (data ?? [])
+    .map((row) => mapPilotFeedbackRow(row as Record<string, unknown>))
+    .filter((row): row is PilotCloudFeedback => row !== null);
+
+  logPilotFeedbackLoadDebug(mapped.length);
+  return mapped;
 }
 
 export async function closePilotFault(id: string): Promise<boolean> {
