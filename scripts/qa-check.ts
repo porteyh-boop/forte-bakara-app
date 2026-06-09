@@ -115,6 +115,11 @@ import {
   buildDemoCatalogSnapshot,
   setCatalogSnapshot,
 } from "../lib/buildings-catalog";
+import {
+  buildBuildingDossier,
+  buildElevatorDossier,
+  filterFaultsForBuilding,
+} from "../lib/master-building-dossier";
 import { DEFAULT_ELEVATOR_COMPANIES } from "../lib/elevator-companies";
 import type { FeedbackSubmissionInput } from "../lib/types";
 
@@ -1758,6 +1763,84 @@ assert(
     cloudCatalog.buildings.test01?.building.name === "בניין בדיקה" &&
     cloudCatalog.buildings.test01?.elevators.length === 1,
   "ניהול בניינים: מיפוי נתוני Supabase לקטלוג"
+);
+
+const dossierFaults: PilotCloudFault[] = [
+  makePilotFault({
+    building_id: "md25",
+    building_name: "מגדל דוד 25",
+    elevator_id: "e1",
+    elevator_name: "מעלית 1",
+    fault_type: "דלת",
+    status: "פתוחה",
+    created_at: "2026-06-01T10:00:00.000Z",
+  }),
+  makePilotFault({
+    building_id: "md25",
+    building_name: "מגדל דוד 25",
+    elevator_id: "e1",
+    elevator_name: "מעלית 1",
+    fault_type: "דלת",
+    status: "סגורה",
+    created_at: "2026-06-02T10:00:00.000Z",
+  }),
+  makePilotFault({
+    building_id: "md25",
+    building_name: "מגדל דוד 25",
+    elevator_id: "e2",
+    elevator_name: "מעלית 2",
+    fault_type: "רעש",
+    status: "סגורה",
+    created_at: "2026-06-03T10:00:00.000Z",
+  }),
+];
+
+const buildingDossier = buildBuildingDossier({
+  buildingId: "md25",
+  buildingName: "מגדל דוד 25",
+  faults: dossierFaults,
+  registeredElevatorIds: ["e1", "e2"],
+});
+assert(buildingDossier.totalFaults === 3, "תיק בניין: סה\"כ תקלות");
+assert(buildingDossier.openFaults === 1, "תיק בניין: תקלות פתוחות");
+assert(buildingDossier.closedFaults === 2, "תיק בניין: תקלות סגורות");
+assert(buildingDossier.elevatorCount === 2, "תיק בניין: מספר מעליות");
+assert(
+  buildingDossier.faultsByElevator.find((e) => e.elevatorId === "e1")?.count === 2,
+  "תיק בניין: תקלות לפי מעלית"
+);
+assert(
+  buildingDossier.lastFaultDate === "2026-06-03T10:00:00.000Z",
+  "תיק בניין: תקלה אחרונה"
+);
+assert(
+  buildingDossier.healthScore >= 0 && buildingDossier.healthScore <= 100,
+  "תיק בניין: ציון בריאות"
+);
+
+const elevatorDossier = buildElevatorDossier({
+  buildingId: "md25",
+  elevatorId: "e1",
+  elevatorName: "מעלית 1",
+  faults: dossierFaults,
+});
+assert(elevatorDossier.totalFaults === 2, "תיק מעלית: סה\"כ תקלות");
+assert(elevatorDossier.openFaults === 1, "תיק מעלית: פתוחות");
+assert(elevatorDossier.closedFaults === 1, "תיק מעלית: סגורות");
+assert(
+  filterFaultsForBuilding(dossierFaults, "md25").length === 3,
+  "תיק בניין: סינון לפי building_id"
+);
+
+const masterBuildingsUiDossier = fs.readFileSync(
+  path.join(process.cwd(), "components/MasterBuildingsSection.tsx"),
+  "utf8"
+);
+assert(
+  masterBuildingsUiDossier.includes("היסטוריית תקלות הבניין") &&
+    masterBuildingsUiDossier.includes("תיק בניין") &&
+    masterBuildingsUiDossier.includes("buildBuildingDossier"),
+  "תיק בניין: UI במסך ניהול בניינים"
 );
 
 setCatalogSnapshot(null);

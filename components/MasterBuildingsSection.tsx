@@ -29,6 +29,12 @@ import {
   isOtherElevatorCompany,
 } from "@/lib/elevator-companies";
 import type { PilotCloudFault } from "@/lib/pilot-cloud";
+import {
+  buildBuildingDossier,
+  buildElevatorDossier,
+  formatDossierDate,
+  getHealthLevelClasses,
+} from "@/lib/master-building-dossier";
 
 interface MasterBuildingsSectionProps {
   cloudReady: boolean;
@@ -132,6 +138,9 @@ export default function MasterBuildingsSection({
   const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>(
     null
   );
+  const [selectedElevatorId, setSelectedElevatorId] = useState<string | null>(
+    null
+  );
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -192,6 +201,108 @@ export default function MasterBuildingsSection({
   const selectedElevators = selectedBuildingId
     ? (elevatorsByBuilding[selectedBuildingId] ?? [])
     : [];
+
+  const selectedBuildingName =
+    selectedBuilding?.name ??
+    faults.find((f) => f.building_id === selectedBuildingId)?.building_name ??
+    selectedBuildingId ??
+    "";
+
+  const selectedDossier = useMemo(() => {
+    if (!selectedBuildingId) return null;
+    return buildBuildingDossier({
+      buildingId: selectedBuildingId,
+      buildingName: selectedBuildingName,
+      faults,
+      registeredElevatorIds: selectedElevators.map((e) => e.elevator_id),
+    });
+  }, [
+    selectedBuildingId,
+    selectedBuildingName,
+    faults,
+    selectedElevators,
+  ]);
+
+  const selectedElevatorDossier = useMemo(() => {
+    if (!selectedBuildingId || !selectedElevatorId || !selectedDossier) {
+      return null;
+    }
+    const registered = selectedElevators.find(
+      (e) => e.elevator_id === selectedElevatorId
+    );
+    const fromFault = selectedDossier.faults.find(
+      (f) => f.elevator_id === selectedElevatorId
+    );
+    return buildElevatorDossier({
+      buildingId: selectedBuildingId,
+      elevatorId: selectedElevatorId,
+      elevatorName:
+        registered?.elevator_name ??
+        fromFault?.elevator_name ??
+        selectedElevatorId,
+      faults,
+    });
+  }, [
+    selectedBuildingId,
+    selectedElevatorId,
+    selectedDossier,
+    selectedElevators,
+    faults,
+  ]);
+
+  const dossierByBuildingId = useMemo(() => {
+    const map = new Map<
+      string,
+      ReturnType<typeof buildBuildingDossier>
+    >();
+    for (const b of buildings) {
+      map.set(
+        b.building_id,
+        buildBuildingDossier({
+          buildingId: b.building_id,
+          buildingName: b.name,
+          faults,
+          registeredElevatorIds: (elevatorsByBuilding[b.building_id] ?? []).map(
+            (e) => e.elevator_id
+          ),
+        })
+      );
+    }
+    for (const id of orphanBuildingIds) {
+      if (map.has(id)) continue;
+      const name =
+        faults.find((f) => f.building_id === id)?.building_name ?? id;
+      map.set(
+        id,
+        buildBuildingDossier({
+          buildingId: id,
+          buildingName: name,
+          faults,
+        })
+      );
+    }
+    return map;
+  }, [buildings, elevatorsByBuilding, faults, orphanBuildingIds]);
+
+  function selectBuilding(buildingId: string) {
+    setSelectedBuildingId(buildingId);
+    setSelectedElevatorId(null);
+    setShowBuildingForm(false);
+    setShowElevatorForm(false);
+  }
+
+  function selectElevator(elevatorId: string) {
+    setSelectedElevatorId((current) =>
+      current === elevatorId ? null : elevatorId
+    );
+  }
+
+  function faultCountForElevator(elevatorId: string): number {
+    return (
+      selectedDossier?.faultsByElevator.find((e) => e.elevatorId === elevatorId)
+        ?.count ?? 0
+    );
+  }
 
   function openAddBuilding() {
     setEditingBuilding(null);
@@ -406,9 +517,9 @@ export default function MasterBuildingsSection({
       <div className="bg-white rounded-2xl border border-gray-200 p-4">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
           <div>
-            <h2 className="text-base font-bold text-navy">ניהול בניינים</h2>
+            <h2 className="text-base font-bold text-navy">ניהול בניינים — תיק בניין</h2>
             <p className="text-xs text-gray-text mt-0.5">
-              הוספה, עריכה והשבתה — פנימי בלבד
+              ניהול בניינים, מעליות ותקלות מ-pilot_faults
             </p>
           </div>
           <button
@@ -440,7 +551,9 @@ export default function MasterBuildingsSection({
           </p>
         ) : (
           <ul className="space-y-2">
-            {buildings.map((b) => (
+            {buildings.map((b) => {
+              const dossier = dossierByBuildingId.get(b.building_id);
+              return (
               <li
                 key={b.id}
                 className={`border rounded-xl px-3 py-2 ${
@@ -452,7 +565,7 @@ export default function MasterBuildingsSection({
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <button
                     type="button"
-                    onClick={() => setSelectedBuildingId(b.building_id)}
+                    onClick={() => selectBuilding(b.building_id)}
                     className="text-right flex-1"
                   >
                     <p className="font-semibold text-navy text-sm">{b.name}</p>
@@ -461,6 +574,11 @@ export default function MasterBuildingsSection({
                       {b.city ? ` · ${b.city}` : ""}
                       {!b.is_active ? " · מושבת" : ""}
                     </p>
+                    {dossier && (
+                      <p className="text-[11px] text-gray-text mt-1">
+                        {dossier.totalFaults} תקלות · {dossier.openFaults} פתוחות · בריאות {dossier.healthScore}
+                      </p>
+                    )}
                   </button>
                   <div className="flex flex-wrap gap-1">
                     <ActionBtn label="ערוך" onClick={() => openEditBuilding(b)} />
@@ -476,7 +594,8 @@ export default function MasterBuildingsSection({
                   </div>
                 </div>
               </li>
-            ))}
+            );
+            })}
           </ul>
         )}
 
@@ -486,11 +605,29 @@ export default function MasterBuildingsSection({
               בניינים מדיווחים בלבד (ללא רשומה בטבלה)
             </p>
             <ul className="space-y-1">
-              {orphanBuildingIds.map((id) => (
-                <li key={id} className="text-sm text-gray-text">
-                  {id}
+              {orphanBuildingIds.map((id) => {
+                const dossier = dossierByBuildingId.get(id);
+                return (
+                <li key={id}>
+                  <button
+                    type="button"
+                    onClick={() => selectBuilding(id)}
+                    className={`w-full text-right rounded-lg px-2 py-1.5 text-sm ${
+                      selectedBuildingId === id
+                        ? "bg-gray-light text-navy font-semibold"
+                        : "text-gray-text hover:bg-gray-50"
+                    }`}
+                  >
+                    {dossier?.buildingName ?? id}
+                    {dossier && (
+                      <span className="text-xs text-gray-text mr-2">
+                        · {dossier.totalFaults} תקלות
+                      </span>
+                    )}
+                  </button>
                 </li>
-              ))}
+              );
+              })}
             </ul>
           </div>
         )}
@@ -640,67 +777,125 @@ export default function MasterBuildingsSection({
         </form>
       )}
 
-      {selectedBuilding && (
-        <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h3 className="text-sm font-bold text-navy">
-                מעליות — {selectedBuilding.name}
-              </h3>
-              <p className="text-xs text-gray-text">
-                {selectedElevators.length} מעליות רשומות
-              </p>
+      {selectedBuildingId && selectedDossier && (
+        <>
+          <BuildingDossierPanel dossier={selectedDossier} />
+
+          <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-bold text-navy">
+                  מעליות — {selectedDossier.buildingName}
+                </h3>
+                <p className="text-xs text-gray-text">
+                  {selectedDossier.elevatorCount} מעליות · לחצו לצפייה בתיק מעלית
+                </p>
+              </div>
+              {selectedBuilding && (
+                <button
+                  type="button"
+                  onClick={openAddElevator}
+                  className="text-xs font-semibold bg-navy text-white px-3 py-1.5 rounded-lg"
+                >
+                  הוסף מעלית
+                </button>
+              )}
             </div>
-            <button
-              type="button"
-              onClick={openAddElevator}
-              className="text-xs font-semibold bg-navy text-white px-3 py-1.5 rounded-lg"
-            >
-              הוסף מעלית
-            </button>
+
+            {selectedElevators.length === 0 &&
+            selectedDossier.faultsByElevator.length === 0 ? (
+              <p className="text-sm text-gray-text">אין מעליות רשומות לבניין זה.</p>
+            ) : (
+              <ul className="space-y-2">
+                {selectedElevators.map((e) => (
+                  <li
+                    key={e.id}
+                    className={`border rounded-xl px-3 py-2 ${
+                      selectedElevatorId === e.elevator_id
+                        ? "border-gold bg-gold/5"
+                        : "border-gray-200"
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <button
+                        type="button"
+                        onClick={() => selectElevator(e.elevator_id)}
+                        className="text-right flex-1"
+                      >
+                        <p className="font-semibold text-navy text-sm">
+                          {e.elevator_name}
+                        </p>
+                        <p className="text-xs text-gray-text">
+                          {e.elevator_id} · {e.status}
+                          {!e.is_active ? " · מושבתת" : ""}
+                          {e.floors_count ? ` · ${e.floors_count} קומות` : ""}
+                          · {faultCountForElevator(e.elevator_id)} תקלות
+                        </p>
+                      </button>
+                      {selectedBuilding && (
+                        <div className="flex flex-wrap gap-1">
+                          <ActionBtn
+                            label="ערוך"
+                            onClick={() => openEditElevator(e)}
+                          />
+                          <ActionBtn
+                            label={e.is_active ? "השבת" : "הפעל"}
+                            onClick={() => void handleToggleElevator(e)}
+                          />
+                          <ActionBtn
+                            label="מחק"
+                            danger
+                            onClick={() => void handleDeleteElevator(e)}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </li>
+                ))}
+
+                {selectedDossier.faultsByElevator
+                  .filter(
+                    (item) =>
+                      !selectedElevators.some(
+                        (e) => e.elevator_id === item.elevatorId
+                      )
+                  )
+                  .map((item) => (
+                    <li
+                      key={item.elevatorId}
+                      className={`border rounded-xl px-3 py-2 border-dashed ${
+                        selectedElevatorId === item.elevatorId
+                          ? "border-gold bg-gold/5"
+                          : "border-gray-200"
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => selectElevator(item.elevatorId)}
+                        className="text-right w-full"
+                      >
+                        <p className="font-semibold text-navy text-sm">
+                          {item.elevatorName}
+                        </p>
+                        <p className="text-xs text-gray-text">
+                          {item.elevatorId} · מדיווחים בלבד · {item.count} תקלות
+                        </p>
+                      </button>
+                    </li>
+                  ))}
+              </ul>
+            )}
           </div>
 
-          {selectedElevators.length === 0 ? (
-            <p className="text-sm text-gray-text">אין מעליות לבניין זה.</p>
-          ) : (
-            <ul className="space-y-2">
-              {selectedElevators.map((e) => (
-                <li
-                  key={e.id}
-                  className="border border-gray-200 rounded-xl px-3 py-2"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <p className="font-semibold text-navy text-sm">
-                        {e.elevator_name}
-                      </p>
-                      <p className="text-xs text-gray-text">
-                        {e.elevator_id} · {e.status}
-                        {!e.is_active ? " · מושבתת" : ""}
-                        {e.floors_count ? ` · ${e.floors_count} קומות` : ""}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      <ActionBtn
-                        label="ערוך"
-                        onClick={() => openEditElevator(e)}
-                      />
-                      <ActionBtn
-                        label={e.is_active ? "השבת" : "הפעל"}
-                        onClick={() => void handleToggleElevator(e)}
-                      />
-                      <ActionBtn
-                        label="מחק"
-                        danger
-                        onClick={() => void handleDeleteElevator(e)}
-                      />
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
+          {selectedElevatorDossier && (
+            <ElevatorDossierPanel dossier={selectedElevatorDossier} />
           )}
-        </div>
+
+          <FaultHistoryTable
+            title="היסטוריית תקלות הבניין"
+            faults={selectedDossier.faults}
+          />
+        </>
       )}
 
       {showElevatorForm && selectedBuildingId && (
@@ -791,6 +986,170 @@ export default function MasterBuildingsSection({
         </form>
       )}
     </section>
+  );
+}
+
+function BuildingDossierPanel({
+  dossier,
+}: {
+  dossier: ReturnType<typeof buildBuildingDossier>;
+}) {
+  const healthStyle = getHealthLevelClasses(dossier.healthLevel);
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
+      <div>
+        <h3 className="text-sm font-bold text-navy">תיק בניין — {dossier.buildingName}</h3>
+        <p className="text-xs text-gray-text mt-0.5">{dossier.buildingId}</p>
+      </div>
+
+      <div
+        className={`rounded-xl border p-3 ${healthStyle.bg} ${healthStyle.border}`}
+      >
+        <p className="text-xs font-semibold text-gray-text">ציון בריאות בניין</p>
+        <p className={`text-2xl font-bold mt-0.5 ${healthStyle.text}`}>
+          {dossier.healthScore}
+          <span className="text-sm font-semibold mr-1">/100</span>
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <DossierKpi label='סה"כ תקלות' value={dossier.totalFaults} />
+        <DossierKpi label="תקלות פתוחות" value={dossier.openFaults} />
+        <DossierKpi label="תקלות סגורות" value={dossier.closedFaults} />
+        <DossierKpi label="מספר מעליות" value={dossier.elevatorCount} />
+        <DossierKpi label="תקלות חוזרות" value={dossier.recurringCount} />
+        <DossierKpi
+          label="תקלה אחרונה"
+          value={formatDossierDate(dossier.lastFaultDate)}
+          small
+        />
+      </div>
+
+      {dossier.faultsByElevator.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-gold mb-2">תקלות לפי מעלית</p>
+          <ul className="space-y-1">
+            {dossier.faultsByElevator.map((item) => (
+              <li
+                key={item.elevatorId}
+                className="text-sm text-navy flex justify-between gap-2 border border-gray-100 rounded-lg px-2 py-1"
+              >
+                <span>{item.elevatorName}</span>
+                <span className="font-semibold">{item.count}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ElevatorDossierPanel({
+  dossier,
+}: {
+  dossier: ReturnType<typeof buildElevatorDossier>;
+}) {
+  return (
+    <div className="bg-white rounded-2xl border border-gold/30 p-4 space-y-3">
+      <div>
+        <h3 className="text-sm font-bold text-navy">
+          תיק מעלית — {dossier.elevatorName}
+        </h3>
+        <p className="text-xs text-gray-text">{dossier.elevatorId}</p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <DossierKpi label='סה"כ תקלות' value={dossier.totalFaults} />
+        <DossierKpi label="פתוחות" value={dossier.openFaults} />
+        <DossierKpi label="סגורות" value={dossier.closedFaults} />
+        <DossierKpi
+          label="תקלה אחרונה"
+          value={formatDossierDate(dossier.lastFaultDate)}
+          small
+        />
+      </div>
+
+      <FaultHistoryTable
+        title="כל התקלות של המעלית"
+        faults={dossier.faults}
+        compact
+      />
+    </div>
+  );
+}
+
+function FaultHistoryTable({
+  title,
+  faults,
+  compact = false,
+}: {
+  title: string;
+  faults: PilotCloudFault[];
+  compact?: boolean;
+}) {
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
+      <h3 className="text-sm font-bold text-navy">{title}</h3>
+      {faults.length === 0 ? (
+        <p className="text-sm text-gray-text">אין תקלות רשומות.</p>
+      ) : (
+        <div className="overflow-x-auto -mx-1">
+          <table className="w-full min-w-[36rem] text-sm">
+            <thead>
+              <tr className="text-xs text-gray-text border-b border-gray-200">
+                <th className="text-right py-2 px-2 font-semibold">תאריך</th>
+                <th className="text-right py-2 px-2 font-semibold">מעלית</th>
+                <th className="text-right py-2 px-2 font-semibold">סוג תקלה</th>
+                {!compact && (
+                  <th className="text-right py-2 px-2 font-semibold">תיאור</th>
+                )}
+                <th className="text-right py-2 px-2 font-semibold">סטטוס</th>
+              </tr>
+            </thead>
+            <tbody>
+              {faults.map((f) => (
+                <tr key={f.id} className="border-b border-gray-100 align-top">
+                  <td className="py-2 px-2 whitespace-nowrap text-xs">
+                    {formatDossierDate(f.created_at)}
+                  </td>
+                  <td className="py-2 px-2 text-xs">{f.elevator_name}</td>
+                  <td className="py-2 px-2 text-xs">{f.fault_type}</td>
+                  {!compact && (
+                    <td className="py-2 px-2 text-xs text-navy/80 max-w-[12rem]">
+                      {f.description}
+                    </td>
+                  )}
+                  <td className="py-2 px-2 text-xs font-semibold">{f.status}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DossierKpi({
+  label,
+  value,
+  small = false,
+}: {
+  label: string;
+  value: string | number;
+  small?: boolean;
+}) {
+  return (
+    <div className="bg-gray-light rounded-xl px-3 py-2 border border-gray-200">
+      <p className="text-[11px] text-gray-text">{label}</p>
+      <p
+        className={`font-bold text-navy mt-0.5 ${small ? "text-xs" : "text-lg"}`}
+      >
+        {value}
+      </p>
+    </div>
   );
 }
 
