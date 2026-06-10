@@ -1,8 +1,15 @@
+import { getBuildingLiveStartedAt } from "./buildings-cloud";
 import {
   getPilotFaultsForBuilding,
   isPilotCloudConfigured,
   type PilotCloudFault,
 } from "./pilot-cloud";
+import {
+  filterFaultsForLiveStart,
+  isAfterLiveStart,
+  resolveLiveStartedAt,
+  setCachedLiveStartedAt,
+} from "./building-live";
 import {
   getSubmittedReports,
   saveSubmittedReports,
@@ -67,18 +74,41 @@ function enrichFaultFromLocal(cloudFault: Fault, localReports: Fault[]): Fault {
   return cloudFault;
 }
 
-function isPendingLocalReport(report: Fault, now: number): boolean {
+function isPendingLocalReport(
+  report: Fault,
+  now: number,
+  liveStartedAt?: string | null
+): boolean {
   if (!report.isUserSubmitted || !report.ticketNumber) return false;
+  if (liveStartedAt && !isAfterLiveStart(report.reportedAt, liveStartedAt)) {
+    return false;
+  }
   const age = now - new Date(report.reportedAt).getTime();
   return age >= 0 && age <= PENDING_CLOUD_SYNC_MS;
+}
+
+export async function resolveLiveStartedAtForBuilding(
+  buildingId: string
+): Promise<string | null> {
+  const cached = resolveLiveStartedAt(buildingId);
+  if (cached) return cached;
+
+  if (!isPilotCloudConfigured()) return null;
+
+  const fromCloud = await getBuildingLiveStartedAt(buildingId);
+  if (fromCloud) {
+    setCachedLiveStartedAt(buildingId, fromCloud);
+  }
+  return fromCloud;
 }
 
 export function reconcileSubmittedReportsWithCloud(params: {
   localReports: Fault[];
   cloudFaults: PilotCloudFault[];
+  liveStartedAt?: string | null;
   now?: number;
 }): Fault[] {
-  const { localReports, cloudFaults, now = Date.now() } = params;
+  const { localReports, cloudFaults, liveStartedAt, now = Date.now() } = params;
   const cloudMapped = cloudFaults
     .map(mapPilotCloudFaultToFault)
     .map((fault) => enrichFaultFromLocal(fault, localReports));
@@ -91,31 +121,44 @@ export function reconcileSubmittedReportsWithCloud(params: {
     (report) =>
       report.ticketNumber &&
       !cloudTickets.has(report.ticketNumber) &&
-      isPendingLocalReport(report, now)
+      isPendingLocalReport(report, now, liveStartedAt)
   );
 
-  return [...pendingLocal, ...cloudMapped].sort(
+  const merged = [...pendingLocal, ...cloudMapped];
+  return filterFaultsForLiveStart(merged, liveStartedAt).sort(
     (a, b) =>
       new Date(b.reportedAt).getTime() - new Date(a.reportedAt).getTime()
   );
 }
 
 export async function syncSubmittedReportsWithCloud(
-  buildingId: string
+  buildingId: string,
+  liveStartedAtOverride?: string | null
 ): Promise<Fault[]> {
   if (!isPilotCloudConfigured()) {
-    return getSubmittedReports(buildingId);
+    const local = getSubmittedReports(buildingId);
+    const liveStartedAt =
+      liveStartedAtOverride ?? resolveLiveStartedAt(buildingId);
+    return filterFaultsForLiveStart(local, liveStartedAt);
   }
+
+  const liveStartedAt =
+    liveStartedAtOverride ??
+    (await resolveLiveStartedAtForBuilding(buildingId));
 
   const cloudFaults = await getPilotFaultsForBuilding(buildingId);
   if (cloudFaults === null) {
-    return getSubmittedReports(buildingId);
+    return filterFaultsForLiveStart(
+      getSubmittedReports(buildingId),
+      liveStartedAt
+    );
   }
 
   const localReports = getSubmittedReports(buildingId);
   const merged = reconcileSubmittedReportsWithCloud({
     localReports,
     cloudFaults,
+    liveStartedAt,
   });
 
   saveSubmittedReports(buildingId, merged);
@@ -123,12 +166,16 @@ export async function syncSubmittedReportsWithCloud(
 }
 
 export async function syncAllSubmittedReportsWithCloud(
-  buildingIds: string[]
+  buildingIds: string[],
+  liveStartedAtByBuilding?: Record<string, string | null>
 ): Promise<Record<string, Fault[]>> {
   const map: Record<string, Fault[]> = {};
   await Promise.all(
     buildingIds.map(async (id) => {
-      map[id] = await syncSubmittedReportsWithCloud(id);
+      map[id] = await syncSubmittedReportsWithCloud(
+        id,
+        liveStartedAtByBuilding?.[id]
+      );
     })
   );
   return map;

@@ -1,4 +1,7 @@
-import { getPilotSupabaseClient } from "./pilot-cloud";
+import {
+  getPilotSupabaseClient,
+  resetPilotCloudDataByBuilding,
+} from "./pilot-cloud";
 import type { PilotCloudFault } from "./pilot-cloud";
 import type { Status } from "./types";
 
@@ -21,6 +24,7 @@ export interface CloudBuildingRow {
   floors_count: number | null;
   is_active: boolean;
   created_at: string;
+  live_started_at?: string | null;
 }
 
 export interface CloudElevatorRow {
@@ -387,4 +391,99 @@ export async function deleteCloudElevator(
   }
 
   return { allowed: true, deleted: true };
+}
+
+export async function getBuildingLiveStartedAt(
+  buildingId: string
+): Promise<string | null> {
+  const client = getPilotSupabaseClient();
+  if (!client || !buildingId.trim()) return null;
+
+  const { data, error } = await client
+    .from(BUILDINGS_TABLE)
+    .select("live_started_at")
+    .eq("building_id", buildingId)
+    .maybeSingle();
+
+  if (error) {
+    console.warn(
+      "[buildings-cloud] getBuildingLiveStartedAt failed:",
+      error.message
+    );
+    return null;
+  }
+
+  return data?.live_started_at ? String(data.live_started_at) : null;
+}
+
+export const INITIALIZE_BUILDING_FOR_LIVE_CONFIRM =
+  "פעולה זו תאפס את נתוני הבניין ותתחיל שימוש אמיתי מאפס.";
+
+export async function initializeBuildingForLiveUse(params: {
+  buildingId: string;
+  buildingName: string;
+}): Promise<{ ok: boolean; liveStartedAt?: string; reason?: string }> {
+  const client = getPilotSupabaseClient();
+  if (!client) {
+    return { ok: false, reason: "Supabase לא מחובר." };
+  }
+
+  const buildingId = normalizeBuildingId(params.buildingId);
+  const buildingName = params.buildingName.trim();
+  if (!buildingId || !buildingName) {
+    return { ok: false, reason: "מזהה או שם בניין חסר." };
+  }
+
+  const resetOk = await resetPilotCloudDataByBuilding(buildingId);
+  if (!resetOk) {
+    return { ok: false, reason: "מחיקת דיווחים ומשובים מהענן נכשלה." };
+  }
+
+  const liveStartedAt = new Date().toISOString();
+
+  const { data: existing, error: existingError } = await client
+    .from(BUILDINGS_TABLE)
+    .select("id")
+    .eq("building_id", buildingId)
+    .maybeSingle();
+
+  if (existingError) {
+    console.warn(
+      "[buildings-cloud] initialize lookup failed:",
+      existingError.message
+    );
+    return { ok: false, reason: existingError.message };
+  }
+
+  if (existing) {
+    const { error } = await client
+      .from(BUILDINGS_TABLE)
+      .update({ live_started_at: liveStartedAt })
+      .eq("building_id", buildingId);
+
+    if (error) {
+      console.warn(
+        "[buildings-cloud] initialize update failed:",
+        error.message
+      );
+      return { ok: false, reason: error.message };
+    }
+  } else {
+    const { error } = await client.from(BUILDINGS_TABLE).insert({
+      building_id: buildingId,
+      name: buildingName,
+      live_started_at: liveStartedAt,
+      is_active: true,
+    });
+
+    if (error) {
+      console.warn(
+        "[buildings-cloud] initialize insert failed:",
+        error.message
+      );
+      return { ok: false, reason: error.message };
+    }
+  }
+
+  return { ok: true, liveStartedAt };
 }

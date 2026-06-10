@@ -565,7 +565,11 @@ export default function MasterPageContent() {
         )}
 
         {tab === "buildings" && (
-          <MasterBuildingsSection cloudReady={cloudReady} faults={faults} />
+          <MasterBuildingsSection
+            cloudReady={cloudReady}
+            faults={faults}
+            onDataChanged={refresh}
+          />
         )}
       </main>
     </div>

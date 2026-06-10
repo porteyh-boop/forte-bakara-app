@@ -14,6 +14,7 @@ import {
   isOpenFault,
 } from "./elevator-status";
 import { isClosedFault } from "./fault-lifecycle";
+import { filterFaultsForLiveStart } from "./building-live";
 import { mergeAllFaults, mergeFaults } from "./report-storage";
 import type {
   BuildingDataContext,
@@ -45,25 +46,35 @@ function getAllFaults(
   ctx: BuildingDataContext,
   submitted: Fault[] = [],
   buildingId?: string,
-  storageReady = true
+  storageReady = true,
+  liveStartedAt: string | null = null
 ): Fault[] {
+  const demoFaults = filterFaultsForLiveStart(ctx.faults, liveStartedAt);
+  const liveSubmitted = filterFaultsForLiveStart(submitted, liveStartedAt);
   return buildingId
     ? mergeAllFaults(
-        ctx.faults,
-        submitted,
+        demoFaults,
+        liveSubmitted,
         buildingId,
         storageReady ? undefined : null
       )
-    : mergeFaults(ctx.faults, submitted);
+    : mergeFaults(demoFaults, liveSubmitted);
 }
 
 function getMergedOpenFaults(
   ctx: BuildingDataContext,
   submitted: Fault[] = [],
   buildingId?: string,
-  storageReady = true
+  storageReady = true,
+  liveStartedAt: string | null = null
 ): Fault[] {
-  return getAllFaults(ctx, submitted, buildingId, storageReady)
+  return getAllFaults(
+    ctx,
+    submitted,
+    buildingId,
+    storageReady,
+    liveStartedAt
+  )
     .filter((f) => isOpenFault(f))
     .sort(
       (a, b) =>
@@ -133,18 +144,24 @@ function resolveClosuresOverride(
 export function getLiveBuildingListItems(
   reportsByBuilding: Record<string, Fault[]> = {},
   storageReady = true,
-  closuresByBuilding?: Record<string, Record<string, Fault>>
+  closuresByBuilding?: Record<string, Record<string, Fault>>,
+  liveStartedAtByBuilding: Record<string, string | null> = {}
 ): BuildingListItem[] {
   return getAllBuildingIds().map((id) => {
     const ctx = getBuildingDataset(id);
-    const submitted = reportsByBuilding[id] ?? [];
+    const liveStartedAt = liveStartedAtByBuilding[id] ?? null;
+    const submitted = filterFaultsForLiveStart(
+      reportsByBuilding[id] ?? [],
+      liveStartedAt
+    );
+    const demoFaults = filterFaultsForLiveStart(ctx.faults, liveStartedAt);
     const closuresOverride = resolveClosuresOverride(
       id,
       storageReady,
       closuresByBuilding
     );
     const allFaults = mergeAllFaults(
-      ctx.faults,
+      demoFaults,
       submitted,
       id,
       closuresOverride
@@ -199,9 +216,16 @@ export function buildRuntimeBuildingContext(
   ctx: BuildingDataContext,
   submitted: Fault[] = [],
   buildingId?: string,
-  storageReady = true
+  storageReady = true,
+  liveStartedAt: string | null = null
 ): BuildingDataContext {
-  const allFaults = getAllFaults(ctx, submitted, buildingId, storageReady);
+  const allFaults = getAllFaults(
+    ctx,
+    submitted,
+    buildingId,
+    storageReady,
+    liveStartedAt
+  );
   const activeFaults = allFaults.filter((f) => !isClosedFault(f));
   return {
     ...ctx,

@@ -101,6 +101,10 @@ import {
   reconcileSubmittedReportsWithCloud,
 } from "../lib/report-cloud-sync";
 import {
+  filterFaultsForLiveStart,
+  isAfterLiveStart,
+} from "../lib/building-live";
+import {
   formatFeedbackNotes,
   getMasterFeedbackEmptyMessage,
 } from "../lib/master-feedback-view";
@@ -1638,6 +1642,72 @@ assert(
     cloudKeeps[0].ticketNumber === "FB-20260605-0003" &&
     cloudKeeps[0].isUserSubmitted === true,
   "סנכרון היסטוריה: כשענן מחובר — נתוני ענן מועדפים"
+);
+
+const liveStartedAt = "2026-06-05T12:00:00.000Z";
+assert(
+  filterFaultsForLiveStart(
+    [
+      {
+        ...staleLocalReport,
+        reportedAt: "2026-01-01T10:00:00.000Z",
+      },
+    ],
+    liveStartedAt
+  ).length === 0,
+  "שימוש אמיתי: תקלות דemo/ישנות לפני live_started_at לא מוצגות"
+);
+assert(
+  isAfterLiveStart("2026-06-05T13:00:00.000Z", liveStartedAt),
+  "שימוש אמיתי: דיווח אחרי live_started_at מזוהה"
+);
+assert(
+  reconcileSubmittedReportsWithCloud({
+    localReports: [
+      staleLocalReport,
+      {
+        ...pendingLocalReport,
+        reportedAt: "2026-06-05T12:00:01.000Z",
+      },
+    ],
+    cloudFaults: [],
+    liveStartedAt,
+    now: Date.parse("2026-06-05T12:00:02.000Z"),
+  }).length === 1,
+  "שימוש אמיתי: אחרי אתחול נשאר רק דיווח חדש ממתין"
+);
+
+assert(
+  fs.existsSync(
+    path.join(
+      process.cwd(),
+      "supabase/migrations/004_buildings_live_started_at.sql"
+    )
+  ),
+  "שימוש אמיתי: migration live_started_at קיים"
+);
+
+const buildingsCloudLiveSource = fs.readFileSync(
+  path.join(process.cwd(), "lib/buildings-cloud.ts"),
+  "utf8"
+);
+assert(
+  buildingsCloudLiveSource.includes("initializeBuildingForLiveUse") &&
+    buildingsCloudLiveSource.includes("live_started_at") &&
+    buildingsCloudLiveSource.includes(
+      "פעולה זו תאפס את נתוני הבניין ותתחיל שימוש אמיתי מאפס"
+    ),
+  "שימוש אמיתי: אתחול בניין ב-buildings-cloud"
+);
+
+const masterBuildingsLiveUi = fs.readFileSync(
+  path.join(process.cwd(), "components/MasterBuildingsSection.tsx"),
+  "utf8"
+);
+assert(
+  masterBuildingsLiveUi.includes("אתחל בניין לשימוש אמיתי") &&
+    masterBuildingsLiveUi.includes("handleInitializeForLiveUse"),
+  "שימוש אמיתי: כפתור אתחול ב-/master"
 );
 
 const analyticsFaults: PilotCloudFault[] = [

@@ -6,7 +6,7 @@ import { syncSubmittedReportsWithCloud } from "@/lib/report-cloud-sync";
 import { getSubmittedReports } from "@/lib/report-storage";
 import type { Fault } from "@/lib/types";
 
-export function useSubmittedReports() {
+export function useSubmittedReports(liveStartedAt: string | null = null) {
   const { buildingId, ready: buildingReady } = useBuilding();
   const [submitted, setSubmitted] = useState<Fault[]>([]);
   const [ready, setReady] = useState(false);
@@ -14,14 +14,17 @@ export function useSubmittedReports() {
   const refresh = useCallback(async () => {
     if (!buildingReady) return;
     try {
-      const reports = await syncSubmittedReportsWithCloud(buildingId);
+      const reports = await syncSubmittedReportsWithCloud(
+        buildingId,
+        liveStartedAt
+      );
       setSubmitted(reports);
     } catch {
       setSubmitted(getSubmittedReports(buildingId));
     } finally {
       setReady(true);
     }
-  }, [buildingId, buildingReady]);
+  }, [buildingId, buildingReady, liveStartedAt]);
 
   useEffect(() => {
     if (!buildingReady) {
@@ -52,7 +55,7 @@ export function useSubmittedReports() {
       window.removeEventListener("forte-reports-updated", onReportsUpdated);
       window.removeEventListener("forte-building-changed", onBuildingChanged);
     };
-  }, [buildingId, buildingReady, refresh]);
+  }, [buildingId, buildingReady, liveStartedAt, refresh]);
 
   return { submitted, ready: buildingReady && ready, refresh };
 }

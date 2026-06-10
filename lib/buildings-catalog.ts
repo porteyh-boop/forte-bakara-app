@@ -15,6 +15,7 @@ export interface BuildingCatalogSnapshot {
   buildings: Record<string, BuildingDataContext>;
   allBuildingIds: string[];
   activeBuildingIds: string[];
+  liveStartedAtByBuilding: Record<string, string | null>;
 }
 
 export const BUILDINGS_CATALOG_UPDATED_EVENT = "forte-buildings-catalog-updated";
@@ -82,6 +83,7 @@ export function buildDemoCatalogSnapshot(
     buildings: { ...demoDatasets },
     allBuildingIds: ids,
     activeBuildingIds: ids,
+    liveStartedAtByBuilding: {},
   };
 }
 
@@ -93,12 +95,14 @@ export function buildCloudCatalogSnapshot(
   const buildings: Record<string, BuildingDataContext> = {};
   const allBuildingIds: string[] = [];
   const activeBuildingIds: string[] = [];
+  const liveStartedAtByBuilding: Record<string, string | null> = {};
 
   for (const row of cloudBuildings) {
     const elev = cloudElevators.filter((e) => e.building_id === row.building_id);
     const demoCtx = demoDatasets[row.building_id];
     buildings[row.building_id] = mapCloudBuildingToContext(row, elev, demoCtx);
     allBuildingIds.push(row.building_id);
+    liveStartedAtByBuilding[row.building_id] = row.live_started_at ?? null;
     if (row.is_active) activeBuildingIds.push(row.building_id);
   }
 
@@ -107,6 +111,7 @@ export function buildCloudCatalogSnapshot(
     buildings,
     allBuildingIds,
     activeBuildingIds,
+    liveStartedAtByBuilding,
   };
 }
 

@@ -14,6 +14,8 @@ import {
   ELEVATOR_STATUS_OPTIONS,
   getAllCloudBuildings,
   getAllCloudElevators,
+  INITIALIZE_BUILDING_FOR_LIVE_CONFIRM,
+  initializeBuildingForLiveUse,
   normalizeBuildingId,
   setCloudBuildingActive,
   setCloudElevatorActive,
@@ -23,7 +25,9 @@ import {
   type CloudElevatorRow,
   type ElevatorStatusOption,
 } from "@/lib/buildings-cloud";
-import { refreshBuildingCatalog, getDemoDatasets } from "@/lib/buildings";
+import { setCachedLiveStartedAt } from "@/lib/building-live";
+import { BUILDING_LIVE_STARTED_EVENT } from "@/hooks/useBuildingLiveStarted";
+import { refreshBuildingCatalog, getDemoDatasets, getBuildingDataset } from "@/lib/buildings";
 import {
   DEFAULT_ELEVATOR_COMPANIES,
   isOtherElevatorCompany,
@@ -39,6 +43,7 @@ import {
 interface MasterBuildingsSectionProps {
   cloudReady: boolean;
   faults: PilotCloudFault[];
+  onDataChanged?: () => void | Promise<void>;
 }
 
 type BuildingFormState = {
@@ -130,6 +135,7 @@ function elevatorFormFromRow(row: CloudElevatorRow): ElevatorFormState {
 export default function MasterBuildingsSection({
   cloudReady,
   faults,
+  onDataChanged,
 }: MasterBuildingsSectionProps) {
   const [buildings, setBuildings] = useState<CloudBuildingRow[]>([]);
   const [elevatorsByBuilding, setElevatorsByBuilding] = useState<
@@ -420,6 +426,59 @@ export default function MasterBuildingsSection({
     await afterMutation("הבניין נמחק.");
   }
 
+  async function handleInitializeForLiveUse(
+    buildingId: string,
+    buildingName: string
+  ) {
+    if (!cloudReady) {
+      setError("Supabase לא מחובר.");
+      return;
+    }
+
+    const faultCount = faults.filter((f) => f.building_id === buildingId).length;
+    if (
+      !window.confirm(
+        `${INITIALIZE_BUILDING_FOR_LIVE_CONFIRM}\n\n` +
+          `בניין: ${buildingName} (${buildingId})\n\n` +
+          `יפעלו:\n` +
+          `• מחיקת ${faultCount} דיווחים מ-Supabase\n` +
+          `• מחיקת כל המשובים של הבניין\n` +
+          `• סימון live_started_at — דמו ו-localStorage ישנים לא יוצגו בלקוח\n\n` +
+          `בניינים אחרים לא יושפעו.\n\n` +
+          `האם להמשיך?`
+      )
+    ) {
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    const result = await initializeBuildingForLiveUse({
+      buildingId,
+      buildingName,
+    });
+    setLoading(false);
+
+    if (!result.ok || !result.liveStartedAt) {
+      setError(result.reason ?? "אתחול בניין לשימוש אמיתי נכשל.");
+      return;
+    }
+
+    setCachedLiveStartedAt(buildingId, result.liveStartedAt);
+    await refreshBuildingCatalog(getDemoDatasets());
+    await onDataChanged?.();
+    window.dispatchEvent(
+      new CustomEvent(BUILDING_LIVE_STARTED_EVENT, {
+        detail: { buildingId, liveStartedAt: result.liveStartedAt },
+      })
+    );
+    await refresh();
+    setMessage(
+      `הבניין "${buildingName}" אותחל לשימוש אמיתי. דיווחים חדשים בלבד יוצגו בלקוח.`
+    );
+    setTimeout(() => setMessage(null), 4000);
+  }
+
   async function handleSaveElevator(e: React.FormEvent) {
     e.preventDefault();
     if (!selectedBuildingId) return;
@@ -579,8 +638,19 @@ export default function MasterBuildingsSection({
                         {dossier.totalFaults} תקלות · {dossier.openFaults} פתוחות · בריאות {dossier.healthScore}
                       </p>
                     )}
+                    {b.live_started_at && (
+                      <p className="text-[11px] text-emerald-700 mt-1">
+                        שימוש אמיתי מ-{formatDossierDate(b.live_started_at)}
+                      </p>
+                    )}
                   </button>
                   <div className="flex flex-wrap gap-1">
+                    <ActionBtn
+                      label="אתחל לשימוש אמיתי"
+                      onClick={() =>
+                        void handleInitializeForLiveUse(b.building_id, b.name)
+                      }
+                    />
                     <ActionBtn label="ערוך" onClick={() => openEditBuilding(b)} />
                     <ActionBtn
                       label={b.is_active ? "השבת" : "הפעל"}
@@ -609,22 +679,34 @@ export default function MasterBuildingsSection({
                 const dossier = dossierByBuildingId.get(id);
                 return (
                 <li key={id}>
-                  <button
-                    type="button"
-                    onClick={() => selectBuilding(id)}
-                    className={`w-full text-right rounded-lg px-2 py-1.5 text-sm ${
-                      selectedBuildingId === id
-                        ? "bg-gray-light text-navy font-semibold"
-                        : "text-gray-text hover:bg-gray-50"
-                    }`}
-                  >
-                    {dossier?.buildingName ?? id}
-                    {dossier && (
-                      <span className="text-xs text-gray-text mr-2">
-                        · {dossier.totalFaults} תקלות
-                      </span>
-                    )}
-                  </button>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => selectBuilding(id)}
+                      className={`flex-1 text-right rounded-lg px-2 py-1.5 text-sm ${
+                        selectedBuildingId === id
+                          ? "bg-gray-light text-navy font-semibold"
+                          : "text-gray-text hover:bg-gray-50"
+                      }`}
+                    >
+                      {dossier?.buildingName ?? getBuildingDataset(id).building.name}
+                      {dossier && (
+                        <span className="text-xs text-gray-text mr-2">
+                          · {dossier.totalFaults} תקלות
+                        </span>
+                      )}
+                    </button>
+                    <ActionBtn
+                      label="אתחל לשימוש אמיתי"
+                      onClick={() =>
+                        void handleInitializeForLiveUse(
+                          id,
+                          dossier?.buildingName ??
+                            getBuildingDataset(id).building.name
+                        )
+                      }
+                    />
+                  </div>
                 </li>
               );
               })}
@@ -779,6 +861,35 @@ export default function MasterBuildingsSection({
 
       {selectedBuildingId && selectedDossier && (
         <>
+          <div className="bg-white rounded-2xl border border-amber-200 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold text-navy">אתחול לשימוש אמיתי</p>
+                <p className="text-xs text-gray-text mt-1">
+                  {INITIALIZE_BUILDING_FOR_LIVE_CONFIRM}
+                </p>
+                {selectedBuilding?.live_started_at && (
+                  <p className="text-xs text-emerald-700 mt-2">
+                    שימוש אמיתי החל ב-
+                    {formatDossierDate(selectedBuilding.live_started_at)}
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  void handleInitializeForLiveUse(
+                    selectedBuildingId,
+                    selectedDossier.buildingName
+                  )
+                }
+                className="text-xs font-semibold rounded-lg border border-amber-400 text-amber-900 bg-amber-50 px-3 py-2 hover:bg-amber-100"
+              >
+                אתחל בניין לשימוש אמיתי
+              </button>
+            </div>
+          </div>
+
           <BuildingDossierPanel dossier={selectedDossier} />
 
           <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
