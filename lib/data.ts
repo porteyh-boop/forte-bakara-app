@@ -14,7 +14,10 @@ import {
   isOpenFault,
 } from "./elevator-status";
 import { isClosedFault } from "./fault-lifecycle";
-import { filterFaultsForLiveStart } from "./building-live";
+import {
+  filterFaultsForLiveStart,
+  logLiveStartFaultFilter,
+} from "./building-live";
 import { mergeAllFaults, mergeFaults } from "./report-storage";
 import type {
   BuildingDataContext,
@@ -47,10 +50,20 @@ function getAllFaults(
   submitted: Fault[] = [],
   buildingId?: string,
   storageReady = true,
-  liveStartedAt: string | null = null
+  liveStartedAt: string | null = null,
+  logSource = "getAllFaults"
 ): Fault[] {
   const demoFaults = filterFaultsForLiveStart(ctx.faults, liveStartedAt);
   const liveSubmitted = filterFaultsForLiveStart(submitted, liveStartedAt);
+  logLiveStartFaultFilter({
+    source: logSource,
+    buildingId: buildingId ?? ctx.id,
+    liveStartedAt,
+    beforeDemo: ctx.faults.length,
+    afterDemo: demoFaults.length,
+    beforeSubmitted: submitted.length,
+    afterSubmitted: liveSubmitted.length,
+  });
   return buildingId
     ? mergeAllFaults(
         demoFaults,
@@ -86,10 +99,17 @@ export function getOpenFaults(
   ctxOrId?: BuildingDataContext | string,
   submitted: Fault[] = [],
   buildingId?: string,
-  storageReady = true
+  storageReady = true,
+  liveStartedAt: string | null = null
 ) {
   const ctx = resolveCtx(ctxOrId);
-  return getMergedOpenFaults(ctx, submitted, buildingId, storageReady);
+  return getMergedOpenFaults(
+    ctx,
+    submitted,
+    buildingId,
+    storageReady,
+    liveStartedAt
+  );
 }
 
 /** מיזוג נתוני דמו + דיווחי localStorage — סטטוס מעליות בזמן אמת */
@@ -150,11 +170,18 @@ export function getLiveBuildingListItems(
   return getAllBuildingIds().map((id) => {
     const ctx = getBuildingDataset(id);
     const liveStartedAt = liveStartedAtByBuilding[id] ?? null;
-    const submitted = filterFaultsForLiveStart(
-      reportsByBuilding[id] ?? [],
-      liveStartedAt
-    );
+    const rawSubmitted = reportsByBuilding[id] ?? [];
+    const submitted = filterFaultsForLiveStart(rawSubmitted, liveStartedAt);
     const demoFaults = filterFaultsForLiveStart(ctx.faults, liveStartedAt);
+    logLiveStartFaultFilter({
+      source: "getLiveBuildingListItems",
+      buildingId: id,
+      liveStartedAt,
+      beforeDemo: ctx.faults.length,
+      afterDemo: demoFaults.length,
+      beforeSubmitted: rawSubmitted.length,
+      afterSubmitted: submitted.length,
+    });
     const closuresOverride = resolveClosuresOverride(
       id,
       storageReady,
@@ -224,7 +251,8 @@ export function buildRuntimeBuildingContext(
     submitted,
     buildingId,
     storageReady,
-    liveStartedAt
+    liveStartedAt,
+    "buildRuntimeBuildingContext"
   );
   const activeFaults = allFaults.filter((f) => !isClosedFault(f));
   return {
@@ -238,16 +266,25 @@ export function getDashboardStats(
   ctxOrId?: BuildingDataContext | string,
   submitted: Fault[] = [],
   buildingId?: string,
-  storageReady = true
+  storageReady = true,
+  liveStartedAt: string | null = null
 ) {
   const ctx = resolveCtx(ctxOrId);
   const now = new Date();
-  const allFaults = getAllFaults(ctx, submitted, buildingId, storageReady);
+  const allFaults = getAllFaults(
+    ctx,
+    submitted,
+    buildingId,
+    storageReady,
+    liveStartedAt,
+    "getDashboardStats"
+  );
   const openFaultsList = getMergedOpenFaults(
     ctx,
     submitted,
     buildingId,
-    storageReady
+    storageReady,
+    liveStartedAt
   );
   const activeFaults = allFaults.filter((f) => !isClosedFault(f));
   const monthFaults = allFaults.filter((f) => {
@@ -274,15 +311,24 @@ export function getClientStats(
   ctxOrId?: BuildingDataContext | string,
   submitted: Fault[] = [],
   buildingId?: string,
-  storageReady = true
+  storageReady = true,
+  liveStartedAt: string | null = null
 ) {
   const ctx = resolveCtx(ctxOrId);
-  const allFaults = getAllFaults(ctx, submitted, buildingId, storageReady);
+  const allFaults = getAllFaults(
+    ctx,
+    submitted,
+    buildingId,
+    storageReady,
+    liveStartedAt,
+    "getClientStats"
+  );
   const openFaultsList = getMergedOpenFaults(
     ctx,
     submitted,
     buildingId,
-    storageReady
+    storageReady,
+    liveStartedAt
   );
   const activeFaults = allFaults.filter((f) => !isClosedFault(f));
   const effectiveElevators = getEffectiveElevators(
@@ -312,10 +358,13 @@ export function getClientStats(
   };
 }
 
-export function getFaultsByType(ctxOrId?: BuildingDataContext | string) {
-  const ctx = resolveCtx(ctxOrId);
+export function getFaultsByType(
+  ctxOrId?: BuildingDataContext | string,
+  faultsOverride?: Fault[]
+) {
+  const faults = faultsOverride ?? resolveCtx(ctxOrId).faults;
   const counts = new Map<string, number>();
-  for (const fault of ctx.faults) {
+  for (const fault of faults) {
     counts.set(fault.type, (counts.get(fault.type) ?? 0) + 1);
   }
   return Array.from(counts.entries())
@@ -323,14 +372,17 @@ export function getFaultsByType(ctxOrId?: BuildingDataContext | string) {
     .sort((a, b) => b.count - a.count);
 }
 
-export function getMonthlyFaultTrend(ctxOrId?: BuildingDataContext | string) {
-  const ctx = resolveCtx(ctxOrId);
+export function getMonthlyFaultTrend(
+  ctxOrId?: BuildingDataContext | string,
+  faultsOverride?: Fault[]
+) {
+  const faults = faultsOverride ?? resolveCtx(ctxOrId).faults;
   const now = new Date();
   const trend: { month: string; count: number }[] = [];
 
   for (let i = 3; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const count = ctx.faults.filter((f) => {
+    const count = faults.filter((f) => {
       const fd = new Date(f.reportedAt);
       return (
         fd.getMonth() === d.getMonth() && fd.getFullYear() === d.getFullYear()
@@ -349,7 +401,8 @@ export function getMonthlyOperationalReport(
   ctxOrId?: BuildingDataContext | string,
   submitted: Fault[] = [],
   buildingId?: string,
-  storageReady = true
+  storageReady = true,
+  liveStartedAt: string | null = null
 ) {
   const ctx = resolveCtx(ctxOrId);
   const now = new Date();
@@ -357,7 +410,9 @@ export function getMonthlyOperationalReport(
     ctx,
     submitted,
     buildingId,
-    storageReady
+    storageReady,
+    liveStartedAt,
+    "getMonthlyOperationalReport"
   ).filter((f) => {
     const date = new Date(f.reportedAt);
     return (
@@ -371,7 +426,9 @@ export function getMonthlyOperationalReport(
     ctx,
     submitted,
     buildingId,
-    storageReady
+    storageReady,
+    liveStartedAt,
+    "getMonthlyOperationalReport:all"
   );
   const activeFaultsForReport = allFaultsForReport.filter(
     (f) => !isClosedFault(f)

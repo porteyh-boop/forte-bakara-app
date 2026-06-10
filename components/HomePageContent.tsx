@@ -24,20 +24,42 @@ import { getAllElevatorFaultCounts } from "@/lib/elevator-stats";
 
 export default function HomePageContent() {
   const { buildingId, ctx } = useBuilding();
-  const { elevators: effectiveElevators, faults, ready, submitted } =
-    useRuntimeBuildingContext();
+  const {
+    elevators: effectiveElevators,
+    faults,
+    ready,
+    submitted,
+    liveStartedAt,
+  } = useRuntimeBuildingContext();
 
   const stats = useMemo(
-    () => getClientStats(ctx, submitted, buildingId, ready),
-    [ctx, submitted, buildingId, ready]
+    () =>
+      getClientStats(ctx, submitted, buildingId, ready, liveStartedAt),
+    [ctx, submitted, buildingId, ready, liveStartedAt]
   );
   const openFaults = useMemo(
-    () => getOpenFaults(ctx, submitted, buildingId, ready),
-    [ctx, submitted, buildingId, ready]
+    () =>
+      getOpenFaults(ctx, submitted, buildingId, ready, liveStartedAt),
+    [ctx, submitted, buildingId, ready, liveStartedAt]
   );
   const monthlyReport = useMemo(
-    () => getMonthlyOperationalReport(ctx, submitted, buildingId, ready),
-    [ctx, submitted, buildingId, ready]
+    () =>
+      getMonthlyOperationalReport(
+        ctx,
+        submitted,
+        buildingId,
+        ready,
+        liveStartedAt
+      ),
+    [ctx, submitted, buildingId, ready, liveStartedAt]
+  );
+  const faultsByType = useMemo(
+    () => getFaultsByType(ctx, faults),
+    [ctx, faults]
+  );
+  const monthlyTrend = useMemo(
+    () => getMonthlyFaultTrend(ctx, faults),
+    [ctx, faults]
   );
   const faultCounts = useMemo(
     () => getAllElevatorFaultCounts(effectiveElevators, faults),
@@ -153,11 +175,11 @@ export default function HomePageContent() {
         <section className="mb-6">
           <SectionTitle title="גרפים תפעוליים" />
           <OperationalCharts
-            faultsByType={getFaultsByType(ctx).map((f) => ({
+            faultsByType={faultsByType.map((f) => ({
               label: f.type,
               count: f.count,
             }))}
-            monthlyTrend={getMonthlyFaultTrend(ctx)}
+            monthlyTrend={monthlyTrend}
           />
         </section>
 

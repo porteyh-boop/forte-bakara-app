@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useBuilding } from "@/components/BuildingProvider";
+import { filterFaultsForLiveStart } from "@/lib/building-live";
 import { syncSubmittedReportsWithCloud } from "@/lib/report-cloud-sync";
 import { getSubmittedReports } from "@/lib/report-storage";
 import type { Fault } from "@/lib/types";
@@ -20,7 +21,8 @@ export function useSubmittedReports(liveStartedAt: string | null = null) {
       );
       setSubmitted(reports);
     } catch {
-      setSubmitted(getSubmittedReports(buildingId));
+      const local = getSubmittedReports(buildingId);
+      setSubmitted(filterFaultsForLiveStart(local, liveStartedAt));
     } finally {
       setReady(true);
     }

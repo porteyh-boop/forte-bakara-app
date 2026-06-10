@@ -1686,6 +1686,27 @@ assert(
   "שימוש אמיתי: אחרי אתחול נשאר רק דיווח חדש ממתין"
 );
 
+const md25CtxLiveStart = getBuildingDataset("md25");
+const md25RuntimeLive = buildRuntimeBuildingContext(
+  md25CtxLiveStart,
+  [],
+  "md25",
+  true,
+  liveStartedAt
+);
+assert(
+  md25RuntimeLive.faults.length === 0 &&
+    getOpenFaults(md25CtxLiveStart, [], "md25", true, liveStartedAt).length ===
+      0 &&
+    getClientStats(md25CtxLiveStart, [], "md25", true, liveStartedAt)
+      .totalFaults === 0,
+  "לקוח: מסך בניין — live_started_at מסנן תקלות דemo כמו /buildings"
+);
+assert(
+  getOpenFaults(md25CtxLiveStart, [], "md25", true, null).length > 0,
+  "לקוח: ללא live_started_at — תקלות דemo נשארות"
+);
+
 assert(
   fs.existsSync(
     path.join(

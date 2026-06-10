@@ -22,6 +22,29 @@ export function filterFaultsForLiveStart(
   return faults.filter((fault) => isAfterLiveStart(fault.reportedAt, liveStartedAt));
 }
 
+export function logLiveStartFaultFilter(params: {
+  source: string;
+  buildingId: string;
+  liveStartedAt: string | null;
+  beforeDemo: number;
+  afterDemo: number;
+  beforeSubmitted: number;
+  afterSubmitted: number;
+}): void {
+  if (typeof window === "undefined") return;
+  console.debug("[forte-live-filter]", {
+    source: params.source,
+    buildingId: params.buildingId,
+    liveStartedAt: params.liveStartedAt,
+    beforeDemo: params.beforeDemo,
+    afterDemo: params.afterDemo,
+    beforeSubmitted: params.beforeSubmitted,
+    afterSubmitted: params.afterSubmitted,
+    beforeTotal: params.beforeDemo + params.beforeSubmitted,
+    afterTotal: params.afterDemo + params.afterSubmitted,
+  });
+}
+
 export function getCachedLiveStartedAt(buildingId: string): string | null {
   if (typeof window === "undefined") return null;
   try {
