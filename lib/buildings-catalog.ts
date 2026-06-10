@@ -204,10 +204,9 @@ export function resolveAllBuildingIdsForMaster(
   orphanBuildingIds: string[] = []
 ): string[] {
   const ids = new Set<string>();
+  Object.keys(demoDatasets).forEach((id) => ids.add(id));
   if (catalogSnapshot) {
     catalogSnapshot.allBuildingIds.forEach((id) => ids.add(id));
-  } else {
-    Object.keys(demoDatasets).forEach((id) => ids.add(id));
   }
   orphanBuildingIds.forEach((id) => ids.add(id));
   return Array.from(ids);

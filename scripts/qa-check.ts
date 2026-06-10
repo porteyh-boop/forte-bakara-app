@@ -27,8 +27,10 @@ import { getExpertPdfData } from "../lib/expert-pdf-data";
 import {
   DEFAULT_BUILDING_ID,
   getAllBuildingIds,
+  getAllDemoBuildingIds,
   getBuildingDataset,
   getDemoDatasets,
+  getStaticDemoBuildingMeta,
 } from "../lib/buildings";
 import { faults } from "../lib/data";
 import { isExpert } from "../lib/roles";
@@ -132,6 +134,7 @@ import {
 import {
   buildCloudCatalogSnapshot,
   buildDemoCatalogSnapshot,
+  resolveAllBuildingIdsForMaster,
   setCatalogSnapshot,
 } from "../lib/buildings-catalog";
 import {
@@ -1712,8 +1715,49 @@ assert(
   masterBuildingsLiveUi.includes("אתחל בניין לשימוש אמיתי") &&
     masterBuildingsLiveUi.includes("handleInitializeForLiveUse") &&
     masterBuildingsLiveUi.includes("buildMasterBuildingList") &&
+    masterBuildingsLiveUi.includes("getAllDemoBuildingIds") &&
+    masterBuildingsLiveUi.includes("getStaticDemoBuildingMeta") &&
     masterBuildingsLiveUi.includes("מקור:"),
   "שימוש אמיתי: כפתור אתחול ב-/master"
+);
+
+assert(
+  getAllDemoBuildingIds().length === 6,
+  "ניהול בניינים: רשימת דמו קבועה — 6 בניינים"
+);
+
+const afterInitMasterList = buildMasterBuildingList({
+  cloudBuildings: [
+    {
+      id: "uuid-md25",
+      building_id: "md25",
+      name: "מגדל דוד 25 (ענן)",
+      city: "מודיעין",
+      address: null,
+      management_company: null,
+      elevator_company: null,
+      contact_name: null,
+      contact_phone: null,
+      floors_count: null,
+      is_active: true,
+      created_at: "2026-01-01T00:00:00.000Z",
+      live_started_at: "2026-06-10T12:00:00.000Z",
+    },
+  ],
+  demoBuildingIds: getAllDemoBuildingIds(),
+  resolveDemoName: (id) => getStaticDemoBuildingMeta(id).name,
+  resolveDemoCity: (id) => getStaticDemoBuildingMeta(id).city,
+  faultBuildings: [],
+});
+assert(
+  afterInitMasterList.length === 6 &&
+    afterInitMasterList.every((entry) => entry.sources.includes("דמו")) &&
+    Boolean(
+      afterInitMasterList
+        .find((entry) => entry.buildingId === "md25")
+        ?.sources.includes("ענן")
+    ),
+  "ניהול בניינים: אחרי אתחול — כל 6 הדemo + מקור ענן לבניין שאותחל"
 );
 
 const unifiedMasterList = buildMasterBuildingList({
@@ -2100,6 +2144,13 @@ assert(
     cloudCatalog.buildings.test01?.elevators.length === 1,
   "ניהול בניינים: מיפוי נתוני Supabase לקטלוג"
 );
+
+setCatalogSnapshot(cloudCatalog);
+assert(
+  resolveAllBuildingIdsForMaster(getDemoDatasets()).length === 7,
+  "ניהול בניינים: resolveAllBuildingIdsForMaster — דemo + ענן"
+);
+setCatalogSnapshot(null);
 
 const dossierFaults: PilotCloudFault[] = [
   makePilotFault({

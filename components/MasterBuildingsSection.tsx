@@ -27,7 +27,12 @@ import {
 } from "@/lib/buildings-cloud";
 import { setCachedLiveStartedAt } from "@/lib/building-live";
 import { BUILDING_LIVE_STARTED_EVENT } from "@/hooks/useBuildingLiveStarted";
-import { refreshBuildingCatalog, getDemoDatasets, getBuildingDataset } from "@/lib/buildings";
+import {
+  getAllDemoBuildingIds,
+  getDemoDatasets,
+  getStaticDemoBuildingMeta,
+  refreshBuildingCatalog,
+} from "@/lib/buildings";
 import {
   buildMasterBuildingList,
   formatMasterBuildingSources,
@@ -173,11 +178,7 @@ export default function MasterBuildingsSection({
   );
 
   const [cloudLoadError, setCloudLoadError] = useState<string | null>(null);
-
-  const demoBuildingIds = useMemo(
-    () => Object.keys(getDemoDatasets()),
-    []
-  );
+  const [listVersion, setListVersion] = useState(0);
 
   const faultBuildingSummaries = useMemo(
     () => summarizeFaultBuildings(faults),
@@ -188,13 +189,26 @@ export default function MasterBuildingsSection({
     () =>
       buildMasterBuildingList({
         cloudBuildings: buildings,
-        demoBuildingIds,
-        resolveDemoName: (id) => getBuildingDataset(id).building.name,
-        resolveDemoCity: (id) => getBuildingDataset(id).building.city || null,
+        demoBuildingIds: getAllDemoBuildingIds(),
+        resolveDemoName: (id) => getStaticDemoBuildingMeta(id).name,
+        resolveDemoCity: (id) => getStaticDemoBuildingMeta(id).city,
         faultBuildings: faultBuildingSummaries,
       }),
-    [buildings, demoBuildingIds, faultBuildingSummaries]
+    [buildings, faultBuildingSummaries, listVersion]
   );
+
+  useEffect(() => {
+    function onCatalogUpdated() {
+      setListVersion((v) => v + 1);
+    }
+    window.addEventListener(BUILDINGS_CATALOG_UPDATED_EVENT, onCatalogUpdated);
+    return () => {
+      window.removeEventListener(
+        BUILDINGS_CATALOG_UPDATED_EVENT,
+        onCatalogUpdated
+      );
+    };
+  }, []);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -363,6 +377,7 @@ export default function MasterBuildingsSection({
 
   async function afterMutation(successMessage: string) {
     await refreshBuildingCatalog(getDemoDatasets());
+    setListVersion((v) => v + 1);
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent(BUILDINGS_CATALOG_UPDATED_EVENT));
     }
@@ -488,6 +503,7 @@ export default function MasterBuildingsSection({
 
     setCachedLiveStartedAt(buildingId, result.liveStartedAt);
     await refreshBuildingCatalog(getDemoDatasets());
+    setListVersion((v) => v + 1);
     await onDataChanged?.();
     window.dispatchEvent(
       new CustomEvent(BUILDING_LIVE_STARTED_EVENT, {

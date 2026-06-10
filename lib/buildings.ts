@@ -748,8 +748,31 @@ const datasets: Record<string, BuildingDataContext> = {
   },
 };
 
+/** Immutable list of all pilot demo building ids — never affected by Supabase catalog. */
+export const ALL_DEMO_BUILDING_IDS = Object.freeze(
+  Object.keys(datasets)
+) as readonly string[];
+
 export function getDemoDatasets(): Record<string, BuildingDataContext> {
   return datasets;
+}
+
+export function getAllDemoBuildingIds(): readonly string[] {
+  return ALL_DEMO_BUILDING_IDS;
+}
+
+export function getStaticDemoBuildingMeta(buildingId: string): {
+  name: string;
+  city: string | null;
+} {
+  const ctx = datasets[buildingId];
+  if (!ctx) {
+    return { name: buildingId, city: null };
+  }
+  return {
+    name: ctx.building.name,
+    city: ctx.building.city || null,
+  };
 }
 
 export function getBuildingDataset(id: string): BuildingDataContext {
