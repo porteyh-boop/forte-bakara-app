@@ -105,6 +105,10 @@ import {
   isAfterLiveStart,
 } from "../lib/building-live";
 import {
+  buildMasterBuildingList,
+  summarizeFaultBuildings,
+} from "../lib/master-buildings-list";
+import {
   formatFeedbackNotes,
   getMasterFeedbackEmptyMessage,
 } from "../lib/master-feedback-view";
@@ -1706,8 +1710,72 @@ const masterBuildingsLiveUi = fs.readFileSync(
 );
 assert(
   masterBuildingsLiveUi.includes("אתחל בניין לשימוש אמיתי") &&
-    masterBuildingsLiveUi.includes("handleInitializeForLiveUse"),
+    masterBuildingsLiveUi.includes("handleInitializeForLiveUse") &&
+    masterBuildingsLiveUi.includes("buildMasterBuildingList") &&
+    masterBuildingsLiveUi.includes("מקור:"),
   "שימוש אמיתי: כפתור אתחול ב-/master"
+);
+
+const unifiedMasterList = buildMasterBuildingList({
+  cloudBuildings: [],
+  demoBuildingIds: ["md25", "ys34"],
+  resolveDemoName: (id) => (id === "md25" ? "מגדל דוד 25" : "ישורון 34"),
+  resolveDemoCity: (id) => (id === "md25" ? "מודיעין" : "הוד השרון"),
+  faultBuildings: summarizeFaultBuildings([
+    {
+      building_id: "or02",
+      building_name: "אורן 2",
+    },
+  ]),
+});
+assert(
+  unifiedMasterList.length === 3 &&
+    unifiedMasterList.some(
+      (b) => b.buildingId === "md25" && b.sources.includes("דמו")
+    ) &&
+    unifiedMasterList.some(
+      (b) =>
+        b.buildingId === "or02" &&
+        b.sources.includes("מדיווחים") &&
+        !b.sources.includes("ענן")
+    ),
+  "ניהול בניינים: רשימה מאוחדת — דemo + מדיווחים גם בלי Supabase"
+);
+
+const unifiedWithCloud = buildMasterBuildingList({
+  cloudBuildings: [
+    {
+      id: "uuid-md25",
+      building_id: "md25",
+      name: "מגדל דוד 25",
+      city: "מודיעין",
+      address: null,
+      management_company: null,
+      elevator_company: null,
+      contact_name: null,
+      contact_phone: null,
+      floors_count: null,
+      is_active: true,
+      created_at: "2026-01-01T00:00:00.000Z",
+      live_started_at: null,
+    },
+  ],
+  demoBuildingIds: ["md25"],
+  resolveDemoName: () => "מגדל דוד 25",
+  resolveDemoCity: () => "מודיעין",
+  faultBuildings: [],
+});
+assert(
+  unifiedWithCloud.length === 1 &&
+    unifiedWithCloud[0].sources.includes("ענן") &&
+    unifiedWithCloud[0].sources.includes("דמו"),
+  "ניהול בניינים: מקורות ענן + דמו לבניין אחד"
+);
+
+assert(
+  buildingsCloudLiveSource.includes("mapCloudBuildingRow") &&
+    buildingsCloudLiveSource.includes("getAllCloudBuildingsWithMeta"),
+  "ניהול בניינים: מיפוי בטוח ל-live_started_at"
 );
 
 const analyticsFaults: PilotCloudFault[] = [

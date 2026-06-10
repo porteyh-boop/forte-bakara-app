@@ -12,7 +12,7 @@ import {
   deleteCloudBuilding,
   deleteCloudElevator,
   ELEVATOR_STATUS_OPTIONS,
-  getAllCloudBuildings,
+  getAllCloudBuildingsWithMeta,
   getAllCloudElevators,
   INITIALIZE_BUILDING_FOR_LIVE_CONFIRM,
   initializeBuildingForLiveUse,
@@ -28,6 +28,11 @@ import {
 import { setCachedLiveStartedAt } from "@/lib/building-live";
 import { BUILDING_LIVE_STARTED_EVENT } from "@/hooks/useBuildingLiveStarted";
 import { refreshBuildingCatalog, getDemoDatasets, getBuildingDataset } from "@/lib/buildings";
+import {
+  buildMasterBuildingList,
+  formatMasterBuildingSources,
+  summarizeFaultBuildings,
+} from "@/lib/master-buildings-list";
 import {
   DEFAULT_ELEVATOR_COMPANIES,
   isOtherElevatorCompany,
@@ -167,49 +172,79 @@ export default function MasterBuildingsSection({
     emptyElevatorForm
   );
 
-  const orphanBuildingIds = useMemo(() => {
-    const known = new Set(buildings.map((b) => b.building_id));
-    const orphans = new Set<string>();
-    for (const f of faults) {
-      if (!known.has(f.building_id)) orphans.add(f.building_id);
-    }
-    return Array.from(orphans);
-  }, [buildings, faults]);
+  const [cloudLoadError, setCloudLoadError] = useState<string | null>(null);
+
+  const demoBuildingIds = useMemo(
+    () => Object.keys(getDemoDatasets()),
+    []
+  );
+
+  const faultBuildingSummaries = useMemo(
+    () => summarizeFaultBuildings(faults),
+    [faults]
+  );
+
+  const masterBuildingList = useMemo(
+    () =>
+      buildMasterBuildingList({
+        cloudBuildings: buildings,
+        demoBuildingIds,
+        resolveDemoName: (id) => getBuildingDataset(id).building.name,
+        resolveDemoCity: (id) => getBuildingDataset(id).building.city || null,
+        faultBuildings: faultBuildingSummaries,
+      }),
+    [buildings, demoBuildingIds, faultBuildingSummaries]
+  );
 
   const refresh = useCallback(async () => {
-    if (!cloudReady) return;
     setLoading(true);
     setError(null);
-    const [rows, allElevators] = await Promise.all([
-      getAllCloudBuildings(),
-      getAllCloudElevators(),
-    ]);
-    const grouped: Record<string, CloudElevatorRow[]> = {};
-    for (const e of allElevators) {
-      if (!grouped[e.building_id]) grouped[e.building_id] = [];
-      grouped[e.building_id].push(e);
+    setCloudLoadError(null);
+
+    let rows: CloudBuildingRow[] = [];
+    let grouped: Record<string, CloudElevatorRow[]> = {};
+
+    if (cloudReady) {
+      const [cloudResult, allElevators] = await Promise.all([
+        getAllCloudBuildingsWithMeta(),
+        getAllCloudElevators(),
+      ]);
+      rows = cloudResult.rows;
+      if (cloudResult.error) {
+        setCloudLoadError(cloudResult.error);
+      }
+      for (const e of allElevators) {
+        if (!grouped[e.building_id]) grouped[e.building_id] = [];
+        grouped[e.building_id].push(e);
+      }
     }
+
     setBuildings(rows);
     setElevatorsByBuilding(grouped);
-    if (!selectedBuildingId && rows[0]) {
-      setSelectedBuildingId(rows[0].building_id);
-    }
     setLoading(false);
-  }, [cloudReady, selectedBuildingId]);
+  }, [cloudReady]);
 
   useEffect(() => {
-    if (cloudReady) void refresh();
-  }, [cloudReady, refresh]);
+    void refresh();
+  }, [refresh]);
 
-  const selectedBuilding = buildings.find(
-    (b) => b.building_id === selectedBuildingId
+  useEffect(() => {
+    if (selectedBuildingId) return;
+    if (masterBuildingList[0]) {
+      setSelectedBuildingId(masterBuildingList[0].buildingId);
+    }
+  }, [masterBuildingList, selectedBuildingId]);
+
+  const selectedEntry = masterBuildingList.find(
+    (b) => b.buildingId === selectedBuildingId
   );
+  const selectedBuilding = selectedEntry?.cloudRow ?? null;
   const selectedElevators = selectedBuildingId
     ? (elevatorsByBuilding[selectedBuildingId] ?? [])
     : [];
 
   const selectedBuildingName =
-    selectedBuilding?.name ??
+    selectedEntry?.name ??
     faults.find((f) => f.building_id === selectedBuildingId)?.building_name ??
     selectedBuildingId ??
     "";
@@ -261,34 +296,21 @@ export default function MasterBuildingsSection({
       string,
       ReturnType<typeof buildBuildingDossier>
     >();
-    for (const b of buildings) {
+    for (const entry of masterBuildingList) {
       map.set(
-        b.building_id,
+        entry.buildingId,
         buildBuildingDossier({
-          buildingId: b.building_id,
-          buildingName: b.name,
+          buildingId: entry.buildingId,
+          buildingName: entry.name,
           faults,
-          registeredElevatorIds: (elevatorsByBuilding[b.building_id] ?? []).map(
-            (e) => e.elevator_id
-          ),
-        })
-      );
-    }
-    for (const id of orphanBuildingIds) {
-      if (map.has(id)) continue;
-      const name =
-        faults.find((f) => f.building_id === id)?.building_name ?? id;
-      map.set(
-        id,
-        buildBuildingDossier({
-          buildingId: id,
-          buildingName: name,
-          faults,
+          registeredElevatorIds: (
+            elevatorsByBuilding[entry.buildingId] ?? []
+          ).map((e) => e.elevator_id),
         })
       );
     }
     return map;
-  }, [buildings, elevatorsByBuilding, faults, orphanBuildingIds]);
+  }, [masterBuildingList, elevatorsByBuilding, faults]);
 
   function selectBuilding(buildingId: string) {
     setSelectedBuildingId(buildingId);
@@ -601,22 +623,27 @@ export default function MasterBuildingsSection({
           </p>
         )}
 
-        {loading && buildings.length === 0 ? (
-          <p className="text-sm text-gray-text">טוען בניינים...</p>
-        ) : buildings.length === 0 ? (
-          <p className="text-sm text-gray-text">
-            אין בניינים ב-Supabase. הוסיפו בניין ראשון או המשיכו עם רשימת הדמו
-            בלקוח.
+        {cloudLoadError && (
+          <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-3">
+            לא ניתן לטעון בניינים מ-Supabase ({cloudLoadError}). מוצגים בנייני
+            דמו ומדיווחים.
           </p>
+        )}
+
+        {loading && masterBuildingList.length === 0 ? (
+          <p className="text-sm text-gray-text">טוען בניינים...</p>
+        ) : masterBuildingList.length === 0 ? (
+          <p className="text-sm text-gray-text">אין בניינים מוכרים במערכת.</p>
         ) : (
           <ul className="space-y-2">
-            {buildings.map((b) => {
-              const dossier = dossierByBuildingId.get(b.building_id);
+            {masterBuildingList.map((entry) => {
+              const dossier = dossierByBuildingId.get(entry.buildingId);
+              const cloudRow = entry.cloudRow;
               return (
               <li
-                key={b.id}
+                key={entry.buildingId}
                 className={`border rounded-xl px-3 py-2 ${
-                  selectedBuildingId === b.building_id
+                  selectedBuildingId === entry.buildingId
                     ? "border-navy bg-gray-light"
                     : "border-gray-200"
                 }`}
@@ -624,23 +651,26 @@ export default function MasterBuildingsSection({
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <button
                     type="button"
-                    onClick={() => selectBuilding(b.building_id)}
+                    onClick={() => selectBuilding(entry.buildingId)}
                     className="text-right flex-1"
                   >
-                    <p className="font-semibold text-navy text-sm">{b.name}</p>
+                    <p className="font-semibold text-navy text-sm">{entry.name}</p>
                     <p className="text-xs text-gray-text">
-                      {b.building_id}
-                      {b.city ? ` · ${b.city}` : ""}
-                      {!b.is_active ? " · מושבת" : ""}
+                      {entry.buildingId}
+                      {entry.city ? ` · ${entry.city}` : ""}
+                      {cloudRow && !cloudRow.is_active ? " · מושבת" : ""}
+                    </p>
+                    <p className="text-[11px] text-gold mt-1">
+                      מקור: {formatMasterBuildingSources(entry.sources)}
                     </p>
                     {dossier && (
                       <p className="text-[11px] text-gray-text mt-1">
                         {dossier.totalFaults} תקלות · {dossier.openFaults} פתוחות · בריאות {dossier.healthScore}
                       </p>
                     )}
-                    {b.live_started_at && (
+                    {entry.liveStartedAt && (
                       <p className="text-[11px] text-emerald-700 mt-1">
-                        שימוש אמיתי מ-{formatDossierDate(b.live_started_at)}
+                        שימוש אמיתי מ-{formatDossierDate(entry.liveStartedAt)}
                       </p>
                     )}
                   </button>
@@ -648,70 +678,35 @@ export default function MasterBuildingsSection({
                     <ActionBtn
                       label="אתחל לשימוש אמיתי"
                       onClick={() =>
-                        void handleInitializeForLiveUse(b.building_id, b.name)
+                        void handleInitializeForLiveUse(
+                          entry.buildingId,
+                          entry.name
+                        )
                       }
                     />
-                    <ActionBtn label="ערוך" onClick={() => openEditBuilding(b)} />
-                    <ActionBtn
-                      label={b.is_active ? "השבת" : "הפעל"}
-                      onClick={() => void handleToggleBuilding(b)}
-                    />
-                    <ActionBtn
-                      label="מחק"
-                      danger
-                      onClick={() => void handleDeleteBuilding(b)}
-                    />
+                    {cloudRow && (
+                      <>
+                        <ActionBtn
+                          label="ערוך"
+                          onClick={() => openEditBuilding(cloudRow)}
+                        />
+                        <ActionBtn
+                          label={cloudRow.is_active ? "השבת" : "הפעל"}
+                          onClick={() => void handleToggleBuilding(cloudRow)}
+                        />
+                        <ActionBtn
+                          label="מחק"
+                          danger
+                          onClick={() => void handleDeleteBuilding(cloudRow)}
+                        />
+                      </>
+                    )}
                   </div>
                 </div>
               </li>
             );
             })}
           </ul>
-        )}
-
-        {orphanBuildingIds.length > 0 && (
-          <div className="mt-4 border-t border-gray-100 pt-3">
-            <p className="text-xs font-semibold text-gold mb-2">
-              בניינים מדיווחים בלבד (ללא רשומה בטבלה)
-            </p>
-            <ul className="space-y-1">
-              {orphanBuildingIds.map((id) => {
-                const dossier = dossierByBuildingId.get(id);
-                return (
-                <li key={id}>
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <button
-                      type="button"
-                      onClick={() => selectBuilding(id)}
-                      className={`flex-1 text-right rounded-lg px-2 py-1.5 text-sm ${
-                        selectedBuildingId === id
-                          ? "bg-gray-light text-navy font-semibold"
-                          : "text-gray-text hover:bg-gray-50"
-                      }`}
-                    >
-                      {dossier?.buildingName ?? getBuildingDataset(id).building.name}
-                      {dossier && (
-                        <span className="text-xs text-gray-text mr-2">
-                          · {dossier.totalFaults} תקלות
-                        </span>
-                      )}
-                    </button>
-                    <ActionBtn
-                      label="אתחל לשימוש אמיתי"
-                      onClick={() =>
-                        void handleInitializeForLiveUse(
-                          id,
-                          dossier?.buildingName ??
-                            getBuildingDataset(id).building.name
-                        )
-                      }
-                    />
-                  </div>
-                </li>
-              );
-              })}
-            </ul>
-          </div>
         )}
       </div>
 
@@ -868,10 +863,10 @@ export default function MasterBuildingsSection({
                 <p className="text-xs text-gray-text mt-1">
                   {INITIALIZE_BUILDING_FOR_LIVE_CONFIRM}
                 </p>
-                {selectedBuilding?.live_started_at && (
+                {selectedEntry?.liveStartedAt && (
                   <p className="text-xs text-emerald-700 mt-2">
                     שימוש אמיתי החל ב-
-                    {formatDossierDate(selectedBuilding.live_started_at)}
+                    {formatDossierDate(selectedEntry.liveStartedAt)}
                   </p>
                 )}
               </div>

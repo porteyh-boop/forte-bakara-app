@@ -108,8 +108,40 @@ export function mapElevatorStatus(status: string): Status {
 }
 
 export async function getAllCloudBuildings(): Promise<CloudBuildingRow[]> {
+  const result = await getAllCloudBuildingsWithMeta();
+  return result.rows;
+}
+
+export function mapCloudBuildingRow(
+  raw: Record<string, unknown>
+): CloudBuildingRow {
+  return {
+    id: String(raw.id ?? ""),
+    building_id: String(raw.building_id ?? ""),
+    name: String(raw.name ?? ""),
+    city: raw.city != null ? String(raw.city) : null,
+    address: raw.address != null ? String(raw.address) : null,
+    management_company:
+      raw.management_company != null ? String(raw.management_company) : null,
+    elevator_company:
+      raw.elevator_company != null ? String(raw.elevator_company) : null,
+    contact_name: raw.contact_name != null ? String(raw.contact_name) : null,
+    contact_phone: raw.contact_phone != null ? String(raw.contact_phone) : null,
+    floors_count:
+      typeof raw.floors_count === "number" ? raw.floors_count : null,
+    is_active: raw.is_active !== false,
+    created_at: String(raw.created_at ?? new Date().toISOString()),
+    live_started_at:
+      raw.live_started_at != null ? String(raw.live_started_at) : null,
+  };
+}
+
+export async function getAllCloudBuildingsWithMeta(): Promise<{
+  rows: CloudBuildingRow[];
+  error: string | null;
+}> {
   const client = getPilotSupabaseClient();
-  if (!client) return [];
+  if (!client) return { rows: [], error: null };
 
   const { data, error } = await client
     .from(BUILDINGS_TABLE)
@@ -118,10 +150,15 @@ export async function getAllCloudBuildings(): Promise<CloudBuildingRow[]> {
 
   if (error) {
     console.warn("[buildings-cloud] getAllCloudBuildings failed:", error.message);
-    return [];
+    return { rows: [], error: error.message };
   }
 
-  return (data ?? []) as CloudBuildingRow[];
+  return {
+    rows: (data ?? []).map((row) =>
+      mapCloudBuildingRow(row as Record<string, unknown>)
+    ),
+    error: null,
+  };
 }
 
 export async function getAllCloudElevators(): Promise<CloudElevatorRow[]> {
