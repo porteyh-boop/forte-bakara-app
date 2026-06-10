@@ -31,6 +31,7 @@ import {
   getBuildingDataset,
   getDemoDatasets,
   getStaticDemoBuildingMeta,
+  isValidBuildingId,
 } from "../lib/buildings";
 import { faults } from "../lib/data";
 import { isExpert } from "../lib/roles";
@@ -134,6 +135,7 @@ import {
 import {
   buildCloudCatalogSnapshot,
   buildDemoCatalogSnapshot,
+  buildMergedClientCatalogSnapshot,
   resolveAllBuildingIdsForMaster,
   setCatalogSnapshot,
 } from "../lib/buildings-catalog";
@@ -2140,10 +2142,65 @@ const cloudCatalog = buildCloudCatalogSnapshot(
 );
 assert(
   cloudCatalog.source === "cloud" &&
+    cloudCatalog.allBuildingIds.length === 7 &&
+    cloudCatalog.activeBuildingIds.length === 7 &&
     cloudCatalog.buildings.test01?.building.name === "בניין בדיקה" &&
-    cloudCatalog.buildings.test01?.elevators.length === 1,
+    cloudCatalog.buildings.test01?.elevators.length === 1 &&
+    cloudCatalog.buildings.md25?.elevators.length === 2,
   "ניהול בניינים: מיפוי נתוני Supabase לקטלוג"
 );
+
+const initializedLiveCatalog = buildMergedClientCatalogSnapshot(
+  [
+    {
+      id: "uuid-md25",
+      building_id: "md25",
+      name: "מגדל דוד 25",
+      city: "מודיעין",
+      address: null,
+      management_company: null,
+      elevator_company: null,
+      contact_name: null,
+      contact_phone: null,
+      floors_count: null,
+      is_active: true,
+      created_at: "2026-01-01T00:00:00.000Z",
+      live_started_at: "2026-06-10T12:00:00.000Z",
+    },
+  ],
+  [],
+  getDemoDatasets()
+);
+assert(
+  initializedLiveCatalog.allBuildingIds.length === 6 &&
+    initializedLiveCatalog.activeBuildingIds.length === 6 &&
+    initializedLiveCatalog.buildings.md25?.elevators.length === 2 &&
+    initializedLiveCatalog.liveStartedAtByBuilding.md25 ===
+      "2026-06-10T12:00:00.000Z",
+  "לקוח: אחרי אתחול — כל 6 הבניינים + מעליות דemo כ-fallback"
+);
+
+setCatalogSnapshot(initializedLiveCatalog);
+assert(
+  getAllBuildingIds().length === 6 &&
+    getLiveBuildingListItems({}, true).length === 6 &&
+    isValidBuildingId("md25") &&
+    isValidBuildingId("ys34"),
+  "לקוח: /buildings מציג את כל הבניינים אחרי אתחול בניין אחד"
+);
+const liveMd25Items = getLiveBuildingListItems(
+  {},
+  true,
+  undefined,
+  initializedLiveCatalog.liveStartedAtByBuilding
+);
+assert(
+  (liveMd25Items.find((b) => b.id === "md25")?.openFaultCount ?? -1) === 0 &&
+    Boolean(liveMd25Items.find((b) => b.id === "md23")) &&
+    (liveMd25Items.find((b) => b.id === "md23")?.openFaultCount ?? 0) > 0,
+  "לקוח: live_started_at מסנן תקלות ישנות בלבד — לא מסתיר בניינים"
+);
+setCatalogSnapshot(null);
 
 setCatalogSnapshot(cloudCatalog);
 assert(

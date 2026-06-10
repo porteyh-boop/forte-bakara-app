@@ -2,6 +2,7 @@ import {
   getAllCloudBuildings,
   getAllCloudElevators,
   mapElevatorStatus,
+  normalizeBuildingId,
   type CloudBuildingRow,
   type CloudElevatorRow,
 } from "./buildings-cloud";
@@ -36,6 +37,16 @@ export function setCatalogSnapshot(snapshot: BuildingCatalogSnapshot | null): vo
   catalogSnapshot = snapshot;
 }
 
+function cloneDemoContext(demo: BuildingDataContext): BuildingDataContext {
+  return {
+    ...demo,
+    building: { ...demo.building },
+    elevators: [...demo.elevators],
+    faults: [...demo.faults],
+    activeFaultDowntime: { ...demo.activeFaultDowntime },
+  };
+}
+
 function mapCloudElevatorToApp(e: CloudElevatorRow): Elevator {
   const status: Status = e.is_active ? mapElevatorStatus(e.status) : "מושבתת";
   const stations = e.floors_count ?? 0;
@@ -53,24 +64,42 @@ function mapCloudBuildingToContext(
   elevators: CloudElevatorRow[],
   demoCtx?: BuildingDataContext
 ): BuildingDataContext {
-  const activeElevators = elevators.filter((e) => e.is_active);
+  const activeCloudElevators = elevators.filter((e) => e.is_active);
+  const cloudAppElevators = activeCloudElevators.map(mapCloudElevatorToApp);
+  const appElevators =
+    cloudAppElevators.length > 0
+      ? cloudAppElevators
+      : [...(demoCtx?.elevators ?? [])];
+  const demoBuilding = demoCtx?.building;
+
+  const buildingMeta: Building = {
+    buildingCode: demoBuilding?.buildingCode ?? building.building_id.toUpperCase(),
+    name: building.name || demoBuilding?.name || building.building_id,
+    address: building.address ?? demoBuilding?.address ?? "",
+    city: building.city ?? demoBuilding?.city ?? "",
+    elevatorCount:
+      appElevators.length > 0
+        ? appElevators.length
+        : (demoBuilding?.elevatorCount ?? 0),
+    elevatorCompany:
+      building.elevator_company ?? demoBuilding?.elevatorCompany ?? "",
+    contactPerson: building.contact_name ?? demoBuilding?.contactPerson ?? "",
+    phone: building.contact_phone ?? demoBuilding?.phone ?? "",
+    managementCompany:
+      building.management_company ?? demoBuilding?.managementCompany ?? "",
+    units: building.floors_count ?? demoBuilding?.units ?? 0,
+    contractNumber: demoBuilding?.contractNumber,
+    serviceLevel: demoBuilding?.serviceLevel,
+    serviceStartDate: demoBuilding?.serviceStartDate,
+    lastInspectionDate: demoBuilding?.lastInspectionDate,
+  };
+
   return {
-    id: building.building_id,
-    building: {
-      buildingCode: building.building_id.toUpperCase(),
-      name: building.name,
-      address: building.address ?? "",
-      city: building.city ?? "",
-      elevatorCount: activeElevators.length,
-      elevatorCompany: building.elevator_company ?? "",
-      contactPerson: building.contact_name ?? "",
-      phone: building.contact_phone ?? "",
-      managementCompany: building.management_company ?? "",
-      units: building.floors_count ?? 0,
-    },
-    elevators: activeElevators.map(mapCloudElevatorToApp),
-    faults: demoCtx?.faults ?? [],
-    activeFaultDowntime: demoCtx?.activeFaultDowntime ?? {},
+    id: normalizeBuildingId(building.building_id),
+    building: buildingMeta,
+    elevators: appElevators,
+    faults: demoCtx?.faults ? [...demoCtx.faults] : [],
+    activeFaultDowntime: { ...(demoCtx?.activeFaultDowntime ?? {}) },
   };
 }
 
@@ -78,16 +107,21 @@ export function buildDemoCatalogSnapshot(
   demoDatasets: Record<string, BuildingDataContext>
 ): BuildingCatalogSnapshot {
   const ids = Object.keys(demoDatasets);
+  const buildings: Record<string, BuildingDataContext> = {};
+  for (const id of ids) {
+    buildings[id] = cloneDemoContext(demoDatasets[id]);
+  }
   return {
     source: "demo",
-    buildings: { ...demoDatasets },
+    buildings,
     allBuildingIds: ids,
     activeBuildingIds: ids,
     liveStartedAtByBuilding: {},
   };
 }
 
-export function buildCloudCatalogSnapshot(
+/** Client catalog: always keep all demo buildings; overlay cloud metadata and live_started_at. */
+export function buildMergedClientCatalogSnapshot(
   cloudBuildings: CloudBuildingRow[],
   cloudElevators: CloudElevatorRow[],
   demoDatasets: Record<string, BuildingDataContext>
@@ -97,13 +131,33 @@ export function buildCloudCatalogSnapshot(
   const activeBuildingIds: string[] = [];
   const liveStartedAtByBuilding: Record<string, string | null> = {};
 
+  for (const id of Object.keys(demoDatasets)) {
+    buildings[id] = cloneDemoContext(demoDatasets[id]);
+    allBuildingIds.push(id);
+    activeBuildingIds.push(id);
+    liveStartedAtByBuilding[id] = null;
+  }
+
   for (const row of cloudBuildings) {
-    const elev = cloudElevators.filter((e) => e.building_id === row.building_id);
-    const demoCtx = demoDatasets[row.building_id];
-    buildings[row.building_id] = mapCloudBuildingToContext(row, elev, demoCtx);
-    allBuildingIds.push(row.building_id);
-    liveStartedAtByBuilding[row.building_id] = row.live_started_at ?? null;
-    if (row.is_active) activeBuildingIds.push(row.building_id);
+    const id = normalizeBuildingId(row.building_id);
+    const elev = cloudElevators.filter(
+      (e) => normalizeBuildingId(e.building_id) === id
+    );
+    const demoCtx = demoDatasets[id];
+    buildings[id] = mapCloudBuildingToContext(row, elev, demoCtx);
+
+    if (!allBuildingIds.includes(id)) {
+      allBuildingIds.push(id);
+    }
+
+    const activeIdx = activeBuildingIds.indexOf(id);
+    if (row.is_active) {
+      if (activeIdx === -1) activeBuildingIds.push(id);
+    } else if (activeIdx !== -1) {
+      activeBuildingIds.splice(activeIdx, 1);
+    }
+
+    liveStartedAtByBuilding[id] = row.live_started_at ?? null;
   }
 
   return {
@@ -114,6 +168,9 @@ export function buildCloudCatalogSnapshot(
     liveStartedAtByBuilding,
   };
 }
+
+/** @deprecated Alias — client catalog is always merged with demo buildings. */
+export const buildCloudCatalogSnapshot = buildMergedClientCatalogSnapshot;
 
 export async function loadBuildingCatalog(
   demoDatasets: Record<string, BuildingDataContext>
@@ -132,7 +189,11 @@ export async function loadBuildingCatalog(
   const snapshot =
     cloudBuildings.length === 0
       ? buildDemoCatalogSnapshot(demoDatasets)
-      : buildCloudCatalogSnapshot(cloudBuildings, cloudElevators, demoDatasets);
+      : buildMergedClientCatalogSnapshot(
+          cloudBuildings,
+          cloudElevators,
+          demoDatasets
+        );
 
   setCatalogSnapshot(snapshot);
   return snapshot;
@@ -164,23 +225,31 @@ export function resolveBuildingDataset(
   demoDatasets: Record<string, BuildingDataContext>,
   defaultBuildingId: string
 ): BuildingDataContext {
+  const normalizedId = normalizeBuildingId(id);
   if (catalogSnapshot) {
     return (
+      catalogSnapshot.buildings[normalizedId] ??
       catalogSnapshot.buildings[id] ??
+      demoDatasets[normalizedId] ??
       demoDatasets[id] ??
       demoDatasets[defaultBuildingId]
     );
   }
-  return demoDatasets[id] ?? demoDatasets[defaultBuildingId];
+  return (
+    demoDatasets[normalizedId] ??
+    demoDatasets[id] ??
+    demoDatasets[defaultBuildingId]
+  );
 }
 
 export function resolveAllBuildingIds(
   demoDatasets: Record<string, BuildingDataContext>
 ): string[] {
   if (catalogSnapshot) {
-    return catalogSnapshot.activeBuildingIds.length > 0
-      ? [...catalogSnapshot.activeBuildingIds]
-      : [...catalogSnapshot.allBuildingIds];
+    if (catalogSnapshot.activeBuildingIds.length > 0) {
+      return [...catalogSnapshot.activeBuildingIds];
+    }
+    return [...catalogSnapshot.allBuildingIds];
   }
   return Object.keys(demoDatasets);
 }
@@ -189,14 +258,18 @@ export function resolveIsValidBuildingId(
   id: string,
   demoDatasets: Record<string, BuildingDataContext>
 ): boolean {
+  const normalizedId = normalizeBuildingId(id);
   if (catalogSnapshot) {
     return (
+      catalogSnapshot.activeBuildingIds.includes(normalizedId) ||
       catalogSnapshot.activeBuildingIds.includes(id) ||
+      catalogSnapshot.allBuildingIds.includes(normalizedId) ||
       catalogSnapshot.allBuildingIds.includes(id) ||
+      normalizedId in demoDatasets ||
       id in demoDatasets
     );
   }
-  return id in demoDatasets;
+  return normalizedId in demoDatasets || id in demoDatasets;
 }
 
 export function resolveAllBuildingIdsForMaster(
