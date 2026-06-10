@@ -268,6 +268,30 @@ export async function getAllPilotFaults(): Promise<PilotCloudFault[]> {
   return (data ?? []) as PilotCloudFault[];
 }
 
+/** null = שגיאת רשת/ענן — יש לשמור על localStorage */
+export async function getPilotFaultsForBuilding(
+  buildingId: string
+): Promise<PilotCloudFault[] | null> {
+  const client = getPilotSupabaseClient();
+  if (!client || !buildingId.trim()) return [];
+
+  const { data, error } = await client
+    .from(PILOT_FAULTS_TABLE)
+    .select("*")
+    .eq("building_id", buildingId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.warn(
+      "[pilot-cloud] getPilotFaultsForBuilding failed:",
+      error.message
+    );
+    return null;
+  }
+
+  return (data ?? []) as PilotCloudFault[];
+}
+
 export async function getAllPilotFeedback(): Promise<PilotCloudFeedback[]> {
   const client = getPilotSupabaseClient();
   if (!client) {

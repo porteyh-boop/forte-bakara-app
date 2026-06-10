@@ -98,6 +98,9 @@ import {
   type PilotCloudFault,
 } from "../lib/pilot-cloud";
 import {
+  reconcileSubmittedReportsWithCloud,
+} from "../lib/report-cloud-sync";
+import {
   formatFeedbackNotes,
   getMasterFeedbackEmptyMessage,
 } from "../lib/master-feedback-view";
@@ -1429,6 +1432,26 @@ assert(
   "ענן פיילוט: ללא Supabase — פונקציות לא קורסות"
 );
 
+const reportCloudSyncSource = fs.readFileSync(
+  path.join(process.cwd(), "lib/report-cloud-sync.ts"),
+  "utf8"
+);
+const useSubmittedReportsSource = fs.readFileSync(
+  path.join(process.cwd(), "hooks/useSubmittedReports.ts"),
+  "utf8"
+);
+assert(
+  reportCloudSyncSource.includes("reconcileSubmittedReportsWithCloud") &&
+    reportCloudSyncSource.includes("syncSubmittedReportsWithCloud") &&
+    useSubmittedReportsSource.includes("syncSubmittedReportsWithCloud"),
+  "סנכרון היסטוריה: טעינה מול Supabase ב-useSubmittedReports"
+);
+
+assert(
+  pilotCloudSource.includes("getPilotFaultsForBuilding"),
+  "סנכרון היסטוריה: שליפת תקלות לפי building_id"
+);
+
 const masterSource = fs.readFileSync(
   path.join(process.cwd(), "components/MasterPageContent.tsx"),
   "utf8"
@@ -1555,6 +1578,67 @@ function makePilotFault(
     source_device_id: overrides.source_device_id ?? null,
   };
 }
+
+const staleLocalReport: import("../lib/types").Fault = {
+  id: "user-FB-20260101-0001",
+  ticketNumber: "FB-20260101-0001",
+  elevatorId: "e1",
+  elevatorName: "מעלית 1",
+  type: "אחר",
+  description: "תקלה ישנה שנשמרה מקומית",
+  status: "פתוחה",
+  priority: "רגילה",
+  reportedAt: "2026-01-01T10:00:00.000Z",
+  isUserSubmitted: true,
+};
+
+const pendingLocalReport: import("../lib/types").Fault = {
+  ...staleLocalReport,
+  id: "user-FB-20260605-0002",
+  ticketNumber: "FB-20260605-0002",
+  reportedAt: "2026-06-05T11:59:00.000Z",
+};
+
+const afterReset = reconcileSubmittedReportsWithCloud({
+  localReports: [staleLocalReport],
+  cloudFaults: [],
+  now: Date.parse("2026-06-05T12:00:00.000Z"),
+});
+assert(
+  afterReset.length === 0,
+  "סנכרון היסטוריה: אחרי איפוס ענן — דיווח מקומי ישן לא מוצג"
+);
+
+const pendingOnly = reconcileSubmittedReportsWithCloud({
+  localReports: [pendingLocalReport],
+  cloudFaults: [],
+  now: Date.parse("2026-06-05T12:00:00.000Z"),
+});
+assert(
+  pendingOnly.length === 1 &&
+    pendingOnly[0].ticketNumber === pendingLocalReport.ticketNumber,
+  "סנכרון היסטוריה: דיווח חדש ממתין לענן נשמר זמנית"
+);
+
+const cloudKeeps = reconcileSubmittedReportsWithCloud({
+  localReports: [staleLocalReport],
+  cloudFaults: [
+    makePilotFault({
+      building_id: "md25",
+      elevator_id: "e1",
+      ticket_number: "FB-20260605-0003",
+      fault_type: "רעש",
+      status: "פתוחה",
+    }),
+  ],
+  now: Date.parse("2026-06-05T12:00:00.000Z"),
+});
+assert(
+  cloudKeeps.length === 1 &&
+    cloudKeeps[0].ticketNumber === "FB-20260605-0003" &&
+    cloudKeeps[0].isUserSubmitted === true,
+  "סנכרון היסטוריה: כשענן מחובר — נתוני ענן מועדפים"
+);
 
 const analyticsFaults: PilotCloudFault[] = [
   makePilotFault({

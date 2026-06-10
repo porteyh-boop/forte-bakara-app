@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useBuilding } from "@/components/BuildingProvider";
+import { syncSubmittedReportsWithCloud } from "@/lib/report-cloud-sync";
 import { getSubmittedReports } from "@/lib/report-storage";
 import type { Fault } from "@/lib/types";
 
@@ -10,10 +11,16 @@ export function useSubmittedReports() {
   const [submitted, setSubmitted] = useState<Fault[]>([]);
   const [ready, setReady] = useState(false);
 
-  const refresh = useCallback(() => {
+  const refresh = useCallback(async () => {
     if (!buildingReady) return;
-    setSubmitted(getSubmittedReports(buildingId));
-    setReady(true);
+    try {
+      const reports = await syncSubmittedReportsWithCloud(buildingId);
+      setSubmitted(reports);
+    } catch {
+      setSubmitted(getSubmittedReports(buildingId));
+    } finally {
+      setReady(true);
+    }
   }, [buildingId, buildingReady]);
 
   useEffect(() => {
@@ -23,19 +30,20 @@ export function useSubmittedReports() {
       return;
     }
 
-    refresh();
+    setReady(false);
+    void refresh();
 
     function onReportsUpdated(e: Event) {
       const detail = (e as CustomEvent<{ buildingId?: string }>).detail;
       if (!detail?.buildingId || detail.buildingId === buildingId) {
-        refresh();
+        void refresh();
       }
     }
 
     function onBuildingChanged() {
       setReady(false);
       setSubmitted([]);
-      refresh();
+      void refresh();
     }
 
     window.addEventListener("forte-reports-updated", onReportsUpdated);
