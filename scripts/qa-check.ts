@@ -108,6 +108,10 @@ import {
   isAfterLiveStart,
 } from "../lib/building-live";
 import {
+  buildMasterElevatorDossierPath,
+  MASTER_ELEVATOR_DOSSIER_ROUTE_PREFIX,
+} from "../lib/master-elevator-routes";
+import {
   buildMasterBuildingList,
   summarizeFaultBuildings,
 } from "../lib/master-buildings-list";
@@ -2318,6 +2322,53 @@ assert(
     masterBuildingsUiDossier.includes("תיק בניין") &&
     masterBuildingsUiDossier.includes("buildBuildingDossier"),
   "תיק בניין: UI במסך ניהול בניינים"
+);
+
+const elevatorDossierRouteFile = path.join(
+  process.cwd(),
+  "app/master/elevator/[buildingId]/[elevatorId]/page.tsx"
+);
+const elevatorDossierPageContent = path.join(
+  process.cwd(),
+  "components/MasterElevatorDossierPageContent.tsx"
+);
+assert(
+  fs.existsSync(elevatorDossierRouteFile),
+  "תיק מעלית: route קיים"
+);
+assert(
+  fs.existsSync(elevatorDossierPageContent),
+  "תיק מעלית: קומפוננטת עמוד קיימת"
+);
+
+const sampleElevatorHref = buildMasterElevatorDossierPath("md25", "md25-right");
+assert(
+  sampleElevatorHref.includes("md25") &&
+    sampleElevatorHref.includes("md25-right") &&
+    sampleElevatorHref.startsWith(MASTER_ELEVATOR_DOSSIER_ROUTE_PREFIX),
+  "תיק מעלית: קישור כולל buildingId ו-elevatorId"
+);
+
+assert(
+  masterBuildingsUiDossier.includes("ElevatorDossierLink") &&
+    masterBuildingsUiDossier.includes("buildMasterElevatorDossierPath") &&
+    masterBuildingsUiDossier.includes("לחצו לצפייה בתיק המעלית") &&
+    masterBuildingsUiDossier.includes('href={href}'),
+  "תיק מעלית: קישור פעיל עם href במסך Master"
+);
+
+assert(
+  !masterBuildingsUiDossier.includes("selectElevator("),
+  "תיק מעלית: אין toggle ללא ניווט"
+);
+
+const elevatorPageSource = fs.readFileSync(elevatorDossierPageContent, "utf8");
+assert(
+  elevatorPageSource.includes("חזרה ל-Master") &&
+    elevatorPageSource.includes("היסטוריית תקלות") &&
+    elevatorPageSource.includes("סטטוס מעלית") &&
+    elevatorPageSource.includes("מספר תחנות"),
+  "תיק מעלית: עמוד ייעודי עם פרטי מעלית והיסטוריה"
 );
 
 const masterAssessmentUi = fs.readFileSync(
