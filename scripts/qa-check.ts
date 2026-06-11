@@ -131,6 +131,7 @@ import {
   type ClientAccessSession,
 } from "../lib/client-access";
 import {
+  buildDocumentInsertRow,
   buildDocumentPublicUrl,
   buildDocumentStoragePath,
   collectDocumentTags,
@@ -144,6 +145,7 @@ import {
   isDocumentReadyForOcr,
   normalizeDocumentTags,
   parseDocumentTagsInput,
+  resolveDocumentContentType,
   validateCreateDocumentInput,
   validateDocumentCenterFile,
   type DocumentRecord,
@@ -3067,8 +3069,11 @@ assert(
     documentCenterLib.includes("deleteDocument") &&
     documentCenterLib.includes("uploadDocumentCenterFile") &&
     documentCenterLib.includes("filterDocuments") &&
+    documentCenterLib.includes("resolveDocumentContentType") &&
+    documentCenterLib.includes("buildDocumentInsertRow") &&
     documentCenterLib.includes("isDocumentReadyForOcr") &&
     documentCenterLib.includes("isDocumentReadyForAi") &&
+    documentCenterLib.includes("UploadDocumentResult") &&
     !documentCenterLib.includes("openai") &&
     !documentCenterLib.includes("Tesseract") &&
     !documentCenterLib.includes("sendEmail"),
@@ -3163,6 +3168,46 @@ assert(
   "Document Center: הכנה ל-OCR/AI — ללא הרצה"
 );
 
+assert(
+  resolveDocumentContentType("report.pdf", "") === "application/pdf" &&
+    resolveDocumentContentType("photo.jpg", "application/octet-stream") ===
+      "image/jpeg",
+  "Document Center: MIME type לפי סיומת — PDF ב-Windows"
+);
+
+const insertRow = buildDocumentInsertRow({
+  buildingId: "MD25",
+  elevatorId: "right",
+  documentType: "inspector_report",
+  title: "תסקיר",
+  fileName: "report.pdf",
+  fileUrl: "https://example.com/report.pdf",
+  storagePath: "md25/report.pdf",
+  mimeType: "application/pdf",
+  fileSizeBytes: 1024,
+  tags: ["בודק", "שנתי"],
+});
+assert(
+  insertRow.building_id === "md25" &&
+    insertRow.document_type === "inspector_report" &&
+    insertRow.title === "תסקיר" &&
+    insertRow.file_url === "https://example.com/report.pdf" &&
+    insertRow.tags.length === 2,
+  "Document Center: insert payload — building/title/type/file_url"
+);
+
+const documentCenterPoliciesMigration = path.join(
+  process.cwd(),
+  "supabase/migrations/009_document_center_storage_policies.sql"
+);
+assert(
+  fs.existsSync(documentCenterPoliciesMigration) &&
+    fs
+      .readFileSync(documentCenterPoliciesMigration, "utf8")
+      .includes("to public"),
+  "Document Center: migration 009 policies ל-Storage"
+);
+
 const documentCenterSectionSource = fs.readFileSync(documentCenterSectionPath, "utf8");
 const masterPageForDocuments = fs.readFileSync(
   path.join(process.cwd(), "components/MasterPageContent.tsx"),
@@ -3175,6 +3220,15 @@ assert(
     documentCenterSectionSource.includes("חיפוש") &&
     documentCenterSectionSource.includes("פתח מסמך"),
   "Document Center: Master UI — העלאה, חיפוש ופתיחה"
+);
+
+assert(
+  documentCenterSectionSource.includes("העלאת הקובץ נכשלה") &&
+    documentCenterSectionSource.includes("שמירת המסמך נכשלה") &&
+    documentCenterSectionSource.includes("await refresh()") &&
+    documentCenterSectionSource.includes("טעינת המאגר נכשלה") &&
+    documentCenterSectionSource.includes("deleteDocumentCenterStorageFile"),
+  "Document Center: הודעות שגיאה ורענון אחרי שמירה"
 );
 
 let documentCenterLeakToClient = 0;

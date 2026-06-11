@@ -83,6 +83,89 @@ export interface DocumentSearchFilters {
   tags?: string[];
 }
 
+export type DocumentCenterStage = "validation" | "upload" | "insert" | "list";
+
+export type UploadDocumentResult =
+  | { ok: true; fileUrl: string; storagePath: string }
+  | { ok: false; error: string; details?: string; stage: "upload" | "validation" };
+
+export interface DocumentListResult {
+  documents: DocumentRecord[];
+  error: string | null;
+}
+
+export interface CreateDocumentResult {
+  document: DocumentRecord | null;
+  error: string | null;
+}
+
+const DOCUMENT_EXTENSION_MIME_MAP: Record<string, string> = {
+  ".pdf": "application/pdf",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".png": "image/png",
+  ".docx":
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".xlsx":
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+};
+
+function formatSupabaseError(error: {
+  message?: string;
+  code?: string;
+  details?: string;
+  hint?: string;
+}): string {
+  const parts = [error.message, error.code, error.details, error.hint].filter(
+    Boolean
+  );
+  const message = parts.join(" · ");
+  if (error.code === "42P01" || message.includes("documents")) {
+    return `${message} · ודאו ש-migration 008 הורץ ב-Supabase`;
+  }
+  return message || "שגיאה לא ידועה";
+}
+
+export function resolveDocumentContentType(
+  fileName: string,
+  fileType = ""
+): string {
+  const normalizedType = fileType.trim().toLowerCase();
+  if (
+    normalizedType &&
+    DOCUMENT_CENTER_ALLOWED_MIME_TYPES.includes(
+      normalizedType as (typeof DOCUMENT_CENTER_ALLOWED_MIME_TYPES)[number]
+    )
+  ) {
+    return normalizedType;
+  }
+
+  const extension = getDocumentFileExtension(fileName);
+  return DOCUMENT_EXTENSION_MIME_MAP[extension] ?? "application/octet-stream";
+}
+
+export function buildDocumentInsertRow(input: CreateDocumentInput) {
+  const now = new Date().toISOString();
+  return {
+    building_id: input.buildingId.trim().toLowerCase(),
+    elevator_id: input.elevatorId?.trim() || null,
+    document_type: input.documentType,
+    title: input.title.trim(),
+    description: input.description?.trim() || null,
+    file_name: input.fileName.trim(),
+    file_url: input.fileUrl.trim(),
+    storage_path: input.storagePath.trim(),
+    mime_type: input.mimeType?.trim() || null,
+    file_size_bytes: input.fileSizeBytes ?? null,
+    tags: normalizeDocumentTags(input.tags ?? []),
+    ocr_status: "none",
+    ocr_text: null,
+    ai_summary: null,
+    ai_metadata: null,
+    updated_at: now,
+  };
+}
+
 function mapDocumentRow(row: Record<string, unknown>): DocumentRecord {
   const rawTags = row.tags;
   const tags = Array.isArray(rawTags)
@@ -276,30 +359,76 @@ function uploadDocumentWithProgress(
         resolve();
         return;
       }
-      reject(new Error(xhr.responseText || `Upload failed (${xhr.status})`));
+      reject(
+        new Error(
+          xhr.responseText ||
+            `Upload failed (${xhr.status}) · bucket=${DOCUMENT_CENTER_BUCKET}`
+        )
+      );
     };
-    xhr.onerror = () => reject(new Error("Upload failed"));
+    xhr.onerror = () => reject(new Error("Upload failed · network error"));
     xhr.send(file);
   });
+}
+
+async function uploadDocumentViaSupabaseClient(
+  file: File,
+  storagePath: string,
+  contentType: string
+): Promise<void> {
+  const client = getPilotSupabaseClient();
+  if (!client) {
+    throw new Error("Supabase client unavailable");
+  }
+
+  const { error } = await client.storage
+    .from(DOCUMENT_CENTER_BUCKET)
+    .upload(storagePath, file, {
+      contentType,
+      upsert: false,
+    });
+
+  if (error) {
+    throw new Error(formatSupabaseError(error));
+  }
 }
 
 export async function uploadDocumentCenterFile(
   file: File,
   buildingId: string,
   onProgress?: (percent: number) => void
-): Promise<{ fileUrl: string; storagePath: string } | null> {
-  if (typeof window === "undefined") return null;
+): Promise<UploadDocumentResult> {
+  if (typeof window === "undefined") {
+    return {
+      ok: false,
+      stage: "upload",
+      error: "העלאת הקובץ נכשלה",
+      details: "upload is browser-only",
+    };
+  }
 
   const validationError = validateDocumentCenterFile(file);
   if (validationError) {
-    console.warn("[document-center] file validation:", validationError);
-    return null;
+    console.error("[document-center] file validation:", validationError);
+    return {
+      ok: false,
+      stage: "validation",
+      error: validationError,
+    };
   }
 
   const baseUrl = getSupabaseUrl()?.replace(/\/$/, "");
   const anonKey = getSupabaseAnonKey();
-  if (!baseUrl || !anonKey) return null;
+  if (!baseUrl || !anonKey) {
+    return {
+      ok: false,
+      stage: "upload",
+      error: "העלאת הקובץ נכשלה",
+      details: "Supabase env missing",
+    };
+  }
 
+  const contentType = resolveDocumentContentType(file.name, file.type);
   const storagePath = buildDocumentStoragePath(buildingId, file.name);
   const encodedPath = storagePath
     .split("/")
@@ -316,20 +445,60 @@ export async function uploadDocumentCenterFile(
       {
         Authorization: `Bearer ${anonKey}`,
         apikey: anonKey,
-        "Content-Type": file.type || "application/octet-stream",
+        "Content-Type": contentType,
         "x-upsert": "false",
       },
       onProgress
     );
-  } catch (error) {
-    console.warn("[document-center] upload failed:", error);
-    return null;
+  } catch (xhrError) {
+    console.error("[document-center] xhr upload failed:", {
+      bucket: DOCUMENT_CENTER_BUCKET,
+      contentType,
+      storagePath,
+      error: xhrError,
+    });
+
+    try {
+      onProgress?.(50);
+      await uploadDocumentViaSupabaseClient(file, storagePath, contentType);
+      onProgress?.(100);
+    } catch (clientError) {
+      console.error("[document-center] client upload failed:", {
+        bucket: DOCUMENT_CENTER_BUCKET,
+        contentType,
+        storagePath,
+        error: clientError,
+      });
+      return {
+        ok: false,
+        stage: "upload",
+        error: "העלאת הקובץ נכשלה",
+        details:
+          clientError instanceof Error
+            ? clientError.message
+            : String(clientError),
+      };
+    }
   }
 
   const fileUrl = buildDocumentPublicUrl(storagePath);
-  if (!fileUrl) return null;
+  if (!fileUrl) {
+    return {
+      ok: false,
+      stage: "upload",
+      error: "העלאת הקובץ נכשלה",
+      details: "public URL could not be built",
+    };
+  }
 
-  return { fileUrl, storagePath };
+  console.info("[document-center] upload success:", {
+    bucket: DOCUMENT_CENTER_BUCKET,
+    contentType,
+    storagePath,
+    fileUrl,
+  });
+
+  return { ok: true, fileUrl, storagePath };
 }
 
 export async function deleteDocumentCenterStorageFile(
@@ -402,32 +571,32 @@ export function collectDocumentTags(documents: DocumentRecord[]): string[] {
 
 export async function createDocument(
   input: CreateDocumentInput
-): Promise<DocumentRecord | null> {
+): Promise<CreateDocumentResult> {
   const validationError = validateCreateDocumentInput(input);
-  if (validationError) return null;
+  if (validationError) {
+    console.error("[document-center] insert validation:", validationError, input);
+    return { document: null, error: validationError };
+  }
 
   const client = getPilotSupabaseClient();
-  if (!client) return null;
+  if (!client) {
+    return {
+      document: null,
+      error: "Supabase לא מוגדר",
+    };
+  }
 
-  const now = new Date().toISOString();
-  const row = {
-    building_id: input.buildingId.trim().toLowerCase(),
-    elevator_id: input.elevatorId?.trim() || null,
-    document_type: input.documentType,
-    title: input.title.trim(),
-    description: input.description?.trim() || null,
-    file_name: input.fileName.trim(),
-    file_url: input.fileUrl.trim(),
-    storage_path: input.storagePath.trim(),
-    mime_type: input.mimeType?.trim() || null,
-    file_size_bytes: input.fileSizeBytes ?? null,
-    tags: normalizeDocumentTags(input.tags ?? []),
-    ocr_status: "none",
-    ocr_text: null,
-    ai_summary: null,
-    ai_metadata: null,
-    updated_at: now,
-  };
+  const row = buildDocumentInsertRow(input);
+  console.info("[document-center] insert payload:", {
+    building_id: row.building_id,
+    elevator_id: row.elevator_id,
+    document_type: row.document_type,
+    title: row.title,
+    file_name: row.file_name,
+    file_url: row.file_url,
+    storage_path: row.storage_path,
+    tags: row.tags,
+  });
 
   const { data, error } = await client
     .from(DOCUMENTS_TABLE)
@@ -436,28 +605,56 @@ export async function createDocument(
     .single();
 
   if (error || !data) {
-    console.warn("[document-center] create failed:", error?.message);
-    return null;
+    const formatted = error ? formatSupabaseError(error) : "no row returned";
+    console.error("[document-center] insert failed:", {
+      error,
+      table: DOCUMENTS_TABLE,
+      row,
+    });
+    return {
+      document: null,
+      error: formatted,
+    };
   }
 
-  return mapDocumentRow(data);
+  const document = mapDocumentRow(data);
+  console.info("[document-center] insert success:", {
+    id: document.id,
+    title: document.title,
+    building_id: document.building_id,
+  });
+  return { document, error: null };
 }
 
-export async function getAllDocuments(): Promise<DocumentRecord[]> {
+export async function getAllDocuments(): Promise<DocumentListResult> {
   const client = getPilotSupabaseClient();
-  if (!client) return [];
+  if (!client) {
+    return {
+      documents: [],
+      error: "Supabase לא מוגדר",
+    };
+  }
 
   const { data, error } = await client
     .from(DOCUMENTS_TABLE)
     .select("*")
     .order("created_at", { ascending: false });
 
-  if (error || !data) {
-    console.warn("[document-center] list failed:", error?.message);
-    return [];
+  if (error) {
+    const formatted = formatSupabaseError(error);
+    console.error("[document-center] list failed:", {
+      error,
+      table: DOCUMENTS_TABLE,
+    });
+    return {
+      documents: [],
+      error: formatted,
+    };
   }
 
-  return data.map((row) => mapDocumentRow(row));
+  const documents = (data ?? []).map((row) => mapDocumentRow(row));
+  console.info("[document-center] list success:", { count: documents.length });
+  return { documents, error: null };
 }
 
 export async function getDocumentById(

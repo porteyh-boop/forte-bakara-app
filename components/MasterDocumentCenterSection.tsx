@@ -5,6 +5,7 @@ import {
   collectDocumentTags,
   createDocument,
   deleteDocument,
+  deleteDocumentCenterStorageFile,
   DOCUMENT_TYPES,
   filterDocuments,
   formatDocumentDate,
@@ -13,6 +14,7 @@ import {
   getDocumentTypeLabel,
   isDocumentCenterConfigured,
   parseDocumentTagsInput,
+  resolveDocumentContentType,
   uploadDocumentCenterFile,
   validateDocumentCenterFile,
   validateCreateDocumentInput,
@@ -37,6 +39,7 @@ export default function MasterDocumentCenterSection() {
   const [creating, setCreating] = useState(false);
   const [actionId, setActionId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
 
   const [buildingId, setBuildingId] = useState(() => getAllBuildingIds()[0] ?? "");
   const [elevatorId, setElevatorId] = useState("");
@@ -81,12 +84,18 @@ export default function MasterDocumentCenterSection() {
   const refresh = useCallback(async () => {
     if (!cloudReady) {
       setDocuments([]);
-      return;
+      setListError(null);
+      return { documents: [], error: null };
     }
     setLoading(true);
-    const rows = await getAllDocuments();
+    const { documents: rows, error } = await getAllDocuments();
     setDocuments(rows);
+    setListError(error);
+    if (error) {
+      console.error("[document-center] refresh failed:", error);
+    }
     setLoading(false);
+    return { documents: rows, error };
   }, [cloudReady]);
 
   useEffect(() => {
@@ -152,10 +161,16 @@ export default function MasterDocumentCenterSection() {
       setUploadProgress
     );
 
-    if (!uploaded) {
+    if (!uploaded.ok) {
       setCreating(false);
       setUploadProgress(null);
-      setMessage("העלאת הקובץ נכשלה. ודאו ש-migration 008 הורץ ב-Supabase.");
+      setMessage(
+        uploaded.stage === "validation"
+          ? uploaded.error
+          : uploaded.details
+            ? `העלאת הקובץ נכשלה: ${uploaded.details}`
+            : "העלאת הקובץ נכשלה"
+      );
       return;
     }
 
@@ -168,7 +183,7 @@ export default function MasterDocumentCenterSection() {
       fileName: selectedFile.name,
       fileUrl: uploaded.fileUrl,
       storagePath: uploaded.storagePath,
-      mimeType: selectedFile.type,
+      mimeType: resolveDocumentContentType(selectedFile.name, selectedFile.type),
       fileSizeBytes: selectedFile.size,
       tags: parseDocumentTagsInput(tagsInput),
     };
@@ -181,12 +196,18 @@ export default function MasterDocumentCenterSection() {
       return;
     }
 
-    const created = await createDocument(input);
+    const { document: created, error: insertError } = await createDocument(input);
     setCreating(false);
     setUploadProgress(null);
 
     if (!created) {
-      setMessage("שמירת המסמך נכשלה.");
+      await deleteDocumentCenterStorageFile(uploaded.storagePath);
+      setMessage(
+        insertError
+          ? `שמירת המסמך נכשלה: ${insertError}`
+          : "שמירת המסמך נכשלה."
+      );
+      console.error("[document-center] save failed after upload:", insertError);
       return;
     }
 
@@ -197,7 +218,10 @@ export default function MasterDocumentCenterSection() {
     setSelectedFile(null);
     setDocumentType("other");
     setMessage("המסמך נשמר במאגר.");
-    await refresh();
+    const refreshed = await refresh();
+    if (refreshed.error) {
+      setMessage(`המסמך נשמר, אך טעינת הרשימה נכשלה: ${refreshed.error}`);
+    }
   }
 
   async function handleDelete(documentId: string) {
@@ -430,7 +454,11 @@ export default function MasterDocumentCenterSection() {
 
         {filteredDocuments.length === 0 ? (
           <p className="text-sm text-gray-text">
-            {cloudReady ? "אין מסמכים במאגר." : "Supabase לא מחובר."}
+            {listError
+              ? `טעינת המאגר נכשלה: ${listError}`
+              : cloudReady
+                ? "אין מסמכים במאגר."
+                : "Supabase לא מחובר."}
           </p>
         ) : (
           <div className="space-y-3">
