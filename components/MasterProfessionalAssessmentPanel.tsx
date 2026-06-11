@@ -4,6 +4,7 @@ import {
   generateProfessionalAssessment,
   getOperationalStatusClasses,
   getRiskLevelClasses,
+  getRuleSeverityClasses,
   mapPilotFaultForAssessment,
   type ProfessionalAssessment,
 } from "@/lib/professional-assessment";
@@ -148,6 +149,39 @@ function AssessmentSummary({
         items={assessment.recommendations}
         emptyText="אין המלצות."
       />
+
+      <div>
+        <p className="text-xs font-semibold text-gold mb-2">כללי מומחה שהופעלו</p>
+        {assessment.activatedRules.length === 0 ? (
+          <p className="text-sm text-gray-text">לא הופעלו כללי מומחה.</p>
+        ) : (
+          <ul className="space-y-2">
+            {assessment.activatedRules.map((rule) => {
+              const style = getRuleSeverityClasses(rule.severity);
+              return (
+                <li
+                  key={rule.id}
+                  className={`border rounded-xl px-3 py-2 ${style.bg} ${style.border}`}
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={`text-xs font-bold dir-ltr ${style.text}`}
+                    >
+                      {rule.id}
+                    </span>
+                    <span className="text-[11px] text-gray-text">
+                      {rule.category}
+                    </span>
+                  </div>
+                  <p className={`text-sm font-semibold mt-1 ${style.text}`}>
+                    {rule.title}
+                  </p>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }

@@ -146,8 +146,16 @@ import {
 } from "../lib/master-building-dossier";
 import {
   generateProfessionalAssessment,
+  mapClientFaultForAssessment,
   mapPilotFaultForAssessment,
 } from "../lib/professional-assessment";
+import {
+  evaluateProfessionalRules,
+  exportRulesAsJson,
+  getRulesByCategory,
+  PROFESSIONAL_RULE_CATEGORIES,
+  PROFESSIONAL_RULES,
+} from "../lib/professional-rules";
 import { DEFAULT_ELEVATOR_COMPANIES } from "../lib/elevator-companies";
 import type { FeedbackSubmissionInput } from "../lib/types";
 
@@ -2324,8 +2332,42 @@ assert(
   masterAssessmentUi.includes("MasterProfessionalAssessmentPanel") &&
     masterAssessmentUi.includes("הערכת מצב מקצועית") === false &&
     masterAssessmentPanel.includes("הערכת מצב מקצועית") &&
-    masterAssessmentPanel.includes("מומחה בלבד"),
+    masterAssessmentPanel.includes("מומחה בלבד") &&
+    masterAssessmentPanel.includes("כללי מומחה שהופעלו"),
   "הערכת מצב מקצועית: UI רק במסך Master"
+);
+
+assert(
+  PROFESSIONAL_RULES.length >= 50,
+  `Knowledge Base: לפחות 50 כללים (${PROFESSIONAL_RULES.length})`
+);
+
+const ruleIds = PROFESSIONAL_RULES.map((r) => r.id);
+assert(
+  new Set(ruleIds).size === ruleIds.length,
+  "Knowledge Base: מזהי כללים ייחודיים"
+);
+
+for (const category of PROFESSIONAL_RULE_CATEGORIES) {
+  assert(
+    getRulesByCategory(category).length >= 5,
+    `Knowledge Base: קטגוריה ${category} — לפחות 5 כללים`
+  );
+}
+
+assert(
+  getRulesByCategory("Reliability").some((r) => r.id === "R-001") &&
+    getRulesByCategory("Doors").some((r) => r.id === "D-001") &&
+    getRulesByCategory("Rescue").some((r) => r.id === "RES-001"),
+  "Knowledge Base: כללי מפתח R/D/RES קיימים"
+);
+
+const exportedRules = exportRulesAsJson();
+assert(
+  exportedRules.includes('"R-001"') &&
+    exportedRules.includes('"category"') &&
+    !exportedRules.includes("evaluate"),
+  "Knowledge Base: ייצוא JSON ללא פונקציות"
 );
 
 const clientUiFiles = [
@@ -2340,8 +2382,11 @@ for (const file of clientUiFiles) {
   const content = fs.readFileSync(file, "utf8");
   if (
     content.includes("professional-assessment") ||
+    content.includes("professional-rules") ||
     content.includes("ProfessionalAssessment") ||
-    content.includes("generateProfessionalAssessment")
+    content.includes("ProfessionalRule") ||
+    content.includes("generateProfessionalAssessment") ||
+    content.includes("PROFESSIONAL_RULES")
   ) {
     clientAssessmentLeak++;
     failed++;
@@ -2383,12 +2428,13 @@ const singleOpenAssessment = generateProfessionalAssessment({
   faults: [
     {
       elevatorId: "e1",
-      faultType: "רעש חריג",
-      description: "רעש",
+      faultType: "תאורה לא עובדת",
+      description: "תאורה כבויה",
       status: "פתוחה",
       reportedAt: "2026-06-01T10:00:00.000Z",
     },
   ],
+  now: new Date("2026-06-05T12:00:00.000Z"),
 });
 assert(
   singleOpenAssessment.operationalStatus === "תקין עם מעקב" &&
@@ -2427,6 +2473,7 @@ const recurringAssessment = generateProfessionalAssessment({
       reportedAt: "2026-06-01T10:00:00.000Z",
     },
   ],
+  now: new Date("2026-06-05T12:00:00.000Z"),
 });
 assert(
   recurringAssessment.operationalStatus === "דורש בדיקה" &&
@@ -2637,6 +2684,33 @@ assert(
     initializedBuildingAssessment.metrics.doorFaults === 0,
   "הערכת מצב: בניין מאותחל — ללא נתוני דemo"
 );
+
+const md25AssessmentCtx = getBuildingDataset("md25");
+const md25DemoAssessment = generateProfessionalAssessment({
+  building: { id: "md25", name: md25AssessmentCtx.building.name },
+  elevators: md25AssessmentCtx.elevators.map((e) => ({
+    id: e.id,
+    name: e.name,
+    status: e.status,
+  })),
+  faults: md25AssessmentCtx.faults.map(mapClientFaultForAssessment),
+  now: new Date("2026-06-05T12:00:00.000Z"),
+});
+assert(
+  md25DemoAssessment.activatedRules.length >= 10,
+  `Knowledge Base: md25 — לפחות 10 כללים הופעלו (${md25DemoAssessment.activatedRules.length})`
+);
+assert(
+  md25DemoAssessment.activatedRules.some((r) => r.id.startsWith("R-")) &&
+    md25DemoAssessment.activatedRules.some((r) => r.id.startsWith("D-") || r.id.startsWith("RES-")),
+  "Knowledge Base: md25 — כללי Reliability/Doors/Rescue הופעלו"
+);
+
+console.log("\n=== Knowledge Base: 10 כללים ראשונים על md25 (מגדל דוד 25) ===");
+for (const rule of md25DemoAssessment.activatedRules.slice(0, 10)) {
+  console.log(`  ${rule.id} — ${rule.title}`);
+}
+console.log("");
 
 setCatalogSnapshot(null);
 
