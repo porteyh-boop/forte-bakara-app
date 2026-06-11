@@ -6,13 +6,17 @@ import {
   computeInspectorFollowUpPhase,
   createInspectorReport,
   daysSinceReportDate,
+  deleteInspectorReport,
   formatInspectorDeadline,
   formatInspectorReportDate,
   generateUrgentLetterTemplate,
   getAllInspectorReports,
   getInspectorPhaseBadgeClass,
   getInspectorPhaseLabel,
+  getInspectorReportDocumentUrl,
   isInspectorReportTrackingConfigured,
+  uploadInspectorReportFile,
+  validateInspectorReportFile,
   validateInspectorReportInput,
   type InspectorReportRecord,
 } from "@/lib/inspector-report-tracking";
@@ -58,6 +62,8 @@ export default function MasterInspectorReportsSection() {
   const [documentUrl, setDocumentUrl] = useState("");
   const [documentDescription, setDocumentDescription] = useState("");
   const [hasRemarks, setHasRemarks] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
   const buildingOptions = useMemo(
     () =>
@@ -98,17 +104,63 @@ export default function MasterInspectorReportsSection() {
     void refresh();
   }, [refresh]);
 
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0] ?? null;
+    setMessage(null);
+    setSelectedFile(null);
+    setUploadProgress(null);
+
+    if (!file) return;
+
+    const validationError = validateInspectorReportFile(file);
+    if (validationError) {
+      setMessage(validationError);
+      e.target.value = "";
+      return;
+    }
+
+    setSelectedFile(file);
+    if (!documentName.trim()) {
+      setDocumentName(file.name.replace(/\.[^.]+$/, ""));
+    }
+  }
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setMessage(null);
+    setUploadProgress(null);
+
+    let fileUrl = "";
+
+    if (selectedFile) {
+      if (!cloudReady) {
+        setMessage("Supabase לא מוגדר. הריצו migration 006 ו-007.");
+        return;
+      }
+
+      setCreating(true);
+      const uploaded = await uploadInspectorReportFile(
+        selectedFile,
+        buildingId,
+        setUploadProgress
+      );
+      if (!uploaded) {
+        setCreating(false);
+        setUploadProgress(null);
+        setMessage("העלאת הקובץ נכשלה. ודאו ש-migration 007 הורץ ב-Supabase.");
+        return;
+      }
+      fileUrl = uploaded.fileUrl;
+    }
 
     const input = {
       buildingId,
       elevatorId: elevatorId || null,
       reportDate,
       inspectorName,
-      documentName,
+      documentName: documentName || selectedFile?.name || "",
       documentUrl,
+      fileUrl: fileUrl || undefined,
       documentDescription,
       hasRemarks,
     };
@@ -124,9 +176,12 @@ export default function MasterInspectorReportsSection() {
       return;
     }
 
-    setCreating(true);
+    if (!selectedFile) {
+      setCreating(true);
+    }
     const created = await createInspectorReport(input);
     setCreating(false);
+    setUploadProgress(null);
 
     if (!created) {
       setMessage("יצירת תסקיר נכשלה. ודאו ש-migration 006 הורץ ב-Supabase.");
@@ -139,11 +194,27 @@ export default function MasterInspectorReportsSection() {
     setDocumentDescription("");
     setHasRemarks(false);
     setElevatorId("");
+    setSelectedFile(null);
     setMessage(
       created.has_remarks
         ? "תסקיר נשמר ודוח מעקב נפתח — מעקב 45 יום פעיל."
         : "תסקיר נשמר ללא מעקב הערות."
     );
+    await refresh();
+  }
+
+  async function handleDelete(reportId: string) {
+    if (!window.confirm("למחוק את התסקיר ואת הקובץ המצורף?")) return;
+
+    setActionId(reportId);
+    setMessage(null);
+    const ok = await deleteInspectorReport(reportId);
+    setActionId(null);
+    if (!ok) {
+      setMessage("מחיקת התסקיר נכשלה.");
+      return;
+    }
+    setMessage("התסקיר והקובץ נמחקו.");
     await refresh();
   }
 
@@ -267,7 +338,42 @@ export default function MasterInspectorReportsSection() {
             />
           </div>
           <div>
-            <label className="text-xs text-gray-text">קישור חיצוני למסמך</label>
+            <label className="text-xs text-gray-text">קובץ תסקיר</label>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <label className="text-xs font-semibold text-navy border border-gray-200 rounded-lg px-3 py-2 hover:bg-gray-50 cursor-pointer">
+                בחר קובץ
+                <input
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx,application/pdf,image/jpeg,image/png,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  onChange={handleFileChange}
+                  className="sr-only"
+                />
+              </label>
+              {selectedFile && (
+                <span className="text-xs text-gray-text break-all">
+                  {selectedFile.name} ({Math.round(selectedFile.size / 1024)}KB)
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-gray-text mt-1">
+              PDF · JPG · PNG · DOCX · XLSX · עד 20MB
+            </p>
+            {uploadProgress !== null && (
+              <div className="mt-2">
+                <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+                  <div
+                    className="h-full bg-navy transition-all duration-200"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+                <p className="text-[11px] text-gray-text mt-1">
+                  מעלה קובץ… {uploadProgress}%
+                </p>
+              </div>
+            )}
+          </div>
+          <div>
+            <label className="text-xs text-gray-text">קישור חיצוני למסמך (אופציונלי)</label>
             <input
               type="url"
               value={documentUrl}
@@ -305,7 +411,11 @@ export default function MasterInspectorReportsSection() {
           disabled={!cloudReady || creating}
           className="btn-primary w-full sm:w-auto disabled:opacity-50"
         >
-          {creating ? "שומר..." : "שמור תסקיר ופתח מעקב"}
+          {creating
+            ? uploadProgress !== null
+              ? `מעלה קובץ… ${uploadProgress}%`
+              : "שומר..."
+            : "שמור תסקיר ופתח מעקב"}
         </button>
       </form>
 
@@ -345,6 +455,8 @@ export default function MasterInspectorReportsSection() {
                     })
                   : "";
 
+              const documentUrl = getInspectorReportDocumentUrl(report);
+
               return (
                 <article
                   key={report.id}
@@ -380,14 +492,14 @@ export default function MasterInspectorReportsSection() {
                     </p>
                   </div>
 
-                  {report.document_url && (
+                  {documentUrl && (
                     <a
-                      href={report.document_url}
+                      href={documentUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs font-semibold text-navy underline break-all"
+                      className="inline-flex text-xs font-semibold text-navy border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50"
                     >
-                      {report.document_url}
+                      פתח מסמך
                     </a>
                   )}
                   {report.document_description && (
@@ -419,6 +531,14 @@ export default function MasterInspectorReportsSection() {
                         </button>
                       </>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => void handleDelete(report.id)}
+                      disabled={actionId === report.id}
+                      className="text-xs font-semibold text-red-700 border border-red-200 rounded-lg px-3 py-1.5 hover:bg-red-50 disabled:opacity-50"
+                    >
+                      מחק תסקיר
+                    </button>
                   </div>
 
                   {letterText && (

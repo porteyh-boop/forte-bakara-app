@@ -131,14 +131,21 @@ import {
   type ClientAccessSession,
 } from "../lib/client-access";
 import {
+  buildInspectorReportPublicUrl,
+  buildInspectorReportStoragePath,
   closeInspectorReportLocally,
   computeInspectorDeadlineAt,
   computeInspectorFollowUpPhase,
   daysSinceReportDate,
+  extractInspectorReportStoragePath,
   generateUrgentLetterTemplate,
+  getInspectorReportDocumentUrl,
   INSPECTOR_ALERT_DAY,
   INSPECTOR_REMINDER_DAY,
+  INSPECTOR_REPORT_ALLOWED_EXTENSIONS,
+  INSPECTOR_REPORTS_BUCKET,
   INSPECTOR_URGENT_DAY,
+  validateInspectorReportFile,
   validateInspectorReportInput,
   type InspectorReportRecord,
 } from "../lib/inspector-report-tracking";
@@ -2756,6 +2763,7 @@ const baseInspectorReport: InspectorReportRecord = {
   inspector_name: "בודק",
   document_name: "תסקיר שנתי",
   document_url: null,
+  file_url: null,
   document_description: null,
   has_remarks: true,
   deadline_at: computeInspectorDeadlineAt("2026-01-01"),
@@ -2901,9 +2909,107 @@ assert(
   inspectorLib.includes("createInspectorReport") &&
     inspectorLib.includes("closeInspectorReport") &&
     inspectorLib.includes("getAllInspectorReports") &&
+    inspectorLib.includes("uploadInspectorReportFile") &&
+    inspectorLib.includes("deleteInspectorReport") &&
+    inspectorLib.includes("deleteInspectorReportStorageFile") &&
     !inspectorLib.includes("openai") &&
     !inspectorLib.includes("ocr"),
   "תסקיר בודק: lib CRUD ללא AI/OCR"
+);
+
+const inspectorFileMigration = path.join(
+  process.cwd(),
+  "supabase/migrations/007_inspector_report_file_storage.sql"
+);
+assert(
+  fs.existsSync(inspectorFileMigration),
+  "תסקיר בודק: migration 007 קיים"
+);
+const inspectorFileMigrationSql = fs.readFileSync(inspectorFileMigration, "utf8");
+assert(
+  inspectorFileMigrationSql.includes("file_url") &&
+    inspectorFileMigrationSql.includes("inspector-reports"),
+  "תסקיר בודק: bucket ו-file_url במigration 007"
+);
+
+assert(
+  validateInspectorReportFile({
+    name: "report.pdf",
+    type: "application/pdf",
+    size: 1024,
+  }) === null &&
+    validateInspectorReportFile({
+      name: "photo.jpg",
+      type: "image/jpeg",
+      size: 2048,
+    }) === null &&
+    validateInspectorReportFile({
+      name: "notes.docx",
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      size: 4096,
+    }) === null,
+  "תסקיר בודק: ולידציית סוגי קובץ — PDF/JPG/DOCX"
+);
+assert(
+  validateInspectorReportFile({
+    name: "virus.exe",
+    type: "application/octet-stream",
+    size: 1024,
+  }) !== null,
+  "תסקיר בודק: ולידציית קובץ — דוחה EXE"
+);
+
+const storagePath = buildInspectorReportStoragePath("md25", "report.pdf");
+assert(
+  storagePath.startsWith("md25/") && storagePath.endsWith("-report.pdf"),
+  "תסקיר בודק: נתיב Storage"
+);
+
+const encodedStoragePath = storagePath
+  .split("/")
+  .map((segment) => encodeURIComponent(segment))
+  .join("/");
+const manualPublicUrl = `https://example.supabase.co/storage/v1/object/public/${INSPECTOR_REPORTS_BUCKET}/${encodedStoragePath}`;
+assert(
+  extractInspectorReportStoragePath(manualPublicUrl) === storagePath,
+  "תסקיר בודק: חילוץ נתיב מ-URL"
+);
+
+const builtPublicUrl = buildInspectorReportPublicUrl(storagePath);
+if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+  assert(
+    builtPublicUrl !== null && builtPublicUrl.includes(INSPECTOR_REPORTS_BUCKET),
+    "תסקיר בודק: URL ציבורי"
+  );
+} else {
+  assert(builtPublicUrl === null, "תסקיר בודק: URL ציבורי דורש Supabase");
+}
+
+assert(
+  getInspectorReportDocumentUrl({
+    file_url: "https://example.com/file.pdf",
+    document_url: "https://example.com/external",
+  }) === "https://example.com/file.pdf" &&
+    getInspectorReportDocumentUrl({
+      file_url: null,
+      document_url: "https://example.com/external",
+    }) === "https://example.com/external",
+  "תסקיר בודק: קישור מסמך — file_url מועדף"
+);
+
+assert(
+  INSPECTOR_REPORT_ALLOWED_EXTENSIONS.includes(".xlsx") &&
+    INSPECTOR_REPORT_ALLOWED_EXTENSIONS.includes(".png"),
+  "תסקיר בודק: סיומות PNG/XLSX"
+);
+
+assert(
+  inspectorSectionSource.includes("בחר קובץ") &&
+    inspectorSectionSource.includes("uploadProgress") &&
+    inspectorSectionSource.includes("פתח מסמך") &&
+    inspectorSectionSource.includes("מחק תסקיר") &&
+    !inspectorSectionSource.includes("Document Center"),
+  "תסקיר בודק: UI העלאת קובץ ופתיחה/מחיקה"
 );
 
 const masterAssessmentUi = fs.readFileSync(

@@ -1,6 +1,30 @@
-import { getPilotSupabaseClient, isPilotCloudConfigured } from "./pilot-cloud";
+import {
+  getPilotSupabaseClient,
+  getSupabaseAnonKey,
+  getSupabaseUrl,
+  isPilotCloudConfigured,
+} from "./pilot-cloud";
 
 export const INSPECTOR_REPORTS_TABLE = "inspector_reports";
+export const INSPECTOR_REPORTS_BUCKET = "inspector-reports";
+export const INSPECTOR_REPORT_MAX_FILE_BYTES = 20 * 1024 * 1024;
+
+export const INSPECTOR_REPORT_ALLOWED_EXTENSIONS = [
+  ".pdf",
+  ".jpg",
+  ".jpeg",
+  ".png",
+  ".docx",
+  ".xlsx",
+] as const;
+
+export const INSPECTOR_REPORT_ALLOWED_MIME_TYPES = [
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+] as const;
 
 export const INSPECTOR_REMINDER_DAY = 35;
 export const INSPECTOR_ALERT_DAY = 40;
@@ -25,6 +49,7 @@ export interface InspectorReportRecord {
   inspector_name: string | null;
   document_name: string | null;
   document_url: string | null;
+  file_url: string | null;
   document_description: string | null;
   has_remarks: boolean;
   deadline_at: string | null;
@@ -41,6 +66,7 @@ export interface CreateInspectorReportInput {
   inspectorName?: string;
   documentName?: string;
   documentUrl?: string;
+  fileUrl?: string;
   documentDescription?: string;
   hasRemarks: boolean;
 }
@@ -61,6 +87,7 @@ function mapInspectorReportRow(row: Record<string, unknown>): InspectorReportRec
     inspector_name: row.inspector_name ? String(row.inspector_name) : null,
     document_name: row.document_name ? String(row.document_name) : null,
     document_url: row.document_url ? String(row.document_url) : null,
+    file_url: row.file_url ? String(row.file_url) : null,
     document_description: row.document_description
       ? String(row.document_description)
       : null,
@@ -154,11 +181,232 @@ export function validateInspectorReportInput(
   if (
     !input.documentName?.trim() &&
     !input.documentUrl?.trim() &&
+    !input.fileUrl?.trim() &&
     !input.documentDescription?.trim()
   ) {
-    return "יש להזין שם מסמך, קישור חיצוני או תיאור.";
+    return "יש להזין שם מסמך, קובץ, קישור חיצוני או תיאור.";
   }
   return null;
+}
+
+export function getInspectorReportFileExtension(fileName: string): string {
+  const trimmed = fileName.trim().toLowerCase();
+  const dot = trimmed.lastIndexOf(".");
+  if (dot <= 0) return "";
+  return trimmed.slice(dot);
+}
+
+export function validateInspectorReportFile(
+  file: Pick<File, "name" | "type" | "size">
+): string | null {
+  const extension = getInspectorReportFileExtension(file.name);
+  const mimeAllowed =
+    file.type &&
+    INSPECTOR_REPORT_ALLOWED_MIME_TYPES.includes(
+      file.type as (typeof INSPECTOR_REPORT_ALLOWED_MIME_TYPES)[number]
+    );
+  const extensionAllowed = INSPECTOR_REPORT_ALLOWED_EXTENSIONS.includes(
+    extension as (typeof INSPECTOR_REPORT_ALLOWED_EXTENSIONS)[number]
+  );
+
+  if (!mimeAllowed && !extensionAllowed) {
+    return "סוג קובץ לא נתמך. ניתן להעלות PDF, JPG, PNG, DOCX או XLSX.";
+  }
+  if (file.size <= 0) return "הקובץ ריק.";
+  if (file.size > INSPECTOR_REPORT_MAX_FILE_BYTES) {
+    return "הקובץ גדול מדי (מקסימום 20MB).";
+  }
+  return null;
+}
+
+export function sanitizeInspectorReportFileName(fileName: string): string {
+  const base = fileName.trim().replace(/[/\\?%*:|"<>]/g, "_");
+  return base || "document";
+}
+
+export function buildInspectorReportStoragePath(
+  buildingId: string,
+  fileName: string,
+  now: Date = new Date()
+): string {
+  const normalizedBuilding = buildingId.trim().toLowerCase();
+  const safeName = sanitizeInspectorReportFileName(fileName);
+  const stamp = now.toISOString().replace(/[:.]/g, "-");
+  return `${normalizedBuilding}/${stamp}-${safeName}`;
+}
+
+export function buildInspectorReportPublicUrl(storagePath: string): string | null {
+  const baseUrl = getSupabaseUrl()?.replace(/\/$/, "");
+  if (!baseUrl || !storagePath.trim()) return null;
+  const encodedPath = storagePath
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+  return `${baseUrl}/storage/v1/object/public/${INSPECTOR_REPORTS_BUCKET}/${encodedPath}`;
+}
+
+export function extractInspectorReportStoragePath(fileUrl: string): string | null {
+  const trimmed = fileUrl.trim();
+  if (!trimmed) return null;
+
+  const marker = `/storage/v1/object/public/${INSPECTOR_REPORTS_BUCKET}/`;
+  const index = trimmed.indexOf(marker);
+  if (index === -1) return null;
+
+  const encodedPath = trimmed.slice(index + marker.length).split("?")[0];
+  if (!encodedPath) return null;
+
+  return encodedPath
+    .split("/")
+    .map((segment) => decodeURIComponent(segment))
+    .join("/");
+}
+
+export function getInspectorReportDocumentUrl(
+  report: Pick<InspectorReportRecord, "file_url" | "document_url">
+): string | null {
+  return report.file_url?.trim() || report.document_url?.trim() || null;
+}
+
+function uploadInspectorReportFileWithProgress(
+  uploadUrl: string,
+  file: File,
+  headers: Record<string, string>,
+  onProgress?: (percent: number) => void
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", uploadUrl);
+    Object.entries(headers).forEach(([key, value]) => {
+      xhr.setRequestHeader(key, value);
+    });
+    xhr.upload.onprogress = (event) => {
+      if (!onProgress || !event.lengthComputable) return;
+      onProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)));
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        onProgress?.(100);
+        resolve();
+        return;
+      }
+      reject(new Error(xhr.responseText || `Upload failed (${xhr.status})`));
+    };
+    xhr.onerror = () => reject(new Error("Upload failed"));
+    xhr.send(file);
+  });
+}
+
+export async function uploadInspectorReportFile(
+  file: File,
+  buildingId: string,
+  onProgress?: (percent: number) => void
+): Promise<{ fileUrl: string; storagePath: string } | null> {
+  if (typeof window === "undefined") return null;
+
+  const validationError = validateInspectorReportFile(file);
+  if (validationError) {
+    console.warn("[inspector-report] file validation:", validationError);
+    return null;
+  }
+
+  const baseUrl = getSupabaseUrl()?.replace(/\/$/, "");
+  const anonKey = getSupabaseAnonKey();
+  if (!baseUrl || !anonKey) return null;
+
+  const storagePath = buildInspectorReportStoragePath(buildingId, file.name);
+  const encodedPath = storagePath
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+  const uploadUrl = `${baseUrl}/storage/v1/object/${INSPECTOR_REPORTS_BUCKET}/${encodedPath}`;
+
+  onProgress?.(0);
+
+  try {
+    await uploadInspectorReportFileWithProgress(
+      uploadUrl,
+      file,
+      {
+        Authorization: `Bearer ${anonKey}`,
+        apikey: anonKey,
+        "Content-Type": file.type || "application/octet-stream",
+        "x-upsert": "false",
+      },
+      onProgress
+    );
+  } catch (error) {
+    console.warn("[inspector-report] upload failed:", error);
+    return null;
+  }
+
+  const fileUrl = buildInspectorReportPublicUrl(storagePath);
+  if (!fileUrl) return null;
+
+  return { fileUrl, storagePath };
+}
+
+export async function deleteInspectorReportStorageFile(
+  fileUrl: string
+): Promise<boolean> {
+  const client = getPilotSupabaseClient();
+  const storagePath = extractInspectorReportStoragePath(fileUrl);
+  if (!client || !storagePath) return false;
+
+  const { error } = await client.storage
+    .from(INSPECTOR_REPORTS_BUCKET)
+    .remove([storagePath]);
+
+  if (error) {
+    console.warn("[inspector-report] storage delete failed:", error.message);
+    return false;
+  }
+
+  return true;
+}
+
+export async function getInspectorReportById(
+  reportId: string
+): Promise<InspectorReportRecord | null> {
+  const client = getPilotSupabaseClient();
+  if (!client || !reportId.trim()) return null;
+
+  const { data, error } = await client
+    .from(INSPECTOR_REPORTS_TABLE)
+    .select("*")
+    .eq("id", reportId)
+    .maybeSingle();
+
+  if (error || !data) {
+    console.warn("[inspector-report] get by id failed:", error?.message);
+    return null;
+  }
+
+  return mapInspectorReportRow(data);
+}
+
+export async function deleteInspectorReport(reportId: string): Promise<boolean> {
+  const client = getPilotSupabaseClient();
+  if (!client || !reportId.trim()) return false;
+
+  const report = await getInspectorReportById(reportId);
+  if (!report) return false;
+
+  if (report.file_url) {
+    await deleteInspectorReportStorageFile(report.file_url);
+  }
+
+  const { error } = await client
+    .from(INSPECTOR_REPORTS_TABLE)
+    .delete()
+    .eq("id", reportId);
+
+  if (error) {
+    console.warn("[inspector-report] delete failed:", error.message);
+    return false;
+  }
+
+  return true;
 }
 
 export function formatInspectorReportDate(isoDate: string): string {
@@ -242,6 +490,7 @@ export async function createInspectorReport(
     inspector_name: input.inspectorName?.trim() || null,
     document_name: input.documentName?.trim() || null,
     document_url: input.documentUrl?.trim() || null,
+    file_url: input.fileUrl?.trim() || null,
     document_description: input.documentDescription?.trim() || null,
     has_remarks: hasRemarks,
     deadline_at: hasRemarks
