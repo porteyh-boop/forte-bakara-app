@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { isClientAccessPath } from "@/lib/client-access";
 import { isMasterAuthenticated } from "@/lib/pilot-cloud";
 
 export default function MasterReturnButton() {
@@ -10,7 +11,7 @@ export default function MasterReturnButton() {
   const [show, setShow] = useState(false);
 
   useEffect(() => {
-    if (pathname.startsWith("/master")) {
+    if (pathname.startsWith("/master") || isClientAccessPath(pathname)) {
       setShow(false);
       return;
     }

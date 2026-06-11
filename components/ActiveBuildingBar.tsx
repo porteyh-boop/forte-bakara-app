@@ -2,13 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { isClientAccessPath } from "@/lib/client-access";
 import { useBuilding } from "./BuildingProvider";
 
 export default function ActiveBuildingBar() {
   const pathname = usePathname();
   const { ctx, ready } = useBuilding();
 
-  if (!ready || pathname === "/buildings") return null;
+  if (!ready || pathname === "/buildings" || isClientAccessPath(pathname)) {
+    return null;
+  }
 
   return (
     <Link

@@ -1,0 +1,187 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { faultTypes } from "@/lib/data";
+import {
+  buildFaultFromSubmission,
+  getSubmittedReports,
+  isReportFormValid,
+  saveSubmittedReport,
+} from "@/lib/report-storage";
+import type { Elevator, FaultType } from "@/lib/types";
+import ReportImagePicker from "@/components/ReportImagePicker";
+import {
+  REPORT_MAINTENANCE_RESPONSIBILITY,
+  REPORT_SAVED_HEADLINE,
+  REPORT_SAVED_INFO,
+} from "@/lib/pilot-copy";
+import { savePilotFaultFromLocalFault } from "@/lib/pilot-cloud";
+import type { ReportImageAttachment } from "@/lib/report-image";
+
+interface ClientAccessReportFormProps {
+  buildingId: string;
+  buildingName: string;
+  elevators: Elevator[];
+  lockedElevatorId?: string | null;
+  onSubmitted?: () => void;
+}
+
+export default function ClientAccessReportForm({
+  buildingId,
+  buildingName,
+  elevators,
+  lockedElevatorId,
+  onSubmitted,
+}: ClientAccessReportFormProps) {
+  const [elevatorId, setElevatorId] = useState(
+    lockedElevatorId ?? elevators[0]?.id ?? ""
+  );
+  const [faultType, setFaultType] = useState("");
+  const [isDisabled, setIsDisabled] = useState(false);
+  const [description, setDescription] = useState("");
+  const [imageAttachment, setImageAttachment] =
+    useState<ReportImageAttachment | null>(null);
+  const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [ticketNumber, setTicketNumber] = useState("");
+
+  const selectedElevator = useMemo(
+    () => elevators.find((elevator) => elevator.id === elevatorId),
+    [elevators, elevatorId]
+  );
+  const isValid = isReportFormValid(elevatorId, faultType, description);
+
+  function resetForm() {
+    setSubmitted(false);
+    setTicketNumber("");
+    setElevatorId(lockedElevatorId ?? elevators[0]?.id ?? "");
+    setFaultType("");
+    setIsDisabled(false);
+    setDescription("");
+    setImageAttachment(null);
+    setSubmitting(false);
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!isValid || !selectedElevator || submitting) return;
+
+    setSubmitting(true);
+
+    const existingCount = getSubmittedReports(buildingId).length;
+    const fault = buildFaultFromSubmission(
+      {
+        elevatorId,
+        elevatorName: selectedElevator.name,
+        faultType: faultType as FaultType,
+        description,
+        isDisabled,
+        image: imageAttachment,
+      },
+      existingCount
+    );
+
+    saveSubmittedReport(fault, buildingId);
+    savePilotFaultFromLocalFault(fault, buildingId, buildingName);
+
+    setTimeout(() => {
+      setTicketNumber(fault.ticketNumber ?? "");
+      setSubmitted(true);
+      setSubmitting(false);
+      onSubmitted?.();
+    }, 300);
+  }
+
+  if (submitted) {
+    return (
+      <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-3 text-center">
+        <h3 className="text-lg font-bold text-navy">{REPORT_SAVED_HEADLINE}</h3>
+        <p className="text-sm text-gray-text">{REPORT_SAVED_INFO}</p>
+        {ticketNumber && (
+          <p className="text-sm font-semibold text-navy">
+            מספר פנייה: {ticketNumber}
+          </p>
+        )}
+        <button type="button" onClick={resetForm} className="btn-primary w-full">
+          דיווח נוסף
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="bg-white rounded-2xl border border-gray-200 p-4 space-y-4"
+    >
+      <div>
+        <label className="text-xs text-gray-text">מעלית</label>
+        <select
+          value={elevatorId}
+          onChange={(e) => setElevatorId(e.target.value)}
+          className="form-input mt-1"
+          disabled={Boolean(lockedElevatorId) || elevators.length <= 1}
+          required
+        >
+          {elevators.map((elevator) => (
+            <option key={elevator.id} value={elevator.id}>
+              {elevator.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label className="text-xs text-gray-text">סוג תקלה</label>
+        <select
+          value={faultType}
+          onChange={(e) => setFaultType(e.target.value)}
+          className="form-input mt-1"
+          required
+        >
+          <option value="">בחרו סוג תקלה</option>
+          {faultTypes.map((type) => (
+            <option key={type} value={type}>
+              {type}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label className="text-xs text-gray-text">תיאור התקלה</label>
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          className="form-input mt-1 min-h-[6rem]"
+          placeholder="תארו את התקלה בקצרה"
+          required
+        />
+      </div>
+
+      <label className="flex items-center gap-2 text-sm text-navy">
+        <input
+          type="checkbox"
+          checked={isDisabled}
+          onChange={(e) => setIsDisabled(e.target.checked)}
+        />
+        המעלית מושבתת / לא ניתן להשתמש בה
+      </label>
+
+      <ReportImagePicker
+        attachment={imageAttachment}
+        onChange={setImageAttachment}
+      />
+
+      <p className="text-xs text-gray-text">{REPORT_MAINTENANCE_RESPONSIBILITY}</p>
+
+      <button
+        type="submit"
+        disabled={!isValid || submitting}
+        className="btn-primary w-full disabled:opacity-50"
+      >
+        {submitting ? "שולח..." : "שליחת דיווח"}
+      </button>
+    </form>
+  );
+}

@@ -119,6 +119,18 @@ import {
   isElevatorFaultFilterActive,
 } from "../lib/master-elevator-fault-filters";
 import {
+  buildClientAccessPath,
+  deactivateClientAccess,
+  generateAccessToken,
+  getClientAccessGateMessage,
+  isAccessTokenIndependentOfScope,
+  isClientAccessPath,
+  resolveClientAccessGate,
+  scopeElevatorsForClientAccess,
+  scopeFaultsForClientAccess,
+  type ClientAccessSession,
+} from "../lib/client-access";
+import {
   buildMasterBuildingList,
   summarizeFaultBuildings,
 } from "../lib/master-buildings-list";
@@ -2487,6 +2499,218 @@ assert(
     elevatorPageSource.includes("לא נמצאו תקלות בהתאם לסינון שנבחר") &&
     elevatorPageSource.includes("filterElevatorDossierFaults"),
   "תיק מעלית סינון: UI ולוגיקה בצד לקוח"
+);
+
+const clientAccessMigration = path.join(
+  process.cwd(),
+  "supabase/migrations/005_client_access_links.sql"
+);
+assert(
+  fs.existsSync(clientAccessMigration),
+  "גישת לקוח: migration 005 קיים"
+);
+
+const clientAccessMigrationSql = fs.readFileSync(clientAccessMigration, "utf8");
+assert(
+  clientAccessMigrationSql.includes("client_users") &&
+    clientAccessMigrationSql.includes("client_access") &&
+    clientAccessMigrationSql.includes("idx_client_users_access_token"),
+  "גישת לקוח: טבלאות ואינדקסים במigration"
+);
+
+const clientAccessRoute = path.join(
+  process.cwd(),
+  "app/client/access/[token]/page.tsx"
+);
+const clientAccessPage = path.join(
+  process.cwd(),
+  "components/ClientAccessPageContent.tsx"
+);
+const masterClientAccessUi = path.join(
+  process.cwd(),
+  "components/MasterClientAccessSection.tsx"
+);
+
+assert(fs.existsSync(clientAccessRoute), "גישת לקוח: route קיים");
+assert(fs.existsSync(clientAccessPage), "גישת לקוח: עמוד לקוח קיים");
+assert(
+  fs.existsSync(masterClientAccessUi),
+  "גישת לקוח: UI Master קיים"
+);
+
+const generatedTokens = Array.from({ length: 100 }, () => generateAccessToken());
+assert(
+  new Set(generatedTokens).size === generatedTokens.length,
+  "גישת לקוח: token ייחודי"
+);
+
+const sampleToken = generateAccessToken();
+assert(
+  isAccessTokenIndependentOfScope(sampleToken, "md25", "md25-right"),
+  "גישת לקוח: token לא מבוסס buildingId/elevatorId"
+);
+assert(
+  !isAccessTokenIndependentOfScope("md25-right", "md25", "md25-right"),
+  "גישת לקוח: token צפוי נדחה"
+);
+
+const clientAccessNow = new Date("2026-06-05T12:00:00.000Z");
+const activeSession: ClientAccessSession = {
+  user: {
+    id: "user-1",
+    name: "לקוח בדיקה",
+    phone: null,
+    email: null,
+    access_token: sampleToken,
+    is_active: true,
+    expires_at: "2026-12-31T23:59:59.000Z",
+    created_at: "2026-06-01T10:00:00.000Z",
+  },
+  access: {
+    id: "access-1",
+    client_user_id: "user-1",
+    building_id: "md25",
+    elevator_id: null,
+    access_level: "building",
+    created_at: "2026-06-01T10:00:00.000Z",
+  },
+};
+
+assert(
+  resolveClientAccessGate(activeSession, clientAccessNow) === "ok",
+  "גישת לקוח: קישור פעיל מאפשר גישה"
+);
+assert(
+  resolveClientAccessGate(
+    {
+      ...activeSession,
+      user: { ...activeSession.user, is_active: false },
+    },
+    clientAccessNow
+  ) === "deactivated",
+  "גישת לקוח: קישור מבוטל נחסם"
+);
+assert(
+  resolveClientAccessGate(
+    {
+      ...activeSession,
+      user: {
+        ...activeSession.user,
+        expires_at: "2026-01-01T00:00:00.000Z",
+      },
+    },
+    clientAccessNow
+  ) === "expired",
+  "גישת לקוח: קישור שפג תוקף נחסם"
+);
+assert(
+  getClientAccessGateMessage("invalid") === "קישור לא תקין" &&
+    getClientAccessGateMessage("deactivated") === "הגישה לקישור זה בוטלה" &&
+    getClientAccessGateMessage("expired") === "תוקף הקישור פג",
+  "גישת לקוח: הודעות שגיאה"
+);
+
+const scopedElevators = [
+  { id: "e1", name: "ימין", status: "פעילה" as const, stations: 19 },
+  { id: "e2", name: "שמאל", status: "פעילה" as const, stations: 19 },
+];
+assert(
+  scopeElevatorsForClientAccess(scopedElevators, {
+    access_level: "building",
+    elevator_id: null,
+  }).length === 2,
+  "גישת לקוח: הרשאת building — כל המעליות"
+);
+assert(
+  scopeElevatorsForClientAccess(scopedElevators, {
+    access_level: "elevator",
+    elevator_id: "e1",
+  }).length === 1 &&
+    scopeElevatorsForClientAccess(scopedElevators, {
+      access_level: "elevator",
+      elevator_id: "e1",
+    })[0]?.id === "e1",
+  "גישת לקוח: הרשאת elevator — מעלית אחת"
+);
+
+const scopedFaults = [
+  makePilotFault({
+    building_id: "md25",
+    elevator_id: "e1",
+    fault_type: "דלת",
+  }),
+  makePilotFault({
+    building_id: "md25",
+    elevator_id: "e2",
+    fault_type: "רעש",
+  }),
+];
+assert(
+  scopeFaultsForClientAccess(scopedFaults, {
+    access_level: "building",
+    elevator_id: null,
+  }).length === 2,
+  "גישת לקוח: building — כל תקלות הבניין"
+);
+assert(
+  scopeFaultsForClientAccess(scopedFaults, {
+    access_level: "elevator",
+    elevator_id: "e2",
+  }).length === 1 &&
+    scopeFaultsForClientAccess(scopedFaults, {
+      access_level: "elevator",
+      elevator_id: "e2",
+    })[0]?.elevator_id === "e2",
+  "גישת לקוח: elevator — תקלות מעלית אחת"
+);
+
+const clientAccessSource = fs.readFileSync(clientAccessPage, "utf8");
+const clientAccessReportSource = fs.readFileSync(
+  path.join(process.cwd(), "components/ClientAccessReportForm.tsx"),
+  "utf8"
+);
+assert(
+  !clientAccessSource.includes("professional-assessment") &&
+    !clientAccessSource.includes("professional-rules") &&
+    !clientAccessReportSource.includes("professional-assessment") &&
+    !clientAccessReportSource.includes("MasterProfessionalAssessmentPanel"),
+  "גישת לקוח: אין import של professional-assessment"
+);
+assert(
+  !clientAccessSource.includes('href="/master"') &&
+    !clientAccessSource.includes("MasterPageContent") &&
+    isClientAccessPath(buildClientAccessPath(sampleToken)),
+  "גישת לקוח: אין חשיפה ל-Master"
+);
+
+const clientAccessLib = fs.readFileSync(
+  path.join(process.cwd(), "lib/client-access.ts"),
+  "utf8"
+);
+assert(
+  clientAccessLib.includes("deactivateClientAccess") &&
+    clientAccessLib.includes("is_active: false") &&
+    !clientAccessLib.includes(".delete().eq(\"id\", userId)") &&
+    deactivateClientAccess.name === "deactivateClientAccess",
+  "גישת לקוח: ביטול גישה לא מוחק משתמש"
+);
+
+const masterPageSource = fs.readFileSync(
+  path.join(process.cwd(), "components/MasterPageContent.tsx"),
+  "utf8"
+);
+assert(
+  masterPageSource.includes("MasterClientAccessSection") &&
+    masterPageSource.includes("ניהול גישות לקוחות") === false &&
+    fs.readFileSync(masterClientAccessUi, "utf8").includes("ניהול גישות לקוחות"),
+  "גישת לקוח: Master UI — ניהול גישות לקוחות"
+);
+
+assert(
+  fs.readFileSync(path.join(process.cwd(), "components/BottomNav.tsx"), "utf8").includes(
+    "isClientAccessPath"
+  ),
+  "גישת לקוח: תפריט תחתון מוסתר בנתיב access"
 );
 
 const masterAssessmentUi = fs.readFileSync(

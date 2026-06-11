@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { isClientAccessPath } from "@/lib/client-access";
 import { isExpert } from "@/lib/roles";
 
 const NAV_ICON_CLASS = "w-[23px] h-[23px]";
@@ -82,6 +83,7 @@ const expertNavItem = {
 
 export default function BottomNav() {
   const pathname = usePathname();
+  if (isClientAccessPath(pathname)) return null;
   const showExpert = isExpert();
   const navItems = showExpert
     ? [...baseNavItems, expertNavItem]

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import MasterAnalyticsSection from "@/components/MasterAnalyticsSection";
 import MasterBuildingsSection from "@/components/MasterBuildingsSection";
+import MasterClientAccessSection from "@/components/MasterClientAccessSection";
 import PageHeader from "@/components/PageHeader";
 import {
   closePilotFault,
@@ -26,7 +27,7 @@ import {
   getMasterFeedbackEmptyMessage,
 } from "@/lib/master-feedback-view";
 import { getAllBuildingIds, getBuildingDataset } from "@/lib/buildings";
-type Tab = "faults" | "feedback" | "buildings";
+type Tab = "faults" | "feedback" | "buildings" | "clientAccess";
 
 function formatCloudDate(iso: string): string {
   return new Intl.DateTimeFormat("he-IL", {
@@ -405,6 +406,17 @@ export default function MasterPageContent() {
           >
             ניהול בניינים
           </button>
+          <button
+            type="button"
+            onClick={() => setTab("clientAccess")}
+            className={`flex-1 min-w-[7rem] rounded-xl py-2.5 text-sm font-semibold transition-colors ${
+              tab === "clientAccess"
+                ? "bg-navy text-white"
+                : "bg-white border border-gray-200 text-navy"
+            }`}
+          >
+            גישות לקוח
+          </button>
         </div>
 
         {tab === "faults" && (
@@ -571,6 +583,8 @@ export default function MasterPageContent() {
             onDataChanged={refresh}
           />
         )}
+
+        {tab === "clientAccess" && <MasterClientAccessSection />}
       </main>
     </div>
   );
