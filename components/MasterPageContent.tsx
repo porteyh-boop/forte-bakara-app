@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import MasterAnalyticsSection from "@/components/MasterAnalyticsSection";
 import MasterBuildingsSection from "@/components/MasterBuildingsSection";
 import MasterClientAccessSection from "@/components/MasterClientAccessSection";
+import MasterDocumentCenterSection from "@/components/MasterDocumentCenterSection";
 import MasterInspectorReportsSection from "@/components/MasterInspectorReportsSection";
 import PageHeader from "@/components/PageHeader";
 import {
@@ -28,7 +29,7 @@ import {
   getMasterFeedbackEmptyMessage,
 } from "@/lib/master-feedback-view";
 import { getAllBuildingIds, getBuildingDataset } from "@/lib/buildings";
-type Tab = "faults" | "feedback" | "buildings" | "clientAccess" | "inspectorReports";
+type Tab = "faults" | "feedback" | "buildings" | "clientAccess" | "inspectorReports" | "documentCenter";
 
 function formatCloudDate(iso: string): string {
   return new Intl.DateTimeFormat("he-IL", {
@@ -429,6 +430,17 @@ export default function MasterPageContent() {
           >
             תסקירי בודק
           </button>
+          <button
+            type="button"
+            onClick={() => setTab("documentCenter")}
+            className={`flex-1 min-w-[7rem] rounded-xl py-2.5 text-sm font-semibold transition-colors ${
+              tab === "documentCenter"
+                ? "bg-navy text-white"
+                : "bg-white border border-gray-200 text-navy"
+            }`}
+          >
+            מאגר מסמכים
+          </button>
         </div>
 
         {tab === "faults" && (
@@ -599,6 +611,8 @@ export default function MasterPageContent() {
         {tab === "clientAccess" && <MasterClientAccessSection />}
 
         {tab === "inspectorReports" && <MasterInspectorReportsSection />}
+
+        {tab === "documentCenter" && <MasterDocumentCenterSection />}
       </main>
     </div>
   );

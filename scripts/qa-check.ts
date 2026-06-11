@@ -131,6 +131,24 @@ import {
   type ClientAccessSession,
 } from "../lib/client-access";
 import {
+  buildDocumentPublicUrl,
+  buildDocumentStoragePath,
+  collectDocumentTags,
+  DOCUMENT_CENTER_BUCKET,
+  DOCUMENT_TYPES,
+  extractDocumentStoragePath,
+  filterDocuments,
+  formatDocumentTags,
+  getDocumentTypeLabel,
+  isDocumentReadyForAi,
+  isDocumentReadyForOcr,
+  normalizeDocumentTags,
+  parseDocumentTagsInput,
+  validateCreateDocumentInput,
+  validateDocumentCenterFile,
+  type DocumentRecord,
+} from "../lib/document-center";
+import {
   buildInspectorReportPublicUrl,
   buildInspectorReportStoragePath,
   closeInspectorReportLocally,
@@ -3010,6 +3028,169 @@ assert(
     inspectorSectionSource.includes("מחק תסקיר") &&
     !inspectorSectionSource.includes("Document Center"),
   "תסקיר בודק: UI העלאת קובץ ופתיחה/מחיקה"
+);
+
+const documentCenterMigration = path.join(
+  process.cwd(),
+  "supabase/migrations/008_document_center.sql"
+);
+assert(
+  fs.existsSync(documentCenterMigration),
+  "Document Center: migration 008 קיים"
+);
+const documentCenterMigrationSql = fs.readFileSync(documentCenterMigration, "utf8");
+assert(
+  documentCenterMigrationSql.includes("create table if not exists public.documents") &&
+    documentCenterMigrationSql.includes("document-center") &&
+    documentCenterMigrationSql.includes("ocr_status") &&
+    documentCenterMigrationSql.includes("ai_summary") &&
+    documentCenterMigrationSql.includes("tags text[]"),
+  "Document Center: טבלה, bucket, תגיות והכנה ל-OCR/AI"
+);
+
+const documentCenterSectionPath = path.join(
+  process.cwd(),
+  "components/MasterDocumentCenterSection.tsx"
+);
+assert(
+  fs.existsSync(documentCenterSectionPath),
+  "Document Center: UI Master קיים"
+);
+
+const documentCenterLib = fs.readFileSync(
+  path.join(process.cwd(), "lib/document-center.ts"),
+  "utf8"
+);
+assert(
+  documentCenterLib.includes("createDocument") &&
+    documentCenterLib.includes("getAllDocuments") &&
+    documentCenterLib.includes("deleteDocument") &&
+    documentCenterLib.includes("uploadDocumentCenterFile") &&
+    documentCenterLib.includes("filterDocuments") &&
+    documentCenterLib.includes("isDocumentReadyForOcr") &&
+    documentCenterLib.includes("isDocumentReadyForAi") &&
+    !documentCenterLib.includes("openai") &&
+    !documentCenterLib.includes("Tesseract") &&
+    !documentCenterLib.includes("sendEmail"),
+  "Document Center: lib CRUD/חיפוש ללא AI/OCR/Email"
+);
+
+const sampleDocument: DocumentRecord = {
+  id: "doc-1",
+  building_id: "md25",
+  elevator_id: "right",
+  document_type: "inspector_report",
+  title: "תסקיר שנתי",
+  description: "תיאור",
+  file_name: "report.pdf",
+  file_url: "https://example.com/report.pdf",
+  storage_path: "md25/report.pdf",
+  mime_type: "application/pdf",
+  file_size_bytes: 1024,
+  tags: ["בודק", "שנתי"],
+  ocr_status: "none",
+  ocr_text: null,
+  ai_summary: null,
+  ai_metadata: null,
+  created_at: "2026-01-01T10:00:00.000Z",
+  updated_at: "2026-01-01T10:00:00.000Z",
+};
+
+assert(
+  normalizeDocumentTags([" בודק ", "שנתי", "בודק"]).join(",") === "בודק,שנתי" &&
+    parseDocumentTagsInput("בודק, שנתי; דחוף").includes("דחוף"),
+  "Document Center: נרמול ופרסור תגיות"
+);
+assert(
+  filterDocuments([sampleDocument], { query: "שנתי" }).length === 1 &&
+    filterDocuments([sampleDocument], { buildingId: "md25" }).length === 1 &&
+    filterDocuments([sampleDocument], { documentType: "contract" }).length === 0 &&
+    filterDocuments([sampleDocument], { tags: ["בודק"] }).length === 1,
+  "Document Center: חיפוש וסינון"
+);
+assert(
+  collectDocumentTags([sampleDocument, { ...sampleDocument, id: "doc-2", tags: ["חוזה"] }])
+    .includes("בודק") &&
+    collectDocumentTags([sampleDocument, { ...sampleDocument, id: "doc-2", tags: ["חוזה"] }])
+      .includes("חוזה"),
+  "Document Center: איסוף תגיות"
+);
+assert(
+  getDocumentTypeLabel("contract") === "חוזה" &&
+    DOCUMENT_TYPES.length >= 5,
+  "Document Center: סוגי מסמך"
+);
+assert(
+  validateDocumentCenterFile({
+    name: "report.pdf",
+    type: "application/pdf",
+    size: 1024,
+  }) === null &&
+    validateDocumentCenterFile({
+      name: "bad.exe",
+      type: "application/octet-stream",
+      size: 1024,
+    }) !== null,
+  "Document Center: ולידציית קובץ"
+);
+assert(
+  validateCreateDocumentInput({
+    buildingId: "md25",
+    documentType: "other",
+    title: "מסמך",
+    fileName: "a.pdf",
+    fileUrl: "https://example.com/a.pdf",
+    storagePath: "md25/a.pdf",
+  }) === null,
+  "Document Center: ולידציית יצירה"
+);
+
+const docStoragePath = buildDocumentStoragePath("md25", "report.pdf");
+const encodedDocPath = docStoragePath
+  .split("/")
+  .map((segment) => encodeURIComponent(segment))
+  .join("/");
+const manualDocUrl = `https://example.supabase.co/storage/v1/object/public/${DOCUMENT_CENTER_BUCKET}/${encodedDocPath}`;
+assert(
+  docStoragePath.startsWith("md25/") &&
+    extractDocumentStoragePath(manualDocUrl) === docStoragePath,
+  "Document Center: Storage path ו-URL"
+);
+assert(
+  isDocumentReadyForOcr(sampleDocument) === true &&
+    isDocumentReadyForAi({ ...sampleDocument, ocr_status: "ready" }) === true &&
+    isDocumentReadyForAi(sampleDocument) === false,
+  "Document Center: הכנה ל-OCR/AI — ללא הרצה"
+);
+
+const documentCenterSectionSource = fs.readFileSync(documentCenterSectionPath, "utf8");
+const masterPageForDocuments = fs.readFileSync(
+  path.join(process.cwd(), "components/MasterPageContent.tsx"),
+  "utf8"
+);
+assert(
+  masterPageForDocuments.includes("MasterDocumentCenterSection") &&
+    masterPageForDocuments.includes("מאגר מסמכים") &&
+    documentCenterSectionSource.includes("בחר קובץ") &&
+    documentCenterSectionSource.includes("חיפוש") &&
+    documentCenterSectionSource.includes("פתח מסמך"),
+  "Document Center: Master UI — העלאה, חיפוש ופתיחה"
+);
+
+let documentCenterLeakToClient = 0;
+for (const file of clientPagesForInspector) {
+  if (!fs.existsSync(file)) continue;
+  const content = fs.readFileSync(file, "utf8");
+  if (
+    content.includes("MasterDocumentCenterSection") ||
+    content.includes("document-center")
+  ) {
+    documentCenterLeakToClient += 1;
+  }
+}
+assert(
+  documentCenterLeakToClient === 0,
+  "Document Center: אין חשיפה למסכי לקוח"
 );
 
 const masterAssessmentUi = fs.readFileSync(
