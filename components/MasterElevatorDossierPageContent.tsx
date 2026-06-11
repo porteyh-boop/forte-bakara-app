@@ -15,6 +15,16 @@ import {
   buildElevatorDossier,
   formatDossierDate,
 } from "@/lib/master-building-dossier";
+import {
+  clearElevatorFaultFilters,
+  DEFAULT_ELEVATOR_FAULT_FILTERS,
+  ELEVATOR_FAULT_PERIOD_OPTIONS,
+  ELEVATOR_FAULT_STATUS_OPTIONS,
+  filterElevatorDossierFaults,
+  getUniqueFaultTypesFromFaults,
+  isElevatorFaultFilterActive,
+  type ElevatorFaultFilters,
+} from "@/lib/master-elevator-fault-filters";
 import { buildMasterElevatorDossierPath } from "@/lib/master-elevator-routes";
 import {
   getAllPilotFaults,
@@ -131,6 +141,9 @@ export default function MasterElevatorDossierPageContent({
     null
   );
   const [loading, setLoading] = useState(true);
+  const [faultFilters, setFaultFilters] = useState<ElevatorFaultFilters>(
+    DEFAULT_ELEVATOR_FAULT_FILTERS
+  );
 
   const buildingName = useMemo(() => {
     const fromDemo = getStaticDemoBuildingMeta(buildingId).name;
@@ -217,6 +230,18 @@ export default function MasterElevatorDossierPageContent({
     [buildingId, elevatorId, elevatorName, faults]
   );
 
+  const faultTypeOptions = useMemo(
+    () => getUniqueFaultTypesFromFaults(dossier.faults),
+    [dossier.faults]
+  );
+
+  const filteredFaults = useMemo(
+    () => filterElevatorDossierFaults(dossier.faults, faultFilters),
+    [dossier.faults, faultFilters]
+  );
+
+  const filterActive = isElevatorFaultFilterActive(faultFilters);
+
   if (!authed) {
     return <MasterCodeGate onSuccess={() => setAuthed(true)} />;
   }
@@ -271,45 +296,156 @@ export default function MasterElevatorDossierPageContent({
               {dossier.faults.length === 0 ? (
                 <p className="text-sm text-gray-text">אין תקלות רשומות.</p>
               ) : (
-                <div className="overflow-x-auto -mx-1">
-                  <table className="w-full min-w-[32rem] text-sm">
-                    <thead>
-                      <tr className="text-xs text-gray-text border-b border-gray-200">
-                        <th className="text-right py-2 px-2 font-semibold">
-                          תאריך
-                        </th>
-                        <th className="text-right py-2 px-2 font-semibold">
-                          סוג תקלה
-                        </th>
-                        <th className="text-right py-2 px-2 font-semibold">
-                          תיאור
-                        </th>
-                        <th className="text-right py-2 px-2 font-semibold">
-                          סטטוס
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {dossier.faults.map((f) => (
-                        <tr
-                          key={f.id}
-                          className="border-b border-gray-100 align-top"
+                <>
+                  <div className="bg-gray-light rounded-xl border border-gray-200 p-3 space-y-3">
+                    <p className="text-xs font-semibold text-gold">
+                      סינון היסטוריית תקלות
+                    </p>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <div>
+                        <label className="text-xs text-gray-text">סטטוס תקלה</label>
+                        <select
+                          value={faultFilters.status}
+                          onChange={(e) =>
+                            setFaultFilters((prev) => ({
+                              ...prev,
+                              status: e.target
+                                .value as ElevatorFaultFilters["status"],
+                            }))
+                          }
+                          className="form-input mt-1"
                         >
-                          <td className="py-2 px-2 whitespace-nowrap text-xs">
-                            {formatDossierDate(f.created_at)}
-                          </td>
-                          <td className="py-2 px-2 text-xs">{f.fault_type}</td>
-                          <td className="py-2 px-2 text-xs text-navy/80 max-w-[14rem]">
-                            {f.description}
-                          </td>
-                          <td className="py-2 px-2 text-xs font-semibold">
-                            {f.status}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                          {ELEVATOR_FAULT_STATUS_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-text">סוג תקלה</label>
+                        <select
+                          value={faultFilters.faultType}
+                          onChange={(e) =>
+                            setFaultFilters((prev) => ({
+                              ...prev,
+                              faultType: e.target.value,
+                            }))
+                          }
+                          className="form-input mt-1"
+                        >
+                          <option value="all">הכל</option>
+                          {faultTypeOptions.map((type) => (
+                            <option key={type} value={type}>
+                              {type}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-text">תקופה</label>
+                        <select
+                          value={faultFilters.period}
+                          onChange={(e) =>
+                            setFaultFilters((prev) => ({
+                              ...prev,
+                              period: e.target
+                                .value as ElevatorFaultFilters["period"],
+                            }))
+                          }
+                          className="form-input mt-1"
+                        >
+                          {ELEVATOR_FAULT_PERIOD_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-text">
+                          חיפוש בתיאור
+                        </label>
+                        <input
+                          type="search"
+                          value={faultFilters.searchQuery}
+                          onChange={(e) =>
+                            setFaultFilters((prev) => ({
+                              ...prev,
+                              searchQuery: e.target.value,
+                            }))
+                          }
+                          placeholder="חיפוש לפי תיאור התקלה"
+                          className="form-input mt-1"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs text-gray-text">
+                        מוצגות {filteredFaults.length} מתוך{" "}
+                        {dossier.faults.length} תקלות
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFaultFilters(clearElevatorFaultFilters())
+                        }
+                        disabled={!filterActive}
+                        className="text-xs font-semibold text-navy border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        נקה סינון
+                      </button>
+                    </div>
+                  </div>
+
+                  {filteredFaults.length === 0 ? (
+                    <p className="text-sm text-gray-text">
+                      לא נמצאו תקלות בהתאם לסינון שנבחר
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto -mx-1">
+                      <table className="w-full min-w-[32rem] text-sm">
+                        <thead>
+                          <tr className="text-xs text-gray-text border-b border-gray-200">
+                            <th className="text-right py-2 px-2 font-semibold">
+                              תאריך
+                            </th>
+                            <th className="text-right py-2 px-2 font-semibold">
+                              סוג תקלה
+                            </th>
+                            <th className="text-right py-2 px-2 font-semibold">
+                              תיאור
+                            </th>
+                            <th className="text-right py-2 px-2 font-semibold">
+                              סטטוס
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredFaults.map((f) => (
+                            <tr
+                              key={f.id}
+                              className="border-b border-gray-100 align-top"
+                            >
+                              <td className="py-2 px-2 whitespace-nowrap text-xs">
+                                {formatDossierDate(f.created_at)}
+                              </td>
+                              <td className="py-2 px-2 text-xs">
+                                {f.fault_type}
+                              </td>
+                              <td className="py-2 px-2 text-xs text-navy/80 max-w-[14rem]">
+                                {f.description}
+                              </td>
+                              <td className="py-2 px-2 text-xs font-semibold">
+                                {f.status}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </>
               )}
             </div>
 

@@ -112,6 +112,13 @@ import {
   MASTER_ELEVATOR_DOSSIER_ROUTE_PREFIX,
 } from "../lib/master-elevator-routes";
 import {
+  clearElevatorFaultFilters,
+  DEFAULT_ELEVATOR_FAULT_FILTERS,
+  filterElevatorDossierFaults,
+  getUniqueFaultTypesFromFaults,
+  isElevatorFaultFilterActive,
+} from "../lib/master-elevator-fault-filters";
+import {
   buildMasterBuildingList,
   summarizeFaultBuildings,
 } from "../lib/master-buildings-list";
@@ -2369,6 +2376,117 @@ assert(
     elevatorPageSource.includes("סטטוס מעלית") &&
     elevatorPageSource.includes("מספר תחנות"),
   "תיק מעלית: עמוד ייעודי עם פרטי מעלית והיסטוריה"
+);
+
+const elevatorFilterFaults: PilotCloudFault[] = [
+  makePilotFault({
+    id: "ef-open",
+    building_id: "md25",
+    elevator_id: "e1",
+    fault_type: "דלת",
+    status: "פתוחה",
+    description: "דלת לא נסגרת בקומה 5",
+    created_at: "2026-05-20T10:00:00.000Z",
+  }),
+  makePilotFault({
+    id: "ef-progress",
+    building_id: "md25",
+    elevator_id: "e1",
+    fault_type: "רעש",
+    status: "בטיפול",
+    description: "רעש חריג בהינע",
+    created_at: "2026-05-01T10:00:00.000Z",
+  }),
+  makePilotFault({
+    id: "ef-fixed",
+    building_id: "md25",
+    elevator_id: "e1",
+    fault_type: "פיקוד",
+    status: "טופלה",
+    description: "תקלת פיקוד בלוח",
+    created_at: "2026-04-01T10:00:00.000Z",
+  }),
+  makePilotFault({
+    id: "ef-closed",
+    building_id: "md25",
+    elevator_id: "e1",
+    fault_type: "דלת",
+    status: "סגורה",
+    description: "דלת נתקעה בפתיחה",
+    created_at: "2025-01-01T10:00:00.000Z",
+  }),
+];
+
+const elevatorFilterNow = new Date("2026-06-05T12:00:00.000Z");
+
+assert(
+  filterElevatorDossierFaults(elevatorFilterFaults, {
+    ...DEFAULT_ELEVATOR_FAULT_FILTERS,
+    status: "פתוחה",
+  }, elevatorFilterNow).length === 1,
+  "תיק מעלית סינון: סטטוס פתוחה"
+);
+assert(
+  filterElevatorDossierFaults(elevatorFilterFaults, {
+    ...DEFAULT_ELEVATOR_FAULT_FILTERS,
+    faultType: "דלת",
+  }, elevatorFilterNow).length === 2,
+  "תיק מעלית סינון: סוג תקלה דלת"
+);
+assert(
+  filterElevatorDossierFaults(elevatorFilterFaults, {
+    ...DEFAULT_ELEVATOR_FAULT_FILTERS,
+    period: "30d",
+  }, elevatorFilterNow).length === 1,
+  "תיק מעלית סינון: 30 יום אחרונים"
+);
+assert(
+  filterElevatorDossierFaults(elevatorFilterFaults, {
+    ...DEFAULT_ELEVATOR_FAULT_FILTERS,
+    searchQuery: "רעש",
+  }, elevatorFilterNow).length === 1,
+  "תיק מעלית סינון: חיפוש חופשי בתיאור"
+);
+assert(
+  filterElevatorDossierFaults(
+    elevatorFilterFaults,
+    {
+      ...DEFAULT_ELEVATOR_FAULT_FILTERS,
+      status: "סגורה",
+      searchQuery: "נתקעה",
+    },
+    elevatorFilterNow
+  ).length === 1,
+  "תיק מעלית סינון: שילוב סטטוס וחיפוש"
+);
+assert(
+  filterElevatorDossierFaults(
+    elevatorFilterFaults,
+    clearElevatorFaultFilters(),
+    elevatorFilterNow
+  ).length === elevatorFilterFaults.length,
+  "תיק מעלית סינון: ניקוי מחזיר את כל התקלות"
+);
+assert(
+  getUniqueFaultTypesFromFaults(elevatorFilterFaults).join(",") ===
+    "דלת,פיקוד,רעש",
+  "תיק מעלית סינון: סוגי תקלה ייחודיים מהרשימה"
+);
+assert(
+  !isElevatorFaultFilterActive(DEFAULT_ELEVATOR_FAULT_FILTERS) &&
+    isElevatorFaultFilterActive({
+      ...DEFAULT_ELEVATOR_FAULT_FILTERS,
+      searchQuery: "דלת",
+    }),
+  "תיק מעלית סינון: זיהוי סינון פעיל"
+);
+assert(
+  elevatorPageSource.includes("סינון היסטוריית תקלות") &&
+    elevatorPageSource.includes("נקה סינון") &&
+    elevatorPageSource.includes("מוצגות") &&
+    elevatorPageSource.includes("לא נמצאו תקלות בהתאם לסינון שנבחר") &&
+    elevatorPageSource.includes("filterElevatorDossierFaults"),
+  "תיק מעלית סינון: UI ולוגיקה בצד לקוח"
 );
 
 const masterAssessmentUi = fs.readFileSync(
