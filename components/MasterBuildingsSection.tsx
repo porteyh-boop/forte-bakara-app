@@ -49,6 +49,7 @@ import {
   formatDossierDate,
   getHealthLevelClasses,
 } from "@/lib/master-building-dossier";
+import MasterProfessionalAssessmentPanel from "@/components/MasterProfessionalAssessmentPanel";
 
 interface MasterBuildingsSectionProps {
   cloudReady: boolean;
@@ -902,6 +903,14 @@ export default function MasterBuildingsSection({
           </div>
 
           <BuildingDossierPanel dossier={selectedDossier} />
+
+          <MasterProfessionalAssessmentPanel
+            buildingId={selectedBuildingId}
+            buildingName={selectedDossier.buildingName}
+            faults={faults}
+            elevators={selectedElevators}
+            liveStartedAt={selectedEntry?.liveStartedAt ?? null}
+          />
 
           <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">

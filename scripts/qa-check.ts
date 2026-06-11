@@ -144,6 +144,10 @@ import {
   buildElevatorDossier,
   filterFaultsForBuilding,
 } from "../lib/master-building-dossier";
+import {
+  generateProfessionalAssessment,
+  mapPilotFaultForAssessment,
+} from "../lib/professional-assessment";
 import { DEFAULT_ELEVATOR_COMPANIES } from "../lib/elevator-companies";
 import type { FeedbackSubmissionInput } from "../lib/types";
 
@@ -2306,6 +2310,332 @@ assert(
     masterBuildingsUiDossier.includes("תיק בניין") &&
     masterBuildingsUiDossier.includes("buildBuildingDossier"),
   "תיק בניין: UI במסך ניהול בניינים"
+);
+
+const masterAssessmentUi = fs.readFileSync(
+  path.join(process.cwd(), "components/MasterBuildingsSection.tsx"),
+  "utf8"
+);
+const masterAssessmentPanel = fs.readFileSync(
+  path.join(process.cwd(), "components/MasterProfessionalAssessmentPanel.tsx"),
+  "utf8"
+);
+assert(
+  masterAssessmentUi.includes("MasterProfessionalAssessmentPanel") &&
+    masterAssessmentUi.includes("הערכת מצב מקצועית") === false &&
+    masterAssessmentPanel.includes("הערכת מצב מקצועית") &&
+    masterAssessmentPanel.includes("מומחה בלבד"),
+  "הערכת מצב מקצועית: UI רק במסך Master"
+);
+
+const clientUiFiles = [
+  "components/HomePageContent.tsx",
+  "components/HistoryList.tsx",
+  "components/BuildingPageContent.tsx",
+  "components/BuildingsListPageContent.tsx",
+].map((f) => path.join(process.cwd(), f)).filter((f) => fs.existsSync(f));
+
+let clientAssessmentLeak = 0;
+for (const file of clientUiFiles) {
+  const content = fs.readFileSync(file, "utf8");
+  if (
+    content.includes("professional-assessment") ||
+    content.includes("ProfessionalAssessment") ||
+    content.includes("generateProfessionalAssessment")
+  ) {
+    clientAssessmentLeak++;
+    failed++;
+    console.error(
+      `✗ הערכת מצב: מידע מקצועי נמצא במסך לקוח — ${path.relative(process.cwd(), file)}`
+    );
+  }
+}
+assert(
+  clientAssessmentLeak === 0,
+  "הערכת מצב: אין חשיפה למסכי לקוח"
+);
+
+const assessmentBuilding = { id: "md25", name: "מבצע נחשון 64" };
+const assessmentElevators = [
+  { id: "e1", name: "מעלית 1", status: "פעילה" as const },
+  { id: "e2", name: "מעלית 2", status: "פעילה" as const },
+];
+
+const noFaultsAssessment = generateProfessionalAssessment({
+  building: assessmentBuilding,
+  elevators: assessmentElevators,
+  faults: [],
+});
+assert(
+  noFaultsAssessment.operationalStatus === "תקין" &&
+    noFaultsAssessment.riskLevel === "נמוכה" &&
+    noFaultsAssessment.metrics.totalFaults === 0 &&
+    noFaultsAssessment.conclusions.some((c) =>
+      c.includes("לא זוהו אירועים חריגים")
+    ) &&
+    noFaultsAssessment.recommendations.includes("המשך מעקב שוטף."),
+  "הערכת מצב: בניין ללא תקלות — תקין / נמוכה"
+);
+
+const singleOpenAssessment = generateProfessionalAssessment({
+  building: assessmentBuilding,
+  elevators: assessmentElevators,
+  faults: [
+    {
+      elevatorId: "e1",
+      faultType: "רעש חריג",
+      description: "רעש",
+      status: "פתוחה",
+      reportedAt: "2026-06-01T10:00:00.000Z",
+    },
+  ],
+});
+assert(
+  singleOpenAssessment.operationalStatus === "תקין עם מעקב" &&
+    singleOpenAssessment.riskLevel === "נמוכה" &&
+    singleOpenAssessment.metrics.openFaults === 1 &&
+    singleOpenAssessment.metrics.recurringFaults === 0 &&
+    singleOpenAssessment.conclusions.some((c) =>
+      c.includes("לא זוהתה אינדיקציה לכשל מערכתי")
+    ),
+  "הערכת מצב: תקלה פתוחה אחת — תקין עם מעקב"
+);
+
+const recurringAssessment = generateProfessionalAssessment({
+  building: assessmentBuilding,
+  elevators: assessmentElevators,
+  faults: [
+    {
+      elevatorId: "e1",
+      faultType: "דלת לא נסגרת",
+      description: "דלת",
+      status: "סגורה",
+      reportedAt: "2026-05-01T10:00:00.000Z",
+    },
+    {
+      elevatorId: "e1",
+      faultType: "דלת לא נסגרת",
+      description: "דלת",
+      status: "סגורה",
+      reportedAt: "2026-05-10T10:00:00.000Z",
+    },
+    {
+      elevatorId: "e1",
+      faultType: "דלת לא נסגרת",
+      description: "דלת",
+      status: "פתוחה",
+      reportedAt: "2026-06-01T10:00:00.000Z",
+    },
+  ],
+});
+assert(
+  recurringAssessment.operationalStatus === "דורש בדיקה" &&
+    recurringAssessment.riskLevel === "בינונית" &&
+    recurringAssessment.metrics.recurringFaults === 1 &&
+    recurringAssessment.conclusions.some((c) =>
+      c.includes("זוהתה חזרתיות בתקלות")
+    ) &&
+    recurringAssessment.recommendations.some((r) => r.includes("דוח תחקור")),
+  "הערכת מצב: תקלות חוזרות — דורש בדיקה / בינונית"
+);
+
+const doorAssessment = generateProfessionalAssessment({
+  building: assessmentBuilding,
+  elevators: assessmentElevators,
+  faults: [
+    {
+      elevatorId: "e1",
+      faultType: "דלת לא נסגרת",
+      description: "דלת 1",
+      status: "סגורה",
+      reportedAt: "2026-05-01T10:00:00.000Z",
+    },
+    {
+      elevatorId: "e2",
+      faultType: "תקלת דלת",
+      description: "דלת 2",
+      status: "סגורה",
+      reportedAt: "2026-05-02T10:00:00.000Z",
+    },
+    {
+      elevatorId: "e1",
+      faultType: "דלת לא נסגרת",
+      description: "דלת 3",
+      status: "פתוחה",
+      reportedAt: "2026-06-01T10:00:00.000Z",
+    },
+  ],
+});
+assert(
+  doorAssessment.metrics.doorFaults === 3 &&
+    doorAssessment.conclusions.some((c) =>
+      c.includes("מערכת הדלתות")
+    ) &&
+    doorAssessment.recommendations.some((r) => r.includes("מפעיל דלת")),
+  "הערכת מצב: תקלות דלתות — מסקנה והמלצות"
+);
+
+const controlAssessment = generateProfessionalAssessment({
+  building: assessmentBuilding,
+  elevators: assessmentElevators,
+  faults: [
+    {
+      elevatorId: "e1",
+      faultType: "תקלת בקר",
+      description: "בקר",
+      status: "סגורה",
+      reportedAt: "2026-05-01T10:00:00.000Z",
+    },
+    {
+      elevatorId: "e1",
+      faultType: "כפתורים לא מגיבים",
+      description: "כפתור",
+      status: "סגורה",
+      reportedAt: "2026-05-02T10:00:00.000Z",
+    },
+    {
+      elevatorId: "e2",
+      faultType: "תקלת פיקוד",
+      description: "פיקוד",
+      status: "פתוחה",
+      reportedAt: "2026-06-01T10:00:00.000Z",
+    },
+  ],
+});
+assert(
+  controlAssessment.metrics.controlFaults === 3 &&
+    controlAssessment.conclusions.some((c) =>
+      c.includes("מערכת הפיקוד")
+    ) &&
+    controlAssessment.recommendations.some((r) => r.includes("בקר")),
+  "הערכת מצב: תקלות פיקוד — מסקנה והמלצות"
+);
+
+const rescueAssessment = generateProfessionalAssessment({
+  building: assessmentBuilding,
+  elevators: assessmentElevators,
+  faults: [
+    {
+      elevatorId: "e1",
+      faultType: "תקועה בין קומות",
+      description: "חילוץ נוסעים",
+      status: "סגורה",
+      reportedAt: "2026-06-01T10:00:00.000Z",
+    },
+  ],
+});
+assert(
+  rescueAssessment.operationalStatus === "חריג" &&
+    rescueAssessment.riskLevel === "גבוהה" &&
+    rescueAssessment.metrics.rescueEvents === 1 &&
+    rescueAssessment.conclusions.some((c) =>
+      c.includes("אירוע חילוץ נוסעים")
+    ),
+  "הערכת מצב: חילוץ נוסעים — חריג / גבוהה"
+);
+
+const shutdownAssessment = generateProfessionalAssessment({
+  building: assessmentBuilding,
+  elevators: assessmentElevators,
+  faults: [
+    {
+      elevatorId: "e1",
+      faultType: "אחר",
+      description: "השבתת מעלית",
+      status: "מושבתת",
+      reportedAt: "2026-05-01T10:00:00.000Z",
+      isDisabled: true,
+    },
+    {
+      elevatorId: "e2",
+      faultType: "אחר",
+      description: "השבתה חוזרת",
+      status: "פתוחה",
+      reportedAt: "2026-06-01T10:00:00.000Z",
+      isDisabled: true,
+    },
+  ],
+});
+assert(
+  shutdownAssessment.operationalStatus === "חריג" &&
+    shutdownAssessment.riskLevel === "גבוהה" &&
+    shutdownAssessment.metrics.shutdownEvents === 2 &&
+    shutdownAssessment.conclusions.some((c) =>
+      c.includes("רמת השירות נפגעה")
+    ),
+  "הערכת מצב: השבתות חוזרות — חריג / גבוהה"
+);
+
+const liveStartedAtAssessment = "2026-06-05T12:00:00.000Z";
+const liveFilterAssessment = generateProfessionalAssessment({
+  building: assessmentBuilding,
+  elevators: assessmentElevators,
+  faults: [
+    {
+      elevatorId: "e1",
+      faultType: "רעש חריג",
+      description: "דemo ישן",
+      status: "פתוחה",
+      reportedAt: "2026-01-01T10:00:00.000Z",
+    },
+    {
+      elevatorId: "e1",
+      faultType: "רעש חריג",
+      description: "אחרי live",
+      status: "פתוחה",
+      reportedAt: "2026-06-06T10:00:00.000Z",
+    },
+  ],
+  liveStartedAt: liveStartedAtAssessment,
+});
+assert(
+  liveFilterAssessment.metrics.totalFaults === 1 &&
+    liveFilterAssessment.metrics.openFaults === 1,
+  "הערכת מצב: סינון live_started_at"
+);
+
+const initializedBuildingAssessment = generateProfessionalAssessment({
+  building: assessmentBuilding,
+  elevators: assessmentElevators,
+  faults: [
+    mapPilotFaultForAssessment(
+      makePilotFault({
+        building_id: "md25",
+        elevator_id: "e1",
+        fault_type: "דלת לא נסגרת",
+        description: "דemo",
+        status: "פתוחה",
+        created_at: "2026-01-01T10:00:00.000Z",
+      })
+    ),
+    mapPilotFaultForAssessment(
+      makePilotFault({
+        building_id: "md25",
+        elevator_id: "e1",
+        fault_type: "דלת לא נסגרת",
+        description: "דemo 2",
+        status: "סגורה",
+        created_at: "2026-02-01T10:00:00.000Z",
+      })
+    ),
+    mapPilotFaultForAssessment(
+      makePilotFault({
+        building_id: "md25",
+        elevator_id: "e1",
+        fault_type: "דלת לא נסגרת",
+        description: "דemo 3",
+        status: "סגורה",
+        created_at: "2026-03-01T10:00:00.000Z",
+      })
+    ),
+  ],
+  liveStartedAt: "2026-06-05T12:00:00.000Z",
+});
+assert(
+  initializedBuildingAssessment.metrics.totalFaults === 0 &&
+    initializedBuildingAssessment.operationalStatus === "תקין" &&
+    initializedBuildingAssessment.metrics.doorFaults === 0,
+  "הערכת מצב: בניין מאותחל — ללא נתוני דemo"
 );
 
 setCatalogSnapshot(null);
