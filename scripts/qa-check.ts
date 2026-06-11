@@ -131,6 +131,18 @@ import {
   type ClientAccessSession,
 } from "../lib/client-access";
 import {
+  closeInspectorReportLocally,
+  computeInspectorDeadlineAt,
+  computeInspectorFollowUpPhase,
+  daysSinceReportDate,
+  generateUrgentLetterTemplate,
+  INSPECTOR_ALERT_DAY,
+  INSPECTOR_REMINDER_DAY,
+  INSPECTOR_URGENT_DAY,
+  validateInspectorReportInput,
+  type InspectorReportRecord,
+} from "../lib/inspector-report-tracking";
+import {
   buildMasterBuildingList,
   summarizeFaultBuildings,
 } from "../lib/master-buildings-list";
@@ -2711,6 +2723,187 @@ assert(
     "isClientAccessPath"
   ),
   "גישת לקוח: תפריט תחתון מוסתר בנתיב access"
+);
+
+const inspectorMigration = path.join(
+  process.cwd(),
+  "supabase/migrations/006_inspector_report_tracking.sql"
+);
+assert(fs.existsSync(inspectorMigration), "תסקיר בודק: migration 006 קיים");
+
+const inspectorMigrationSql = fs.readFileSync(inspectorMigration, "utf8");
+assert(
+  inspectorMigrationSql.includes("inspector_reports") &&
+    inspectorMigrationSql.includes("has_remarks") &&
+    inspectorMigrationSql.includes("deadline_at"),
+  "תסקיר בודק: טבלת inspector_reports במigration"
+);
+
+const inspectorSectionPath = path.join(
+  process.cwd(),
+  "components/MasterInspectorReportsSection.tsx"
+);
+assert(
+  fs.existsSync(inspectorSectionPath),
+  "תסקיר בודק: UI Master קיים"
+);
+
+const baseInspectorReport: InspectorReportRecord = {
+  id: "ir-1",
+  building_id: "md25",
+  elevator_id: null,
+  report_date: "2026-01-01",
+  inspector_name: "בודק",
+  document_name: "תסקיר שנתי",
+  document_url: null,
+  document_description: null,
+  has_remarks: true,
+  deadline_at: computeInspectorDeadlineAt("2026-01-01"),
+  status: "open",
+  closed_at: null,
+  closure_notes: null,
+  created_at: "2026-01-01T10:00:00.000Z",
+};
+
+assert(
+  computeInspectorFollowUpPhase(baseInspectorReport, new Date("2026-01-20")) ===
+    "active",
+  "תסקיר בודק: יום 19 — מעקב פעיל"
+);
+assert(
+  computeInspectorFollowUpPhase(
+    baseInspectorReport,
+    new Date("2026-02-05")
+  ) === "reminder" &&
+    INSPECTOR_REMINDER_DAY === 35,
+  "תסקיר בודק: יום 35 — תזכורת"
+);
+assert(
+  computeInspectorFollowUpPhase(
+    baseInspectorReport,
+    new Date("2026-02-10")
+  ) === "alert" &&
+    INSPECTOR_ALERT_DAY === 40,
+  "תסקיר בודק: יום 40 — התראה"
+);
+assert(
+  computeInspectorFollowUpPhase(
+    baseInspectorReport,
+    new Date("2026-02-15")
+  ) === "urgent" &&
+    INSPECTOR_URGENT_DAY === 45,
+  "תסקיר בודק: יום 45+ — מכתב בהול"
+);
+assert(
+  computeInspectorFollowUpPhase(
+    { ...baseInspectorReport, has_remarks: false },
+    new Date("2026-03-01")
+  ) === "none",
+  "תסקיר בודק: ללא הערות — אין מעקב"
+);
+assert(
+  computeInspectorFollowUpPhase(
+    closeInspectorReportLocally(baseInspectorReport, "טופל"),
+    new Date("2026-03-01")
+  ) === "closed",
+  "תסקיר בודק: סגירה ידנית"
+);
+assert(
+  daysSinceReportDate("2026-01-01", new Date("2026-02-05")) === 35,
+  "תסקיר בודק: חישוב ימים מהתסקיר"
+);
+assert(
+  normalizeReportDateForQa(baseInspectorReport.report_date) === "2026-01-01",
+  "תסקיר בודק: נרמול תאריך"
+);
+
+function normalizeReportDateForQa(value: string): string {
+  return value.trim().split("T")[0];
+}
+
+const urgentLetter = generateUrgentLetterTemplate({
+  buildingName: "מגדל דוד 25",
+  reportDate: "2026-01-01",
+  deadlineAt: computeInspectorDeadlineAt("2026-01-01"),
+  documentName: "תסקיר שנתי",
+  inspectorName: "בודק",
+  daysSinceReport: 46,
+});
+assert(
+  urgentLetter.includes("מכתב בהול ודחוף") &&
+    urgentLetter.includes("45 יום") &&
+    urgentLetter.includes("מגדל דוד 25"),
+  "תסקיר בודק: תבנית מכתב להעתקה"
+);
+assert(
+  validateInspectorReportInput({
+    buildingId: "md25",
+    reportDate: "2026-01-01",
+    documentName: "תסקיר",
+    hasRemarks: true,
+  }) === null,
+  "תסקיר בודק: ולידציה תקינה"
+);
+assert(
+  validateInspectorReportInput({
+    buildingId: "",
+    reportDate: "2026-01-01",
+    documentName: "תסקיר",
+    hasRemarks: false,
+  }) !== null,
+  "תסקיר בודק: ולידציה — בניין חובה"
+);
+
+const inspectorSectionSource = fs.readFileSync(inspectorSectionPath, "utf8");
+const masterPageForInspector = fs.readFileSync(
+  path.join(process.cwd(), "components/MasterPageContent.tsx"),
+  "utf8"
+);
+assert(
+  masterPageForInspector.includes("MasterInspectorReportsSection") &&
+    masterPageForInspector.includes("תסקירי בודק") &&
+    inspectorSectionSource.includes("העתק מכתב בהול") &&
+    inspectorSectionSource.includes("סגור מעקב לאחר טיפול"),
+  "תסקיר בודק: Master UI — מעקב וסגירה"
+);
+assert(
+  !inspectorSectionSource.includes("professional-assessment") &&
+    !inspectorSectionSource.includes("professional-rules"),
+  "תסקיר בודק: Master בלבד — ללא professional-assessment"
+);
+
+const clientPagesForInspector = [
+  "components/HomePageContent.tsx",
+  "components/ClientAccessPageContent.tsx",
+  "components/BottomNav.tsx",
+].map((f) => path.join(process.cwd(), f));
+let inspectorLeakToClient = 0;
+for (const file of clientPagesForInspector) {
+  if (!fs.existsSync(file)) continue;
+  const content = fs.readFileSync(file, "utf8");
+  if (
+    content.includes("MasterInspectorReportsSection") ||
+    content.includes("inspector-report-tracking")
+  ) {
+    inspectorLeakToClient += 1;
+  }
+}
+assert(
+  inspectorLeakToClient === 0,
+  "תסקיר בודק: אין חשיפה למסכי לקוח"
+);
+
+const inspectorLib = fs.readFileSync(
+  path.join(process.cwd(), "lib/inspector-report-tracking.ts"),
+  "utf8"
+);
+assert(
+  inspectorLib.includes("createInspectorReport") &&
+    inspectorLib.includes("closeInspectorReport") &&
+    inspectorLib.includes("getAllInspectorReports") &&
+    !inspectorLib.includes("openai") &&
+    !inspectorLib.includes("ocr"),
+  "תסקיר בודק: lib CRUD ללא AI/OCR"
 );
 
 const masterAssessmentUi = fs.readFileSync(

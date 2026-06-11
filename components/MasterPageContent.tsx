@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import MasterAnalyticsSection from "@/components/MasterAnalyticsSection";
 import MasterBuildingsSection from "@/components/MasterBuildingsSection";
 import MasterClientAccessSection from "@/components/MasterClientAccessSection";
+import MasterInspectorReportsSection from "@/components/MasterInspectorReportsSection";
 import PageHeader from "@/components/PageHeader";
 import {
   closePilotFault,
@@ -27,7 +28,7 @@ import {
   getMasterFeedbackEmptyMessage,
 } from "@/lib/master-feedback-view";
 import { getAllBuildingIds, getBuildingDataset } from "@/lib/buildings";
-type Tab = "faults" | "feedback" | "buildings" | "clientAccess";
+type Tab = "faults" | "feedback" | "buildings" | "clientAccess" | "inspectorReports";
 
 function formatCloudDate(iso: string): string {
   return new Intl.DateTimeFormat("he-IL", {
@@ -417,6 +418,17 @@ export default function MasterPageContent() {
           >
             גישות לקוח
           </button>
+          <button
+            type="button"
+            onClick={() => setTab("inspectorReports")}
+            className={`flex-1 min-w-[7rem] rounded-xl py-2.5 text-sm font-semibold transition-colors ${
+              tab === "inspectorReports"
+                ? "bg-navy text-white"
+                : "bg-white border border-gray-200 text-navy"
+            }`}
+          >
+            תסקירי בודק
+          </button>
         </div>
 
         {tab === "faults" && (
@@ -585,6 +597,8 @@ export default function MasterPageContent() {
         )}
 
         {tab === "clientAccess" && <MasterClientAccessSection />}
+
+        {tab === "inspectorReports" && <MasterInspectorReportsSection />}
       </main>
     </div>
   );
