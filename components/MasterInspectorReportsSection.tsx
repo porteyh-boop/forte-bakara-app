@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   closeInspectorReport,
   computeInspectorFollowUpPhase,
-  createInspectorReport,
+  createInspectorReportWithFile,
   daysSinceReportDate,
   deleteInspectorReport,
   formatInspectorDeadline,
@@ -15,7 +15,6 @@ import {
   getInspectorPhaseLabel,
   getInspectorReportDocumentUrl,
   isInspectorReportTrackingConfigured,
-  uploadInspectorReportFile,
   validateInspectorReportFile,
   validateInspectorReportInput,
   type InspectorReportRecord,
@@ -130,29 +129,6 @@ export default function MasterInspectorReportsSection() {
     setMessage(null);
     setUploadProgress(null);
 
-    let fileUrl = "";
-
-    if (selectedFile) {
-      if (!cloudReady) {
-        setMessage("Supabase לא מוגדר. הריצו migration 006 ו-007.");
-        return;
-      }
-
-      setCreating(true);
-      const uploaded = await uploadInspectorReportFile(
-        selectedFile,
-        buildingId,
-        setUploadProgress
-      );
-      if (!uploaded) {
-        setCreating(false);
-        setUploadProgress(null);
-        setMessage("העלאת הקובץ נכשלה. ודאו ש-migration 007 הורץ ב-Supabase.");
-        return;
-      }
-      fileUrl = uploaded.fileUrl;
-    }
-
     const input = {
       buildingId,
       elevatorId: elevatorId || null,
@@ -160,7 +136,6 @@ export default function MasterInspectorReportsSection() {
       inspectorName,
       documentName: documentName || selectedFile?.name || "",
       documentUrl,
-      fileUrl: fileUrl || undefined,
       documentDescription,
       hasRemarks,
     };
@@ -172,19 +147,28 @@ export default function MasterInspectorReportsSection() {
     }
 
     if (!cloudReady) {
-      setMessage("Supabase לא מוגדר. הריצו migration 006.");
+      setMessage("Supabase לא מוגדר. הריצו migrations 006, 008 ו-011.");
       return;
     }
 
     if (!selectedFile) {
-      setCreating(true);
+      setMessage("יש לבחור קובץ להעלאה.");
+      return;
     }
-    const created = await createInspectorReport(input);
+
+    setCreating(true);
+    const created = await createInspectorReportWithFile(
+      input,
+      selectedFile,
+      setUploadProgress
+    );
     setCreating(false);
     setUploadProgress(null);
 
     if (!created) {
-      setMessage("יצירת תסקיר נכשלה. ודאו ש-migration 006 הורץ ב-Supabase.");
+      setMessage(
+        "יצירת תסקיר נכשלה. ודאו ש-migrations 008 ו-011 הורצו ב-Supabase."
+      );
       return;
     }
 
@@ -197,8 +181,8 @@ export default function MasterInspectorReportsSection() {
     setSelectedFile(null);
     setMessage(
       created.has_remarks
-        ? "תסקיר נשמר ודוח מעקב נפתח — מעקב 45 יום פעיל."
-        : "תסקיר נשמר ללא מעקב הערות."
+        ? "תסקיר נשמר במאגר מסמכים ודוח מעקב נפתח — מעקב 45 יום פעיל."
+        : "תסקיר נשמר במאגר מסמכים ללא מעקב הערות."
     );
     await refresh();
   }
@@ -255,6 +239,14 @@ export default function MasterInspectorReportsSection() {
 
   return (
     <div className="space-y-4">
+      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-1">
+        <p className="text-sm font-bold text-amber-900">תסקירי בודק עברו למאגר מסמכים</p>
+        <p className="text-sm text-amber-900/90">
+          תסקירים חדשים נשמרים בטאב &quot;מאגר מסמכים&quot; (סוג: תסקיר בודק).
+          טאב זה נשאר זמנית לתקופת מעבר — תסקירים ישנים ממשיכים להופיע כאן.
+        </p>
+      </div>
+
       <div className="bg-white rounded-2xl border border-gold/30 p-4 space-y-2">
         <h2 className="text-base font-bold text-navy">תסקירי בודק ומעקב</h2>
         <p className="text-sm text-gray-text">

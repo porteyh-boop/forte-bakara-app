@@ -151,6 +151,16 @@ import {
   type DocumentRecord,
 } from "../lib/document-center";
 import {
+  buildDocumentInspectorMetaInsertRow,
+  DOCUMENT_INSPECTOR_META_TABLE,
+} from "../lib/document-inspector-meta";
+import {
+  buildInspectorClosureEmailPayload,
+  buildInspectorClosureEmailSubject,
+  buildInspectorClosureEmailText,
+  INSPECTOR_NOTIFY_EMAIL,
+} from "../lib/inspector-closure-email";
+import {
   buildInspectorReportPublicUrl,
   buildInspectorReportStoragePath,
   closeInspectorReportLocally,
@@ -2777,6 +2787,8 @@ assert(
 
 const baseInspectorReport: InspectorReportRecord = {
   id: "ir-1",
+  document_id: null,
+  source: "legacy",
   building_id: "md25",
   elevator_id: null,
   report_date: "2026-01-01",
@@ -2927,14 +2939,19 @@ const inspectorLib = fs.readFileSync(
 );
 assert(
   inspectorLib.includes("createInspectorReport") &&
+    inspectorLib.includes("createInspectorReportWithFile") &&
     inspectorLib.includes("closeInspectorReport") &&
     inspectorLib.includes("getAllInspectorReports") &&
     inspectorLib.includes("uploadInspectorReportFile") &&
     inspectorLib.includes("deleteInspectorReport") &&
     inspectorLib.includes("deleteInspectorReportStorageFile") &&
+    inspectorLib.includes("document-inspector-meta") &&
+    inspectorLib.includes('source: "document"') &&
+    inspectorLib.includes('source: "legacy"') &&
+    inspectorLib.includes("closeInspectorReportByDocumentId") &&
     !inspectorLib.includes("openai") &&
     !inspectorLib.includes("ocr"),
-  "תסקיר בודק: lib CRUD ללא AI/OCR"
+  "תסקיר בודק: adapter documents+meta, legacy נשמר, ללא AI/OCR"
 );
 
 const inspectorFileMigration = path.join(
@@ -3028,8 +3045,9 @@ assert(
     inspectorSectionSource.includes("uploadProgress") &&
     inspectorSectionSource.includes("פתח מסמך") &&
     inspectorSectionSource.includes("מחק תסקיר") &&
-    !inspectorSectionSource.includes("Document Center"),
-  "תסקיר בודק: UI העלאת קובץ ופתיחה/מחיקה"
+    inspectorSectionSource.includes("מאגר מסמכים") &&
+    inspectorSectionSource.includes("createInspectorReportWithFile"),
+  "תסקיר בודק: UI העלאה, מעבר למאגר מסמכים ופתיחה/מחיקה"
 );
 
 const documentCenterMigration = path.join(
@@ -3266,6 +3284,136 @@ for (const file of clientPagesForInspector) {
 assert(
   documentCenterLeakToClient === 0,
   "Document Center: אין חשיפה למסכי לקוח"
+);
+
+const documentInspectorMetaMigration = path.join(
+  process.cwd(),
+  "supabase/migrations/011_document_inspector_meta.sql"
+);
+assert(
+  fs.existsSync(documentInspectorMetaMigration),
+  "תסקיר בודק: migration 011 קיים"
+);
+const documentInspectorMetaMigrationSql = fs.readFileSync(
+  documentInspectorMetaMigration,
+  "utf8"
+);
+assert(
+  documentInspectorMetaMigrationSql.includes("document_inspector_meta") &&
+    documentInspectorMetaMigrationSql.includes("references public.documents") &&
+    documentInspectorMetaMigrationSql.includes("has_remarks") &&
+    documentInspectorMetaMigrationSql.includes("legacy_inspector_report_id") &&
+    !documentInspectorMetaMigrationSql.toLowerCase().includes("drop table") &&
+    !documentInspectorMetaMigrationSql.toLowerCase().includes("drop table public.inspector_reports"),
+  "תסקיר בודק: migration 011 — meta על documents, ללא DROP/backfill"
+);
+
+const documentInspectorMetaLib = fs.readFileSync(
+  path.join(process.cwd(), "lib/document-inspector-meta.ts"),
+  "utf8"
+);
+assert(
+  documentInspectorMetaLib.includes("createDocumentInspectorMeta") &&
+    documentInspectorMetaLib.includes("listAllDocumentInspectorMeta") &&
+    documentInspectorMetaLib.includes("closeDocumentInspectorMeta") &&
+    documentInspectorMetaLib.includes(DOCUMENT_INSPECTOR_META_TABLE),
+  "תסקיר בודק: lib document-inspector-meta"
+);
+
+const metaInsertRow = buildDocumentInspectorMetaInsertRow({
+  documentId: "doc-1",
+  reportDate: "2026-01-01",
+  inspectorName: "בודק",
+  hasRemarks: true,
+});
+assert(
+  metaInsertRow.document_id === "doc-1" &&
+    metaInsertRow.has_remarks === true &&
+    metaInsertRow.deadline_at !== null &&
+    metaInsertRow.status === "open",
+  "תסקיר בודק: insert meta — deadline כשיש הערות"
+);
+assert(
+  buildDocumentInspectorMetaInsertRow({
+    documentId: "doc-2",
+    reportDate: "2026-01-01",
+    hasRemarks: false,
+  }).deadline_at === null,
+  "תסקיר בודק: insert meta — ללא deadline כשאין הערות"
+);
+
+const inspectorPanelPath = path.join(
+  process.cwd(),
+  "components/MasterDocumentInspectorPanel.tsx"
+);
+assert(
+  fs.existsSync(inspectorPanelPath),
+  "תסקיר בודק: MasterDocumentInspectorPanel קיים"
+);
+const inspectorPanelSource = fs.readFileSync(inspectorPanelPath, "utf8");
+assert(
+  inspectorPanelSource.includes("InspectorCreateFields") &&
+    inspectorPanelSource.includes("InspectorDocumentCard") &&
+    inspectorPanelSource.includes("סגור מעקב לאחר טיפול") &&
+    inspectorPanelSource.includes("closeInspectorReportByDocumentId"),
+  "תסקיר בודק: פאנל יצירה/מעקב במאגר מסמכים"
+);
+assert(
+  documentCenterSectionSource.includes("MasterDocumentInspectorPanel") &&
+    documentCenterSectionSource.includes("createInspectorReportWithFile") &&
+    documentCenterSectionSource.includes("listAllDocumentInspectorMeta") &&
+    documentCenterSectionSource.includes("inspector_report"),
+  "Document Center: אינטגרציית תסקיר בודק"
+);
+
+const inspectorClosureEmailLib = fs.readFileSync(
+  path.join(process.cwd(), "lib/inspector-closure-email.ts"),
+  "utf8"
+);
+assert(
+  inspectorClosureEmailLib.includes(INSPECTOR_NOTIFY_EMAIL) &&
+    inspectorClosureEmailLib.includes("buildInspectorClosureEmailSubject") &&
+    inspectorClosureEmailLib.includes("/api/master/inspector-closure-notify") &&
+    !inspectorClosureEmailLib.includes("RESEND_API_KEY"),
+  "תסקיר בודק: מייל סגירה — client fetch בלבד, ללא מפתח ב-client"
+);
+
+const closurePayload = buildInspectorClosureEmailPayload({
+  report: {
+    ...baseInspectorReport,
+    document_id: "doc-1",
+    source: "document",
+  },
+  buildingName: "מגדל דוד 25",
+  elevatorLabel: "ימין",
+  documentUrl: "https://example.com/report.pdf",
+  dossierUrl: "https://example.com/master/elevator/md25/right",
+  closureNotes: "טופל",
+});
+assert(
+  buildInspectorClosureEmailSubject() ===
+    "עודכן תיעוד ביצוע הערות בודק מוסמך" &&
+    buildInspectorClosureEmailText(closurePayload).includes("מגדל דוד 25") &&
+    buildInspectorClosureEmailText(closurePayload).includes("טופל") &&
+    INSPECTOR_NOTIFY_EMAIL === "lifts.forte@gmail.com",
+  "תסקיר בודק: תוכן מייל סגירה"
+);
+
+const inspectorClosureApiPath = path.join(
+  process.cwd(),
+  "app/api/master/inspector-closure-notify/route.ts"
+);
+assert(
+  fs.existsSync(inspectorClosureApiPath),
+  "תסקיר בודק: API route לשליחת מייל"
+);
+const inspectorClosureApiSource = fs.readFileSync(inspectorClosureApiPath, "utf8");
+assert(
+  inspectorClosureApiSource.includes("Resend") &&
+    inspectorClosureApiSource.includes("RESEND_API_KEY") &&
+    inspectorClosureApiSource.includes("INSPECTOR_NOTIFY_EMAIL") &&
+    inspectorClosureApiSource.includes("x-master-code"),
+  "תסקיר בודק: API route — Resend + auth + כתובת יעד"
 );
 
 const masterAssessmentUi = fs.readFileSync(

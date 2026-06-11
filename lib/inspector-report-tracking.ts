@@ -4,6 +4,25 @@ import {
   getSupabaseUrl,
   isPilotCloudConfigured,
 } from "./pilot-cloud";
+import {
+  closeDocumentInspectorMeta,
+  createDocumentInspectorMeta,
+  getDocumentInspectorMetaByDocumentId,
+  listAllDocumentInspectorMeta,
+} from "./document-inspector-meta";
+import {
+  createDocument,
+  deleteDocument,
+  getDocumentById,
+  resolveDocumentContentType,
+  uploadDocumentCenterFile,
+} from "./document-center";
+import type { DocumentRecord } from "./document-center";
+import {
+  buildInspectorClosureEmailPayload,
+  sendInspectorClosureNotification,
+} from "./inspector-closure-email";
+import { buildMasterElevatorDossierPath } from "./master-elevator-routes";
 
 export const INSPECTOR_REPORTS_TABLE = "inspector_reports";
 export const INSPECTOR_REPORTS_BUCKET = "inspector-reports";
@@ -41,8 +60,12 @@ export type InspectorFollowUpPhase =
   | "urgent"
   | "closed";
 
+export type InspectorReportSource = "legacy" | "document";
+
 export interface InspectorReportRecord {
   id: string;
+  document_id: string | null;
+  source: InspectorReportSource;
   building_id: string;
   elevator_id: string | null;
   report_date: string;
@@ -67,6 +90,9 @@ export interface CreateInspectorReportInput {
   documentName?: string;
   documentUrl?: string;
   fileUrl?: string;
+  storagePath?: string;
+  mimeType?: string;
+  fileSizeBytes?: number;
   documentDescription?: string;
   hasRemarks: boolean;
 }
@@ -77,7 +103,70 @@ export interface CloseInspectorReportInput {
   closedAt?: string;
 }
 
-function mapInspectorReportRow(row: Record<string, unknown>): InspectorReportRecord {
+function mapLegacyInspectorReportRow(
+  row: Record<string, unknown>
+): InspectorReportRecord {
+  const report = mapInspectorReportRow(row);
+  return {
+    ...report,
+    document_id: null,
+    source: "legacy",
+  };
+}
+
+function mapDocumentInspectorToReport(
+  document: DocumentRecord,
+  meta: NonNullable<Awaited<ReturnType<typeof getDocumentInspectorMetaByDocumentId>>>
+): InspectorReportRecord {
+  return {
+    id: document.id,
+    document_id: document.id,
+    source: "document",
+    building_id: document.building_id,
+    elevator_id: document.elevator_id,
+    report_date: meta.report_date,
+    inspector_name: meta.inspector_name,
+    document_name: document.title,
+    document_url: null,
+    file_url: document.file_url,
+    document_description: document.description,
+    has_remarks: meta.has_remarks,
+    deadline_at: meta.deadline_at,
+    status: meta.status,
+    closed_at: meta.closed_at,
+    closure_notes: meta.closure_notes,
+    created_at: document.created_at,
+  };
+}
+
+async function notifyInspectorClosureByReport(
+  report: InspectorReportRecord,
+  closureNotes?: string,
+  buildingName?: string,
+  elevatorLabel?: string
+): Promise<void> {
+  const payload = buildInspectorClosureEmailPayload({
+    report,
+    buildingName: buildingName ?? report.building_id,
+    elevatorLabel: elevatorLabel ?? report.elevator_id ?? "—",
+    documentUrl: getInspectorReportDocumentUrl(report),
+    dossierUrl:
+      report.building_id && report.elevator_id
+        ? buildMasterElevatorDossierPath(report.building_id, report.elevator_id)
+        : "—",
+    closureNotes,
+  });
+
+  const result = await sendInspectorClosureNotification(payload);
+  if (!result.ok) {
+    console.warn("[inspector-report] closure email failed:", result.error);
+  }
+}
+
+function mapInspectorReportRow(row: Record<string, unknown>): Omit<
+  InspectorReportRecord,
+  "document_id" | "source"
+> {
   const reportDate = String(row.report_date);
   return {
     id: String(row.id),
@@ -371,6 +460,14 @@ export async function getInspectorReportById(
   const client = getPilotSupabaseClient();
   if (!client || !reportId.trim()) return null;
 
+  const document = await getDocumentById(reportId);
+  if (document && document.document_type === "inspector_report") {
+    const meta = await getDocumentInspectorMetaByDocumentId(reportId);
+    if (meta) {
+      return mapDocumentInspectorToReport(document, meta);
+    }
+  }
+
   const { data, error } = await client
     .from(INSPECTOR_REPORTS_TABLE)
     .select("*")
@@ -382,15 +479,19 @@ export async function getInspectorReportById(
     return null;
   }
 
-  return mapInspectorReportRow(data);
+  return mapLegacyInspectorReportRow(data);
 }
 
 export async function deleteInspectorReport(reportId: string): Promise<boolean> {
-  const client = getPilotSupabaseClient();
-  if (!client || !reportId.trim()) return false;
-
   const report = await getInspectorReportById(reportId);
   if (!report) return false;
+
+  if (report.source === "document" && report.document_id) {
+    return deleteDocument(report.document_id);
+  }
+
+  const client = getPilotSupabaseClient();
+  if (!client) return false;
 
   if (report.file_url) {
     await deleteInspectorReportStorageFile(report.file_url);
@@ -482,40 +583,76 @@ export async function createInspectorReport(
   const client = getPilotSupabaseClient();
   if (!client) return null;
 
-  const hasRemarks = input.hasRemarks;
-  const row = {
-    building_id: input.buildingId.trim().toLowerCase(),
-    elevator_id: input.elevatorId?.trim() || null,
-    report_date: normalizeReportDate(input.reportDate),
-    inspector_name: input.inspectorName?.trim() || null,
-    document_name: input.documentName?.trim() || null,
-    document_url: input.documentUrl?.trim() || null,
-    file_url: input.fileUrl?.trim() || null,
-    document_description: input.documentDescription?.trim() || null,
-    has_remarks: hasRemarks,
-    deadline_at: hasRemarks
-      ? computeInspectorDeadlineAt(input.reportDate)
-      : null,
-    status: "open",
-    closed_at: null,
-    closure_notes: null,
-  };
-
-  const { data, error } = await client
-    .from(INSPECTOR_REPORTS_TABLE)
-    .insert(row)
-    .select("*")
-    .single();
-
-  if (error || !data) {
-    console.warn("[inspector-report] create failed:", error?.message);
+  if (!input.fileUrl?.trim() || !input.storagePath?.trim()) {
+    console.warn("[inspector-report] create requires uploaded file in document-center");
     return null;
   }
 
-  return mapInspectorReportRow(data);
+  const fileName = input.documentName?.trim() || "inspector-report";
+
+  const { document, error: documentError } = await createDocument({
+    buildingId: input.buildingId,
+    elevatorId: input.elevatorId,
+    documentType: "inspector_report",
+    title: fileName,
+    description: input.documentDescription,
+    fileName,
+    fileUrl: input.fileUrl,
+    storagePath: input.storagePath,
+    mimeType: input.mimeType,
+    fileSizeBytes: input.fileSizeBytes,
+    tags: ["תסקיר בודק"],
+  });
+
+  if (!document) {
+    console.warn("[inspector-report] document create failed:", documentError);
+    return null;
+  }
+
+  const meta = await createDocumentInspectorMeta({
+    documentId: document.id,
+    reportDate: input.reportDate,
+    inspectorName: input.inspectorName,
+    hasRemarks: input.hasRemarks,
+  });
+
+  if (!meta) {
+    await deleteDocument(document.id);
+    console.warn("[inspector-report] meta create failed — rolled back document");
+    return null;
+  }
+
+  return mapDocumentInspectorToReport(document, meta);
 }
 
-export async function getAllInspectorReports(): Promise<InspectorReportRecord[]> {
+export async function createInspectorReportWithFile(
+  input: CreateInspectorReportInput,
+  file: File,
+  onProgress?: (percent: number) => void
+): Promise<InspectorReportRecord | null> {
+  const validationError = validateInspectorReportInput({
+    ...input,
+    documentName: input.documentName || file.name,
+  });
+  if (validationError) return null;
+
+  const uploaded = await uploadDocumentCenterFile(file, input.buildingId, onProgress);
+  if (!uploaded.ok) {
+    console.warn("[inspector-report] upload failed:", uploaded);
+    return null;
+  }
+
+  return createInspectorReport({
+    ...input,
+    documentName: input.documentName || file.name.replace(/\.[^.]+$/, ""),
+    fileUrl: uploaded.fileUrl,
+    storagePath: uploaded.storagePath,
+    mimeType: resolveDocumentContentType(file.name, file.type),
+    fileSizeBytes: file.size,
+  });
+}
+
+async function listLegacyInspectorReports(): Promise<InspectorReportRecord[]> {
   const client = getPilotSupabaseClient();
   if (!client) return [];
 
@@ -525,20 +662,77 @@ export async function getAllInspectorReports(): Promise<InspectorReportRecord[]>
     .order("report_date", { ascending: false });
 
   if (error || !data) {
-    console.warn("[inspector-report] list failed:", error?.message);
+    console.warn("[inspector-report] legacy list failed:", error?.message);
     return [];
   }
 
-  return data.map((row) => mapInspectorReportRow(row));
+  return data.map((row) => mapLegacyInspectorReportRow(row));
+}
+
+async function listDocumentInspectorReports(): Promise<InspectorReportRecord[]> {
+  const client = getPilotSupabaseClient();
+  if (!client) return [];
+
+  const metaRows = await listAllDocumentInspectorMeta();
+  if (metaRows.length === 0) return [];
+
+  const reports: InspectorReportRecord[] = [];
+  for (const meta of metaRows) {
+    const document = await getDocumentById(meta.document_id);
+    if (!document || document.document_type !== "inspector_report") continue;
+    reports.push(mapDocumentInspectorToReport(document, meta));
+  }
+
+  return reports;
+}
+
+export async function getAllInspectorReports(): Promise<InspectorReportRecord[]> {
+  const [legacyReports, documentReports] = await Promise.all([
+    listLegacyInspectorReports(),
+    listDocumentInspectorReports(),
+  ]);
+
+  return [...documentReports, ...legacyReports].sort((a, b) =>
+    b.report_date.localeCompare(a.report_date)
+  );
 }
 
 export async function closeInspectorReport(
-  input: CloseInspectorReportInput
+  input: CloseInspectorReportInput,
+  context?: {
+    buildingName?: string;
+    elevatorLabel?: string;
+  }
 ): Promise<InspectorReportRecord | null> {
   const client = getPilotSupabaseClient();
   if (!client || !input.reportId.trim()) return null;
 
+  const existing = await getInspectorReportById(input.reportId);
+  if (!existing) return null;
+
   const closedAt = input.closedAt ?? new Date().toISOString();
+
+  if (existing.source === "document" && existing.document_id) {
+    const meta = await closeDocumentInspectorMeta({
+      documentId: existing.document_id,
+      closureNotes: input.closureNotes,
+      closedAt,
+    });
+    if (!meta) return null;
+
+    const document = await getDocumentById(existing.document_id);
+    if (!document) return null;
+
+    const closedReport = mapDocumentInspectorToReport(document, meta);
+    await notifyInspectorClosureByReport(
+      closedReport,
+      input.closureNotes,
+      context?.buildingName,
+      context?.elevatorLabel
+    );
+    return closedReport;
+  }
+
   const { data, error } = await client
     .from(INSPECTOR_REPORTS_TABLE)
     .update({
@@ -555,7 +749,14 @@ export async function closeInspectorReport(
     return null;
   }
 
-  return mapInspectorReportRow(data);
+  const closedReport = mapLegacyInspectorReportRow(data);
+  await notifyInspectorClosureByReport(
+    closedReport,
+    input.closureNotes,
+    context?.buildingName,
+    context?.elevatorLabel
+  );
+  return closedReport;
 }
 
 export function closeInspectorReportLocally(
@@ -569,4 +770,18 @@ export function closeInspectorReportLocally(
     closed_at: closedAt.toISOString(),
     closure_notes: closureNotes?.trim() || null,
   };
+}
+
+export async function closeInspectorReportByDocumentId(
+  documentId: string,
+  closureNotes?: string,
+  context?: {
+    buildingName?: string;
+    elevatorLabel?: string;
+  }
+): Promise<InspectorReportRecord | null> {
+  return closeInspectorReport(
+    { reportId: documentId, closureNotes },
+    context
+  );
 }

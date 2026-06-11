@@ -21,6 +21,13 @@ import {
   type DocumentRecord,
   type DocumentTypeId,
 } from "@/lib/document-center";
+import { listAllDocumentInspectorMeta } from "@/lib/document-inspector-meta";
+import { createInspectorReportWithFile } from "@/lib/inspector-report-tracking";
+import {
+  InspectorCreateFields,
+  InspectorDocumentCard,
+} from "@/components/MasterDocumentInspectorPanel";
+import type { DocumentInspectorMetaRecord } from "@/lib/document-inspector-meta";
 import { buildMasterBuildingList } from "@/lib/master-buildings-list";
 import { getAllBuildingIds, getBuildingDataset } from "@/lib/buildings";
 
@@ -49,6 +56,14 @@ export default function MasterDocumentCenterSection() {
   const [tagsInput, setTagsInput] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [inspectorMetaByDocumentId, setInspectorMetaByDocumentId] = useState<
+    Record<string, DocumentInspectorMetaRecord>
+  >({});
+  const [reportDate, setReportDate] = useState(
+    () => new Date().toISOString().split("T")[0]
+  );
+  const [inspectorName, setInspectorName] = useState("");
+  const [hasRemarks, setHasRemarks] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [filterBuildingId, setFilterBuildingId] = useState("");
@@ -88,9 +103,15 @@ export default function MasterDocumentCenterSection() {
       return { documents: [], error: null };
     }
     setLoading(true);
-    const { documents: rows, error } = await getAllDocuments();
+    const [{ documents: rows, error }, metaRows] = await Promise.all([
+      getAllDocuments(),
+      listAllDocumentInspectorMeta(),
+    ]);
     setDocuments(rows);
     setListError(error);
+    setInspectorMetaByDocumentId(
+      Object.fromEntries(metaRows.map((meta) => [meta.document_id, meta]))
+    );
     if (error) {
       console.error("[document-center] refresh failed:", error);
     }
@@ -146,6 +167,51 @@ export default function MasterDocumentCenterSection() {
 
     if (!selectedFile) {
       setMessage("יש לבחור קובץ להעלאה.");
+      return;
+    }
+
+    if (documentType === "inspector_report") {
+      setCreating(true);
+      const created = await createInspectorReportWithFile(
+        {
+          buildingId,
+          elevatorId: elevatorId || null,
+          reportDate,
+          inspectorName,
+          documentName: title || selectedFile.name.replace(/\.[^.]+$/, ""),
+          documentDescription: description,
+          hasRemarks,
+        },
+        selectedFile,
+        setUploadProgress
+      );
+      setCreating(false);
+      setUploadProgress(null);
+
+      if (!created) {
+        setMessage(
+          "שמירת תסקיר הבודק נכשלה. ודאו ש-migrations 008 ו-011 הורצו ב-Supabase."
+        );
+        return;
+      }
+
+      setTitle("");
+      setDescription("");
+      setTagsInput("");
+      setElevatorId("");
+      setInspectorName("");
+      setHasRemarks(false);
+      setSelectedFile(null);
+      setDocumentType("other");
+      setMessage(
+        created.has_remarks
+          ? "תסקיר בודק נשמר במאגר ודוח מעקב נפתח."
+          : "תסקיר בודק נשמר במאגר ללא מעקב הערות."
+      );
+      const refreshed = await refresh();
+      if (refreshed.error) {
+        setMessage(`התסקיר נשמר, אך טעינת הרשימה נכשלה: ${refreshed.error}`);
+      }
       return;
     }
 
@@ -312,6 +378,16 @@ export default function MasterDocumentCenterSection() {
               ))}
             </select>
           </div>
+          {documentType === "inspector_report" ? (
+            <InspectorCreateFields
+              reportDate={reportDate}
+              inspectorName={inspectorName}
+              hasRemarks={hasRemarks}
+              onReportDateChange={setReportDate}
+              onInspectorNameChange={setInspectorName}
+              onHasRemarksChange={setHasRemarks}
+            />
+          ) : null}
           <div>
             <label className="text-xs text-gray-text">כותרת</label>
             <input
@@ -462,7 +538,13 @@ export default function MasterDocumentCenterSection() {
           </p>
         ) : (
           <div className="space-y-3">
-            {filteredDocuments.map((document) => (
+            {filteredDocuments.map((document) => {
+              const inspectorMeta =
+                document.document_type === "inspector_report"
+                  ? inspectorMetaByDocumentId[document.id]
+                  : undefined;
+
+              return (
               <article
                 key={document.id}
                 className="rounded-xl border border-gray-200 p-3 space-y-2"
@@ -526,8 +608,24 @@ export default function MasterDocumentCenterSection() {
                     מחק מסמך
                   </button>
                 </div>
+
+                {inspectorMeta && (
+                  <InspectorDocumentCard
+                    document={document}
+                    meta={inspectorMeta}
+                    buildingName={resolveBuildingName(document.building_id)}
+                    actionId={actionId}
+                    onClosed={(msg) => {
+                      setMessage(msg);
+                      void refresh();
+                    }}
+                    onActionStart={setActionId}
+                    onActionEnd={() => setActionId(null)}
+                  />
+                )}
               </article>
-            ))}
+            );
+            })}
           </div>
         )}
 
