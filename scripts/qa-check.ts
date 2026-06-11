@@ -3208,6 +3208,27 @@ assert(
   "Document Center: migration 009 policies ל-Storage"
 );
 
+const documentCenterBucketMigration = path.join(
+  process.cwd(),
+  "supabase/migrations/010_document_center_bucket.sql"
+);
+const documentCenterBucketMigrationSql = fs.readFileSync(
+  documentCenterBucketMigration,
+  "utf8"
+);
+assert(
+  fs.existsSync(documentCenterBucketMigration) &&
+    documentCenterBucketMigrationSql.includes("'document-center'") &&
+    documentCenterBucketMigrationSql.includes("storage.buckets") &&
+    documentCenterBucketMigrationSql.includes("on conflict (id)"),
+  "Document Center: migration 010 יוצר bucket document-center"
+);
+assert(
+  documentCenterBucketMigrationSql.includes("bucket_id = 'document-center'") &&
+    DOCUMENT_CENTER_BUCKET === "document-center",
+  "Document Center: שם bucket זהה בקוד, 009 ו-010"
+);
+
 const documentCenterSectionSource = fs.readFileSync(documentCenterSectionPath, "utf8");
 const masterPageForDocuments = fs.readFileSync(
   path.join(process.cwd(), "components/MasterPageContent.tsx"),
