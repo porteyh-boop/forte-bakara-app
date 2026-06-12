@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import MasterCloudFaultCard from "@/components/MasterCloudFaultCard";
 import MasterAnalyticsSection from "@/components/MasterAnalyticsSection";
 import MasterBuildingsSection from "@/components/MasterBuildingsSection";
 import MasterClientAccessSection from "@/components/MasterClientAccessSection";
@@ -451,76 +452,15 @@ export default function MasterPageContent() {
               </p>
             ) : (
               filteredFaults.map((f) => (
-                <article
+                <MasterCloudFaultCard
                   key={f.id}
-                  className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm"
-                >
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <div>
-                      <p className="font-semibold text-navy text-sm">{f.fault_type}</p>
-                      <p className="text-xs text-gray-text">
-                        {f.building_name} · {f.elevator_name}
-                      </p>
-                      {f.ticket_number && (
-                        <p className="text-xs text-gold font-medium mt-0.5">
-                          {f.ticket_number}
-                        </p>
-                      )}
-                    </div>
-                    <span className="text-xs font-semibold px-2 py-1 rounded-lg bg-gray-light text-navy shrink-0">
-                      {f.status}
-                    </span>
-                  </div>
-                  <p className="text-sm text-navy/80 leading-relaxed">{f.description}</p>
-                  {f.image_data && (
-                    <div className="mt-3 rounded-xl overflow-hidden border border-gray-200">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={f.image_data}
-                        alt="תמונה מצורפת"
-                        className="w-full h-36 object-cover"
-                      />
-                    </div>
-                  )}
-                  <p className="text-xs text-gray-text mt-2">
-                    {formatCloudDate(f.created_at)}
-                    {f.source_device_id && (
-                      <span className="mr-2"> · מכשיר: {f.source_device_id.slice(0, 12)}…</span>
-                    )}
-                    {f.closed_at && (
-                      <span className="mr-2"> · נסגר: {formatCloudDate(f.closed_at)}</span>
-                    )}
-                  </p>
-                  <div className="flex flex-wrap gap-2 mt-3">
-                    {f.status !== "סגורה" ? (
-                      <button
-                        type="button"
-                        disabled={actionId === f.id}
-                        onClick={() => void handleClose(f.id)}
-                        className="text-xs font-semibold bg-navy text-white px-3 py-1.5 rounded-lg disabled:opacity-50"
-                      >
-                        סגור תקלה
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled={actionId === f.id}
-                        onClick={() => void handleReopen(f.id)}
-                        className="text-xs font-semibold border border-gold text-navy px-3 py-1.5 rounded-lg disabled:opacity-50"
-                      >
-                        פתח מחדש
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      disabled={actionId === f.id}
-                      onClick={() => void handleDelete(f.id)}
-                      className="text-xs font-semibold border border-red-200 text-red-700 px-3 py-1.5 rounded-lg disabled:opacity-50"
-                    >
-                      מחק
-                    </button>
-                  </div>
-                </article>
+                  fault={f}
+                  actionId={actionId}
+                  formatDate={formatCloudDate}
+                  onClose={(faultId) => void handleClose(faultId)}
+                  onReopen={(faultId) => void handleReopen(faultId)}
+                  onDelete={(faultId) => void handleDelete(faultId)}
+                />
               ))
             )}
 

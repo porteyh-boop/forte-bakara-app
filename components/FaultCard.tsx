@@ -1,7 +1,11 @@
 import type { Fault } from "@/lib/types";
 import { getLifecycleStatus } from "@/lib/fault-lifecycle";
-import { formatFileSize } from "@/lib/report-image";
+import { resolveFaultReportImagesFromFault } from "@/lib/fault-images";
 import { formatDate, formatRelativeDate } from "@/lib/utils";
+import {
+  FaultReportImageThumbnails,
+  useFaultReportImageViewer,
+} from "./FaultReportImageSection";
 import StatusBadge from "./StatusBadge";
 
 interface FaultCardProps {
@@ -27,6 +31,8 @@ export default function FaultCard({
 }: FaultCardProps) {
   const lifecycleStatus = getLifecycleStatus(fault);
   const isActive = lifecycleStatus !== "סגורה";
+  const reportImages = resolveFaultReportImagesFromFault(fault);
+  const imageViewer = useFaultReportImageViewer(reportImages);
 
   return (
     <article
@@ -71,19 +77,12 @@ export default function FaultCard({
         <p className="text-sm text-navy/75 leading-relaxed">{fault.description}</p>
       )}
 
-      {fault.image && (
-        <div className={`${compact ? "mt-2" : "mt-3"} rounded-xl overflow-hidden border border-gray-200 bg-gray-light`}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={fault.image.dataUrl}
-            alt={`תמונה מצורפת: ${fault.image.name}`}
-            className={`w-full object-cover ${compact ? "h-28" : "h-36"}`}
-          />
-          <p className="text-[10px] text-gray-text px-2 py-1.5 truncate">
-            {fault.image.name} · {formatFileSize(fault.image.sizeBytes)}
-          </p>
-        </div>
-      )}
+      <FaultReportImageThumbnails
+        images={reportImages}
+        compact={compact}
+        onOpen={imageViewer.openImage}
+      />
+      {imageViewer.lightbox}
 
       {fault.resolvedAt && (
         <p className="text-xs text-gray-text mt-2">
@@ -100,9 +99,28 @@ export default function FaultCard({
         <time className="text-xs text-gray-text" title={formatDate(fault.reportedAt)}>
           {isActive ? formatRelativeDate(fault.reportedAt) : formatDate(fault.reportedAt)}
         </time>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {fault.reportedBy && !compact && (
             <span className="text-xs text-gray-text">{fault.reportedBy}</span>
+          )}
+          {imageViewer.hasImages && onClose && (
+            <>
+              <button
+                type="button"
+                onClick={() => imageViewer.openImage(0)}
+                className="text-xs font-semibold border border-gray-200 text-navy px-3 py-1.5 rounded-lg hover:bg-gray-50"
+              >
+                פתח תמונה
+              </button>
+              <button
+                type="button"
+                onClick={() => void imageViewer.downloadImage(0)}
+                disabled={imageViewer.downloading}
+                className="text-xs font-semibold border border-gray-200 text-navy px-3 py-1.5 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+              >
+                {imageViewer.downloading ? "מוריד..." : "הורד תמונה"}
+              </button>
+            </>
           )}
           {isActive && onClose && (
             <button

@@ -47,13 +47,15 @@ export function mapPilotCloudFaultToFault(cloud: PilotCloudFault): Fault {
     isUserSubmitted: true,
     isDisabled: cloud.is_disabled,
     resolvedAt: cloud.closed_at ?? undefined,
-    ...(cloud.image_data
+    ...(cloud.image_url || cloud.image_data
       ? {
           image: {
-            dataUrl: cloud.image_data,
-            name: "report-image",
-            sizeBytes: cloud.image_data.length,
-            mimeType: "image/jpeg",
+            dataUrl: cloud.image_url ?? cloud.image_data!,
+            name: cloud.image_url
+              ? cloud.image_url.split("/").pop() ?? "report-image"
+              : "report-image",
+            sizeBytes: cloud.image_data?.length ?? 0,
+            mimeType: cloud.image_url ? "image/jpeg" : "image/jpeg",
           },
         }
       : {}),

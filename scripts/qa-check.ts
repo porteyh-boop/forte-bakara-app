@@ -131,6 +131,12 @@ import {
   type ClientAccessSession,
 } from "../lib/client-access";
 import {
+  clampFaultImageZoom,
+  isRemoteFaultImageSrc,
+  resolveFaultReportImages,
+  resolveFaultReportImagesFromCloud,
+} from "../lib/fault-images";
+import {
   buildDocumentInsertRow,
   buildDocumentPublicUrl,
   buildDocumentStoragePath,
@@ -876,9 +882,60 @@ const faultCardSource = fs.readFileSync(
   "utf8"
 );
 assert(
-  faultCardSource.includes("fault.image") &&
-    faultCardSource.includes("dataUrl"),
+  faultCardSource.includes("FaultReportImageThumbnails") &&
+    faultCardSource.includes("פתח תמונה") &&
+    faultCardSource.includes("הורד תמונה") &&
+    faultCardSource.includes("resolveFaultReportImagesFromFault"),
   "תמונה: הצגה בכרטיס תקלה בהיסטוריה"
+);
+
+const faultImagesLib = fs.readFileSync(
+  path.join(process.cwd(), "lib/fault-images.ts"),
+  "utf8"
+);
+const faultImageLightboxSource = fs.readFileSync(
+  path.join(process.cwd(), "components/FaultImageLightbox.tsx"),
+  "utf8"
+);
+const masterCloudFaultCardSource = fs.readFileSync(
+  path.join(process.cwd(), "components/MasterCloudFaultCard.tsx"),
+  "utf8"
+);
+assert(
+  faultImagesLib.includes("resolveFaultReportImages") &&
+    faultImagesLib.includes("image_url") &&
+    faultImageLightboxSource.includes("export default function FaultImageLightbox") &&
+    faultImageLightboxSource.includes("onTouchMove") &&
+    faultImageLightboxSource.includes("onWheel") &&
+    faultImageLightboxSource.includes("הורד תמונה"),
+  "תמונה: lib תצוגה מלאה + zoom"
+);
+assert(
+  masterCloudFaultCardSource.includes("פתח תמונה") &&
+    masterCloudFaultCardSource.includes("הורד תמונה") &&
+    masterCloudFaultCardSource.includes("FaultReportImageThumbnails") &&
+    masterCloudFaultCardSource.includes("resolveFaultReportImagesFromCloud"),
+  "תמונה: Master — תצוגה מלאה וכפתורי פעולה"
+);
+assert(
+  resolveFaultReportImages({
+    imageUrl: "https://example.supabase.co/storage/v1/object/public/faults/a.jpg",
+    imageData: "data:image/jpeg;base64,abc",
+  }).length === 1 &&
+    resolveFaultReportImages({
+      imageUrl: "https://example.supabase.co/storage/v1/object/public/faults/a.jpg",
+      imageData: "data:image/jpeg;base64,abc",
+    })[0].fromStorage === true &&
+    resolveFaultReportImages({
+      imageData: '["https://example.com/1.jpg","https://example.com/2.jpg"]',
+    }).length === 2 &&
+    resolveFaultReportImagesFromCloud({
+      image_url: null,
+      image_data: "data:image/jpeg;base64,abc",
+    }).length === 1 &&
+    clampFaultImageZoom(5) === 4 &&
+    isRemoteFaultImageSrc("https://x.com/a.jpg"),
+  "תמונה: עדיפות Storage URL וריבוי תמונות"
 );
 
 const reportFormImageSource = fs.readFileSync(

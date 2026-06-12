@@ -1,0 +1,275 @@
+"use client";
+
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type TouchEvent as ReactTouchEvent,
+  type WheelEvent as ReactWheelEvent,
+} from "react";
+import {
+  clampFaultImageZoom,
+  downloadFaultReportImage,
+  type FaultReportImage,
+} from "@/lib/fault-images";
+
+interface FaultImageLightboxProps {
+  images: FaultReportImage[];
+  initialIndex?: number;
+  open: boolean;
+  onClose: () => void;
+}
+
+function touchPointsDistance(
+  touchA: { clientX: number; clientY: number },
+  touchB: { clientX: number; clientY: number }
+): number {
+  return Math.hypot(touchA.clientX - touchB.clientX, touchA.clientY - touchB.clientY);
+}
+
+export default function FaultImageLightbox({
+  images,
+  initialIndex = 0,
+  open,
+  onClose,
+}: FaultImageLightboxProps) {
+  const [index, setIndex] = useState(initialIndex);
+  const [scale, setScale] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [dragging, setDragging] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const dragStart = useRef({ x: 0, y: 0, offsetX: 0, offsetY: 0 });
+  const pinchStart = useRef<{ distance: number; scale: number } | null>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
+
+  const current = images[index];
+
+  const resetView = useCallback(() => {
+    setScale(1);
+    setOffset({ x: 0, y: 0 });
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    setIndex(Math.min(Math.max(initialIndex, 0), Math.max(images.length - 1, 0)));
+    resetView();
+  }, [open, initialIndex, images.length, resetView]);
+
+  useEffect(() => {
+    if (!open) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+      if (event.key === "ArrowRight") {
+        setIndex((value) => (value + 1) % images.length);
+        resetView();
+      }
+      if (event.key === "ArrowLeft") {
+        setIndex((value) => (value - 1 + images.length) % images.length);
+        resetView();
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open, images.length, onClose, resetView]);
+
+  function goNext() {
+    if (images.length <= 1) return;
+    setIndex((value) => (value + 1) % images.length);
+    resetView();
+  }
+
+  function goPrev() {
+    if (images.length <= 1) return;
+    setIndex((value) => (value - 1 + images.length) % images.length);
+    resetView();
+  }
+
+  function handleWheel(event: ReactWheelEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setScale((value) =>
+      clampFaultImageZoom(value + (event.deltaY < 0 ? 0.12 : -0.12))
+    );
+  }
+
+  function handlePointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    if (scale <= 1) return;
+    setDragging(true);
+    dragStart.current = {
+      x: event.clientX,
+      y: event.clientY,
+      offsetX: offset.x,
+      offsetY: offset.y,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function handlePointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    if (!dragging) return;
+    setOffset({
+      x: dragStart.current.offsetX + (event.clientX - dragStart.current.x),
+      y: dragStart.current.offsetY + (event.clientY - dragStart.current.y),
+    });
+  }
+
+  function handlePointerUp(event: React.PointerEvent<HTMLDivElement>) {
+    setDragging(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }
+
+  function handleTouchStart(event: ReactTouchEvent<HTMLDivElement>) {
+    if (event.touches.length === 2) {
+      pinchStart.current = {
+        distance: touchPointsDistance(event.touches[0], event.touches[1]),
+        scale,
+      };
+    }
+  }
+
+  function handleTouchMove(event: ReactTouchEvent<HTMLDivElement>) {
+    if (event.touches.length !== 2 || !pinchStart.current) return;
+    event.preventDefault();
+    const distance = touchPointsDistance(event.touches[0], event.touches[1]);
+    if (distance <= 0 || pinchStart.current.distance <= 0) return;
+    const ratio = distance / pinchStart.current.distance;
+    setScale(clampFaultImageZoom(pinchStart.current.scale * ratio));
+  }
+
+  function handleTouchEnd() {
+    pinchStart.current = null;
+  }
+
+  async function handleDownload() {
+    if (!current || downloading) return;
+    setDownloading(true);
+    try {
+      await downloadFaultReportImage(current);
+    } catch {
+      window.alert("הורדת התמונה נכשלה");
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  if (!open || !current) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex flex-col bg-black/90"
+      role="dialog"
+      aria-modal="true"
+      aria-label="תצוגת תמונה מלאה"
+    >
+      <div className="flex items-center justify-between gap-2 px-3 py-2 text-white shrink-0">
+        <p className="text-xs sm:text-sm truncate">
+          {current.name}
+          {images.length > 1 && (
+            <span className="mr-2 text-white/70">
+              ({index + 1}/{images.length})
+            </span>
+          )}
+        </p>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            onClick={() => setScale((value) => clampFaultImageZoom(value - 0.25))}
+            className="rounded-lg border border-white/20 px-2.5 py-1.5 text-xs font-semibold hover:bg-white/10"
+            aria-label="הקטנת תמונה"
+          >
+            −
+          </button>
+          <span className="text-xs tabular-nums w-10 text-center">
+            {Math.round(scale * 100)}%
+          </span>
+          <button
+            type="button"
+            onClick={() => setScale((value) => clampFaultImageZoom(value + 0.25))}
+            className="rounded-lg border border-white/20 px-2.5 py-1.5 text-xs font-semibold hover:bg-white/10"
+            aria-label="הגדלת תמונה"
+          >
+            +
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleDownload()}
+            disabled={downloading}
+            className="rounded-lg border border-white/20 px-2.5 py-1.5 text-xs font-semibold hover:bg-white/10 disabled:opacity-50"
+          >
+            {downloading ? "מוריד..." : "הורד תמונה"}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-white/20 px-2.5 py-1.5 text-xs font-semibold hover:bg-white/10"
+            aria-label="סגירה"
+          >
+            סגור
+          </button>
+        </div>
+      </div>
+
+      <div
+        ref={viewportRef}
+        className="relative flex-1 min-h-0 overflow-hidden touch-none"
+        onWheel={handleWheel}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
+      >
+        {images.length > 1 && (
+          <>
+            <button
+              type="button"
+              onClick={goPrev}
+              className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/50 text-white w-10 h-10 text-lg hover:bg-black/70"
+              aria-label="תמונה קודמת"
+            >
+              ‹
+            </button>
+            <button
+              type="button"
+              onClick={goNext}
+              className="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/50 text-white w-10 h-10 text-lg hover:bg-black/70"
+              aria-label="תמונה הבאה"
+            >
+              ›
+            </button>
+          </>
+        )}
+
+        <div
+          className={`absolute inset-0 flex items-center justify-center p-4 ${
+            scale > 1 ? (dragging ? "cursor-grabbing" : "cursor-grab") : ""
+          }`}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            key={current.src}
+            src={current.src}
+            alt={current.name}
+            draggable={false}
+            className="max-h-full max-w-full object-contain select-none"
+            style={{
+              transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
+              transformOrigin: "center center",
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
