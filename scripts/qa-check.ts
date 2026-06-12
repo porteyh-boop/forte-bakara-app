@@ -136,15 +136,19 @@ import {
   buildDocumentStoragePath,
   collectDocumentTags,
   DOCUMENT_CENTER_BUCKET,
+  DOCUMENT_PREDEFINED_TAGS,
   DOCUMENT_UNSUPPORTED_CONTENT_TYPE_ERROR,
   DOCUMENT_TYPES,
   extractDocumentStoragePath,
   filterDocuments,
   formatDocumentTags,
+  getDocumentFilterTagOptions,
   getDocumentTypeLabel,
   isDocumentReadyForAi,
   isDocumentReadyForOcr,
+  isPredefinedDocumentTag,
   normalizeDocumentTags,
+  normalizePredefinedDocumentTags,
   parseDocumentTagsInput,
   resolveDocumentContentType,
   resolveStorageExtension,
@@ -3107,6 +3111,8 @@ assert(
     documentCenterLib.includes("deleteDocument") &&
     documentCenterLib.includes("uploadDocumentCenterFile") &&
     documentCenterLib.includes("filterDocuments") &&
+    documentCenterLib.includes("DOCUMENT_PREDEFINED_TAGS") &&
+    documentCenterLib.includes("getDocumentFilterTagOptions") &&
     documentCenterLib.includes("resolveDocumentContentType") &&
     documentCenterLib.includes("buildDocumentInsertRow") &&
     documentCenterLib.includes("isDocumentReadyForOcr") &&
@@ -3143,6 +3149,27 @@ assert(
   normalizeDocumentTags([" בודק ", "שנתי", "בודק"]).join(",") === "בודק,שנתי" &&
     parseDocumentTagsInput("בודק, שנתי; דחוף").includes("דחוף"),
   "Document Center: נרמול ופרסור תגיות"
+);
+assert(
+  DOCUMENT_PREDEFINED_TAGS.length === 22 &&
+    DOCUMENT_PREDEFINED_TAGS[0] === "תסקיר בודק" &&
+    DOCUMENT_PREDEFINED_TAGS.includes("שדרוג / מודרניזציה") &&
+    isPredefinedDocumentTag("חשבונית") &&
+    !isPredefinedDocumentTag("בודק"),
+  "Document Center: תגיות קבועות"
+);
+assert(
+  normalizePredefinedDocumentTags(["תסקיר בודק", "בודק", "חשבונית"]).join(",") ===
+    "חשבונית,תסקיר בודק",
+  "Document Center: נרמול תגיות קבועות בלבד"
+);
+assert(
+  getDocumentFilterTagOptions([sampleDocument]).includes("בודק") &&
+    getDocumentFilterTagOptions([sampleDocument]).includes("תסקיר בודק") &&
+    getDocumentFilterTagOptions([
+      { ...sampleDocument, tags: ["תסקיר בודק"] },
+    ]).length === DOCUMENT_PREDEFINED_TAGS.length,
+  "Document Center: אפשרויות סינון תגיות"
 );
 assert(
   filterDocuments([sampleDocument], { query: "שנתי" }).length === 1 &&
@@ -3331,6 +3358,8 @@ assert(
     masterPageForDocuments.includes("מאגר מסמכים") &&
     documentCenterSectionSource.includes("בחר קובץ") &&
     documentCenterSectionSource.includes("חיפוש") &&
+    documentCenterSectionSource.includes("DOCUMENT_PREDEFINED_TAGS") &&
+    documentCenterSectionSource.includes("getDocumentFilterTagOptions") &&
     documentCenterSectionSource.includes("פתח מסמך"),
   "Document Center: Master UI — העלאה, חיפוש ופתיחה"
 );

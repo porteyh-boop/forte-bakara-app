@@ -38,6 +38,37 @@ export const DOCUMENT_TYPES = [
 
 export type DocumentTypeId = (typeof DOCUMENT_TYPES)[number]["id"];
 
+/** תגיות קבועות לבחירה, סינון והצגה במרכז המסמכים */
+export const DOCUMENT_PREDEFINED_TAGS = [
+  "תסקיר בודק",
+  "הערות בודק",
+  "אישור בודק",
+  "חוזה שירות",
+  "הצעת מחיר",
+  "הצעת מחיר למזמין",
+  "אישור הצעת מחיר",
+  "חשבונית",
+  "דוח תקלה",
+  "דוח שירות",
+  "בדיקת קבלה",
+  "מפרט מעלית",
+  "תוכנית מעלית",
+  "אישור מכון התקנים",
+  "בטיחות",
+  "שדרוג / מודרניזציה",
+  "התכתבות",
+  "תיק מתקן",
+  "תמונות",
+  "חוות דעת",
+  "פיקוח עליון",
+  "אחר",
+] as const;
+
+export type DocumentPredefinedTag = (typeof DOCUMENT_PREDEFINED_TAGS)[number];
+
+export const DOCUMENT_TAG_INSPECTOR_REPORT: DocumentPredefinedTag =
+  "תסקיר בודק";
+
 export type DocumentOcrStatus = "none" | "pending" | "ready" | "failed";
 
 export interface DocumentRecord {
@@ -268,16 +299,20 @@ export function getDocumentTypeLabel(documentType: string): string {
   );
 }
 
+export function isPredefinedDocumentTag(
+  tag: string
+): tag is DocumentPredefinedTag {
+  return (DOCUMENT_PREDEFINED_TAGS as readonly string[]).includes(tag);
+}
+
 export function normalizeDocumentTags(input: string[] | string): string[] {
-  const raw = Array.isArray(input)
-    ? input
-    : input.split(/[,;#]+/);
+  const raw = Array.isArray(input) ? input : input.split(/[,;#]+/);
 
   const seen = new Set<string>();
   const normalized: string[] = [];
 
   for (const tag of raw) {
-    const value = tag.trim().toLowerCase();
+    const value = tag.trim();
     if (!value || seen.has(value)) continue;
     seen.add(value);
     normalized.push(value);
@@ -286,8 +321,29 @@ export function normalizeDocumentTags(input: string[] | string): string[] {
   return normalized.sort((a, b) => a.localeCompare(b, "he"));
 }
 
+export function normalizePredefinedDocumentTags(input: string[]): string[] {
+  return normalizeDocumentTags(input).filter(isPredefinedDocumentTag);
+}
+
 export function parseDocumentTagsInput(input: string): string[] {
   return normalizeDocumentTags(input);
+}
+
+export function getDocumentFilterTagOptions(
+  documents: DocumentRecord[]
+): string[] {
+  const legacy = new Set<string>();
+  for (const document of documents) {
+    for (const tag of document.tags) {
+      if (!isPredefinedDocumentTag(tag)) {
+        legacy.add(tag);
+      }
+    }
+  }
+  const legacySorted = Array.from(legacy).sort((a, b) =>
+    a.localeCompare(b, "he")
+  );
+  return [...DOCUMENT_PREDEFINED_TAGS, ...legacySorted];
 }
 
 export function formatDocumentTags(tags: string[]): string {
