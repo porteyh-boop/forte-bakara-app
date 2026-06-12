@@ -15,6 +15,7 @@ import {
   deleteDocument,
   getDocumentById,
   buildDocumentStoragePath,
+  DOCUMENT_TAG_INSPECTOR_REPORT,
   resolveDocumentContentType,
   uploadDocumentCenterFile,
 } from "./document-center";
@@ -579,7 +580,7 @@ export async function createInspectorReport(
     storagePath: input.storagePath,
     mimeType: input.mimeType,
     fileSizeBytes: input.fileSizeBytes,
-    tags: ["תסקיר בודק"],
+    tags: [DOCUMENT_TAG_INSPECTOR_REPORT],
   });
 
   if (!document) {

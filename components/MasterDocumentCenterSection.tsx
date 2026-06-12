@@ -6,14 +6,16 @@ import {
   createDocument,
   deleteDocument,
   deleteDocumentCenterStorageFile,
+  DOCUMENT_PREDEFINED_TAGS,
   DOCUMENT_TYPES,
   filterDocuments,
   formatDocumentDate,
   formatDocumentTags,
   getAllDocuments,
+  getDocumentLegacyFilterTags,
   getDocumentTypeLabel,
   isDocumentCenterConfigured,
-  parseDocumentTagsInput,
+  normalizePredefinedDocumentTags,
   uploadDocumentCenterFile,
   validateDocumentCenterFile,
   validateCreateDocumentInput,
@@ -57,7 +59,7 @@ export default function MasterDocumentCenterSection() {
   const [documentType, setDocumentType] = useState<DocumentTypeId>("other");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [tagsInput, setTagsInput] = useState("");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [inspectorMetaByDocumentId, setInspectorMetaByDocumentId] = useState<
@@ -134,6 +136,11 @@ export default function MasterDocumentCenterSection() {
     void refresh();
   }, [refresh]);
 
+  const legacyFilterTags = useMemo(
+    () => getDocumentLegacyFilterTags(documents),
+    [documents]
+  );
+
   const availableTags = useMemo(
     () => collectDocumentTags(documents),
     [documents]
@@ -208,7 +215,7 @@ export default function MasterDocumentCenterSection() {
 
       setTitle("");
       setDescription("");
-      setTagsInput("");
+      setSelectedTags([]);
       setElevatorId("");
       setInspectorName("");
       setHasRemarks(false);
@@ -259,7 +266,7 @@ export default function MasterDocumentCenterSection() {
       storagePath: uploaded.storagePath,
       mimeType: uploaded.contentType,
       fileSizeBytes: selectedFile.size,
-      tags: parseDocumentTagsInput(tagsInput),
+      tags: normalizePredefinedDocumentTags(selectedTags),
     };
 
     const validationError = validateCreateDocumentInput(input);
@@ -287,7 +294,7 @@ export default function MasterDocumentCenterSection() {
 
     setTitle("");
     setDescription("");
-    setTagsInput("");
+    setSelectedTags([]);
     setElevatorId("");
     setSelectedFile(null);
     setDocumentType("other");
@@ -416,13 +423,32 @@ export default function MasterDocumentCenterSection() {
             />
           </div>
           <div className="sm:col-span-2">
-            <label className="text-xs text-gray-text">תגיות (מופרדות בפסיק)</label>
-            <input
-              value={tagsInput}
-              onChange={(e) => setTagsInput(e.target.value)}
-              className="form-input mt-1"
-              placeholder="בודק, שנתי, דחוף"
-            />
+            <label className="text-xs text-gray-text">תגיות</label>
+            <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+              {DOCUMENT_PREDEFINED_TAGS.map((tag) => {
+                const checked = selectedTags.includes(tag);
+                return (
+                  <label
+                    key={tag}
+                    className="flex items-center gap-2 text-xs text-navy cursor-pointer rounded-lg border border-gray-100 px-2 py-1.5 hover:bg-gray-50"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => {
+                        setSelectedTags((current) =>
+                          checked
+                            ? current.filter((value) => value !== tag)
+                            : normalizePredefinedDocumentTags([...current, tag])
+                        );
+                      }}
+                      className="rounded border-gray-300 text-navy focus:ring-navy/30"
+                    />
+                    <span>{tag}</span>
+                  </label>
+                );
+              })}
+            </div>
           </div>
           <div className="sm:col-span-2">
             <label className="text-xs text-gray-text">קובץ</label>
@@ -528,9 +554,14 @@ export default function MasterDocumentCenterSection() {
             className="form-input"
           >
             <option value="">כל התגיות</option>
-            {availableTags.map((tag) => (
+            {DOCUMENT_PREDEFINED_TAGS.map((tag) => (
               <option key={tag} value={tag}>
                 {tag}
+              </option>
+            ))}
+            {legacyFilterTags.map((tag) => (
+              <option key={`legacy-${tag}`} value={tag}>
+                {tag} (ישן)
               </option>
             ))}
           </select>

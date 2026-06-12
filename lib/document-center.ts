@@ -56,7 +56,7 @@ export const DOCUMENT_PREDEFINED_TAGS = [
   "אישור מכון התקנים",
   "בטיחות",
   "שדרוג / מודרניזציה",
-  "התכתבות",
+  "התכתבויות",
   "תיק מתקן",
   "תמונות",
   "חוות דעת",
@@ -329,21 +329,50 @@ export function parseDocumentTagsInput(input: string): string[] {
   return normalizeDocumentTags(input);
 }
 
-export function getDocumentFilterTagOptions(
+/** תגיות ישנות שמסוננות יחד עם התגית הקבועה המקבילה */
+export const DOCUMENT_TAG_FILTER_EQUIVALENTS: Partial<
+  Record<DocumentPredefinedTag, readonly string[]>
+> = {
+  התכתבויות: ["התכתבות", "התכתבויות"],
+};
+
+export function getDocumentTagFilterMatches(filterTag: string): string[] {
+  if (isPredefinedDocumentTag(filterTag)) {
+    const equivalents = DOCUMENT_TAG_FILTER_EQUIVALENTS[filterTag];
+    return equivalents ? [...equivalents] : [filterTag];
+  }
+  return [filterTag];
+}
+
+export function documentHasTagFilter(
+  documentTags: string[],
+  filterTag: string
+): boolean {
+  const matches = getDocumentTagFilterMatches(filterTag);
+  return matches.some((tag) => documentTags.includes(tag));
+}
+
+export function getDocumentLegacyFilterTags(
   documents: DocumentRecord[]
 ): string[] {
+  const predefined = new Set<string>(DOCUMENT_PREDEFINED_TAGS);
   const legacy = new Set<string>();
+
   for (const document of documents) {
     for (const tag of document.tags) {
-      if (!isPredefinedDocumentTag(tag)) {
-        legacy.add(tag);
-      }
+      if (predefined.has(tag)) continue;
+      if (isPredefinedDocumentTag(tag)) continue;
+      legacy.add(tag);
     }
   }
-  const legacySorted = Array.from(legacy).sort((a, b) =>
-    a.localeCompare(b, "he")
-  );
-  return [...DOCUMENT_PREDEFINED_TAGS, ...legacySorted];
+
+  return Array.from(legacy).sort((a, b) => a.localeCompare(b, "he"));
+}
+
+export function getDocumentFilterTagOptions(
+  documents: DocumentRecord[] = []
+): string[] {
+  return [...DOCUMENT_PREDEFINED_TAGS, ...getDocumentLegacyFilterTags(documents)];
 }
 
 export function formatDocumentTags(tags: string[]): string {
@@ -678,7 +707,9 @@ export function filterDocuments(
       return false;
     }
     if (tagFilters.length > 0) {
-      const hasAllTags = tagFilters.every((tag) => document.tags.includes(tag));
+      const hasAllTags = tagFilters.every((tag) =>
+        documentHasTagFilter(document.tags, tag)
+      );
       if (!hasAllTags) return false;
     }
     if (!query) return true;

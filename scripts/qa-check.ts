@@ -143,7 +143,10 @@ import {
   filterDocuments,
   formatDocumentTags,
   getDocumentFilterTagOptions,
+  getDocumentLegacyFilterTags,
+  getDocumentTagFilterMatches,
   getDocumentTypeLabel,
+  documentHasTagFilter,
   isDocumentReadyForAi,
   isDocumentReadyForOcr,
   isPredefinedDocumentTag,
@@ -3113,6 +3116,7 @@ assert(
     documentCenterLib.includes("filterDocuments") &&
     documentCenterLib.includes("DOCUMENT_PREDEFINED_TAGS") &&
     documentCenterLib.includes("getDocumentFilterTagOptions") &&
+    documentCenterLib.includes("getDocumentLegacyFilterTags") &&
     documentCenterLib.includes("resolveDocumentContentType") &&
     documentCenterLib.includes("buildDocumentInsertRow") &&
     documentCenterLib.includes("isDocumentReadyForOcr") &&
@@ -3154,6 +3158,7 @@ assert(
   DOCUMENT_PREDEFINED_TAGS.length === 22 &&
     DOCUMENT_PREDEFINED_TAGS[0] === "תסקיר בודק" &&
     DOCUMENT_PREDEFINED_TAGS.includes("שדרוג / מודרניזציה") &&
+    DOCUMENT_PREDEFINED_TAGS.includes("התכתבויות") &&
     isPredefinedDocumentTag("חשבונית") &&
     !isPredefinedDocumentTag("בודק"),
   "Document Center: תגיות קבועות"
@@ -3164,12 +3169,29 @@ assert(
   "Document Center: נרמול תגיות קבועות בלבד"
 );
 assert(
-  getDocumentFilterTagOptions([sampleDocument]).includes("בודק") &&
+  getDocumentFilterTagOptions([]).length === DOCUMENT_PREDEFINED_TAGS.length &&
+    getDocumentFilterTagOptions([]).every((tag) =>
+      isPredefinedDocumentTag(tag)
+    ) &&
+    getDocumentFilterTagOptions([sampleDocument]).includes("בודק") &&
     getDocumentFilterTagOptions([sampleDocument]).includes("תסקיר בודק") &&
     getDocumentFilterTagOptions([
       { ...sampleDocument, tags: ["תסקיר בודק"] },
-    ]).length === DOCUMENT_PREDEFINED_TAGS.length,
+    ]).length === DOCUMENT_PREDEFINED_TAGS.length &&
+    getDocumentLegacyFilterTags([sampleDocument]).join(",") === "בודק,שנתי" &&
+    getDocumentLegacyFilterTags([
+      { ...sampleDocument, tags: ["התכתבות"] },
+    ]).join(",") === "התכתבות",
   "Document Center: אפשרויות סינון תגיות"
+);
+assert(
+  getDocumentTagFilterMatches("התכתבויות").includes("התכתבות") &&
+    documentHasTagFilter(["התכתבות"], "התכתבויות") &&
+    filterDocuments(
+      [{ ...sampleDocument, tags: ["התכתבות"] }],
+      { tags: ["התכתבויות"] }
+    ).length === 1,
+  "Document Center: סינון תגית התכתבויות + תאימות ישנה"
 );
 assert(
   filterDocuments([sampleDocument], { query: "שנתי" }).length === 1 &&
@@ -3359,7 +3381,7 @@ assert(
     documentCenterSectionSource.includes("בחר קובץ") &&
     documentCenterSectionSource.includes("חיפוש") &&
     documentCenterSectionSource.includes("DOCUMENT_PREDEFINED_TAGS") &&
-    documentCenterSectionSource.includes("getDocumentFilterTagOptions") &&
+    documentCenterSectionSource.includes("getDocumentLegacyFilterTags") &&
     documentCenterSectionSource.includes("פתח מסמך"),
   "Document Center: Master UI — העלאה, חיפוש ופתיחה"
 );
