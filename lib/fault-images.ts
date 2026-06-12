@@ -200,3 +200,19 @@ export async function downloadFaultReportImage(
   anchor.click();
   URL.revokeObjectURL(objectUrl);
 }
+
+export function isFaultImageLightboxCloseKey(key: string): boolean {
+  return key === "Escape";
+}
+
+export function restoreFaultImageLightboxScroll(scrollY: number): void {
+  if (typeof window === "undefined") return;
+  window.scrollTo(0, scrollY);
+}
+
+export function shouldCloseFaultImageLightboxOnBackdrop(
+  target: EventTarget | null,
+  backdropElement: Element | null
+): boolean {
+  return Boolean(backdropElement && target === backdropElement);
+}

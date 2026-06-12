@@ -5,12 +5,16 @@ import {
   useEffect,
   useRef,
   useState,
+  type MouseEvent as ReactMouseEvent,
   type TouchEvent as ReactTouchEvent,
   type WheelEvent as ReactWheelEvent,
 } from "react";
 import {
   clampFaultImageZoom,
   downloadFaultReportImage,
+  isFaultImageLightboxCloseKey,
+  restoreFaultImageLightboxScroll,
+  shouldCloseFaultImageLightboxOnBackdrop,
   type FaultReportImage,
 } from "@/lib/fault-images";
 
@@ -41,7 +45,8 @@ export default function FaultImageLightbox({
   const [downloading, setDownloading] = useState(false);
   const dragStart = useRef({ x: 0, y: 0, offsetX: 0, offsetY: 0 });
   const pinchStart = useRef<{ distance: number; scale: number } | null>(null);
-  const viewportRef = useRef<HTMLDivElement>(null);
+  const backdropRef = useRef<HTMLButtonElement>(null);
+  const scrollYRef = useRef(0);
 
   const current = images[index];
 
@@ -49,6 +54,19 @@ export default function FaultImageLightbox({
     setScale(1);
     setOffset({ x: 0, y: 0 });
   }, []);
+
+  const handleClose = useCallback(() => {
+    onClose();
+  }, [onClose]);
+
+  const handleBackdropClose = useCallback(
+    (event: ReactMouseEvent<HTMLButtonElement>) => {
+      if (shouldCloseFaultImageLightboxOnBackdrop(event.target, backdropRef.current)) {
+        handleClose();
+      }
+    },
+    [handleClose]
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -58,11 +76,17 @@ export default function FaultImageLightbox({
 
   useEffect(() => {
     if (!open) return;
+
+    scrollYRef.current = window.scrollY;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
+      if (isFaultImageLightboxCloseKey(event.key)) {
+        event.preventDefault();
+        handleClose();
+        return;
+      }
       if (event.key === "ArrowRight") {
         setIndex((value) => (value + 1) % images.length);
         resetView();
@@ -77,8 +101,9 @@ export default function FaultImageLightbox({
     return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", onKeyDown);
+      restoreFaultImageLightboxScroll(scrollYRef.current);
     };
-  }, [open, images.length, onClose, resetView]);
+  }, [open, images.length, handleClose, resetView]);
 
   function goNext() {
     if (images.length <= 1) return;
@@ -164,110 +189,151 @@ export default function FaultImageLightbox({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex flex-col bg-black/90"
+      className="fixed inset-0 z-[100]"
       role="dialog"
       aria-modal="true"
       aria-label="תצוגת תמונה מלאה"
     >
-      <div className="flex items-center justify-between gap-2 px-3 py-2 text-white shrink-0">
-        <p className="text-xs sm:text-sm truncate">
-          {current.name}
-          {images.length > 1 && (
-            <span className="mr-2 text-white/70">
-              ({index + 1}/{images.length})
+      <button
+        ref={backdropRef}
+        type="button"
+        tabIndex={-1}
+        aria-label="סגירת תצוגת תמונה"
+        className="absolute inset-0 bg-black/90"
+        onClick={handleBackdropClose}
+      />
+
+      <button
+        type="button"
+        onClick={handleClose}
+        className="absolute top-3 end-3 z-[110] flex h-12 w-12 items-center justify-center rounded-full border-2 border-white/40 bg-black/60 text-2xl font-bold leading-none text-white shadow-lg hover:bg-black/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+        aria-label="סגירה"
+      >
+        ✕
+      </button>
+
+      <div className="relative z-[105] flex h-full flex-col pointer-events-none">
+        <div
+          className="pointer-events-auto flex items-center justify-between gap-2 px-3 py-2 pt-16 text-white shrink-0 sm:pt-2"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <p className="text-xs sm:text-sm truncate">
+            {current.name}
+            {images.length > 1 && (
+              <span className="mr-2 text-white/70">
+                ({index + 1}/{images.length})
+              </span>
+            )}
+          </p>
+          <div className="hidden sm:flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={() => setScale((value) => clampFaultImageZoom(value - 0.25))}
+              className="rounded-lg border border-white/20 px-2.5 py-1.5 text-xs font-semibold hover:bg-white/10"
+              aria-label="הקטנת תמונה"
+            >
+              −
+            </button>
+            <span className="text-xs tabular-nums w-10 text-center">
+              {Math.round(scale * 100)}%
             </span>
+            <button
+              type="button"
+              onClick={() => setScale((value) => clampFaultImageZoom(value + 0.25))}
+              className="rounded-lg border border-white/20 px-2.5 py-1.5 text-xs font-semibold hover:bg-white/10"
+              aria-label="הגדלת תמונה"
+            >
+              +
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleDownload()}
+              disabled={downloading}
+              className="rounded-lg border border-white/20 px-2.5 py-1.5 text-xs font-semibold hover:bg-white/10 disabled:opacity-50"
+            >
+              {downloading ? "מוריד..." : "הורד תמונה"}
+            </button>
+            <button
+              type="button"
+              onClick={handleClose}
+              className="rounded-lg border border-white/20 px-2.5 py-1.5 text-xs font-semibold hover:bg-white/10"
+            >
+              סגור
+            </button>
+          </div>
+        </div>
+
+        <div className="relative flex-1 min-h-0 overflow-hidden touch-none pointer-events-auto">
+          {images.length > 1 && (
+            <>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  goPrev();
+                }}
+                className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/50 text-white w-10 h-10 text-lg hover:bg-black/70"
+                aria-label="תמונה קודמת"
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  goNext();
+                }}
+                className="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/50 text-white w-10 h-10 text-lg hover:bg-black/70"
+                aria-label="תמונה הבאה"
+              >
+                ›
+              </button>
+            </>
           )}
-        </p>
-        <div className="flex items-center gap-1 shrink-0">
-          <button
-            type="button"
-            onClick={() => setScale((value) => clampFaultImageZoom(value - 0.25))}
-            className="rounded-lg border border-white/20 px-2.5 py-1.5 text-xs font-semibold hover:bg-white/10"
-            aria-label="הקטנת תמונה"
+
+          <div
+            className="absolute inset-0 flex items-center justify-center p-4"
+            onClick={handleClose}
+            onWheel={handleWheel}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            onTouchCancel={handleTouchEnd}
           >
-            −
-          </button>
-          <span className="text-xs tabular-nums w-10 text-center">
-            {Math.round(scale * 100)}%
-          </span>
+            <div
+              className={`max-h-full max-w-full ${
+                scale > 1 ? (dragging ? "cursor-grabbing" : "cursor-grab") : ""
+              }`}
+              onClick={(event) => event.stopPropagation()}
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerUp}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                key={current.src}
+                src={current.src}
+                alt={current.name}
+                draggable={false}
+                className="max-h-[calc(100vh-10rem)] max-w-full object-contain select-none sm:max-h-[calc(100vh-6rem)]"
+                style={{
+                  transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
+                  transformOrigin: "center center",
+                }}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="pointer-events-auto sm:hidden border-t border-white/15 bg-black/70 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <button
             type="button"
-            onClick={() => setScale((value) => clampFaultImageZoom(value + 0.25))}
-            className="rounded-lg border border-white/20 px-2.5 py-1.5 text-xs font-semibold hover:bg-white/10"
-            aria-label="הגדלת תמונה"
-          >
-            +
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleDownload()}
-            disabled={downloading}
-            className="rounded-lg border border-white/20 px-2.5 py-1.5 text-xs font-semibold hover:bg-white/10 disabled:opacity-50"
-          >
-            {downloading ? "מוריד..." : "הורד תמונה"}
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-white/20 px-2.5 py-1.5 text-xs font-semibold hover:bg-white/10"
-            aria-label="סגירה"
+            onClick={handleClose}
+            className="w-full rounded-xl bg-white text-navy py-4 text-base font-bold shadow-lg hover:bg-gray-100"
           >
             סגור
           </button>
-        </div>
-      </div>
-
-      <div
-        ref={viewportRef}
-        className="relative flex-1 min-h-0 overflow-hidden touch-none"
-        onWheel={handleWheel}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        onTouchCancel={handleTouchEnd}
-      >
-        {images.length > 1 && (
-          <>
-            <button
-              type="button"
-              onClick={goPrev}
-              className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/50 text-white w-10 h-10 text-lg hover:bg-black/70"
-              aria-label="תמונה קודמת"
-            >
-              ‹
-            </button>
-            <button
-              type="button"
-              onClick={goNext}
-              className="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/50 text-white w-10 h-10 text-lg hover:bg-black/70"
-              aria-label="תמונה הבאה"
-            >
-              ›
-            </button>
-          </>
-        )}
-
-        <div
-          className={`absolute inset-0 flex items-center justify-center p-4 ${
-            scale > 1 ? (dragging ? "cursor-grabbing" : "cursor-grab") : ""
-          }`}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerCancel={handlePointerUp}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            key={current.src}
-            src={current.src}
-            alt={current.name}
-            draggable={false}
-            className="max-h-full max-w-full object-contain select-none"
-            style={{
-              transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
-              transformOrigin: "center center",
-            }}
-          />
         </div>
       </div>
     </div>

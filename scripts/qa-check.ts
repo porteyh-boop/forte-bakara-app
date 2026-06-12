@@ -132,9 +132,12 @@ import {
 } from "../lib/client-access";
 import {
   clampFaultImageZoom,
+  isFaultImageLightboxCloseKey,
   isRemoteFaultImageSrc,
+  restoreFaultImageLightboxScroll,
   resolveFaultReportImages,
   resolveFaultReportImagesFromCloud,
+  shouldCloseFaultImageLightboxOnBackdrop,
 } from "../lib/fault-images";
 import {
   buildDocumentInsertRow,
@@ -904,11 +907,25 @@ const masterCloudFaultCardSource = fs.readFileSync(
 assert(
   faultImagesLib.includes("resolveFaultReportImages") &&
     faultImagesLib.includes("image_url") &&
+    faultImagesLib.includes("isFaultImageLightboxCloseKey") &&
+    faultImagesLib.includes("restoreFaultImageLightboxScroll") &&
+    faultImagesLib.includes("shouldCloseFaultImageLightboxOnBackdrop") &&
     faultImageLightboxSource.includes("export default function FaultImageLightbox") &&
     faultImageLightboxSource.includes("onTouchMove") &&
     faultImageLightboxSource.includes("onWheel") &&
     faultImageLightboxSource.includes("הורד תמונה"),
   "תמונה: lib תצוגה מלאה + zoom"
+);
+assert(
+  isFaultImageLightboxCloseKey("Escape") &&
+    !isFaultImageLightboxCloseKey("Enter") &&
+    shouldCloseFaultImageLightboxOnBackdrop(null, null) === false &&
+    faultImageLightboxSource.includes("handleClose") &&
+    faultImageLightboxSource.includes("handleBackdropClose") &&
+    faultImageLightboxSource.includes("✕") &&
+    faultImageLightboxSource.includes("restoreFaultImageLightboxScroll") &&
+    faultImageLightboxSource.includes("isFaultImageLightboxCloseKey"),
+  "תמונה: סגירת lightbox — כפתור, רקע ו-ESC"
 );
 assert(
   masterCloudFaultCardSource.includes("פתח תמונה") &&
