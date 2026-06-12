@@ -22,6 +22,11 @@ import {
   type DocumentTypeId,
 } from "@/lib/document-center";
 import { listAllDocumentInspectorMeta } from "@/lib/document-inspector-meta";
+import {
+  groupNotificationsByDocumentId,
+  listAllDocumentInspectorNotifications,
+  type DocumentInspectorNotificationRecord,
+} from "@/lib/document-inspector-notifications";
 import { createInspectorReportWithFile } from "@/lib/inspector-report-tracking";
 import {
   InspectorCreateFields,
@@ -59,6 +64,8 @@ export default function MasterDocumentCenterSection() {
   const [inspectorMetaByDocumentId, setInspectorMetaByDocumentId] = useState<
     Record<string, DocumentInspectorMetaRecord>
   >({});
+  const [inspectorNotificationsByDocumentId, setInspectorNotificationsByDocumentId] =
+    useState<Record<string, DocumentInspectorNotificationRecord[]>>({});
   const [reportDate, setReportDate] = useState(
     () => new Date().toISOString().split("T")[0]
   );
@@ -103,14 +110,19 @@ export default function MasterDocumentCenterSection() {
       return { documents: [], error: null };
     }
     setLoading(true);
-    const [{ documents: rows, error }, metaRows] = await Promise.all([
-      getAllDocuments(),
-      listAllDocumentInspectorMeta(),
-    ]);
+    const [{ documents: rows, error }, metaRows, notificationRows] =
+      await Promise.all([
+        getAllDocuments(),
+        listAllDocumentInspectorMeta(),
+        listAllDocumentInspectorNotifications(),
+      ]);
     setDocuments(rows);
     setListError(error);
     setInspectorMetaByDocumentId(
       Object.fromEntries(metaRows.map((meta) => [meta.document_id, meta]))
+    );
+    setInspectorNotificationsByDocumentId(
+      groupNotificationsByDocumentId(notificationRows)
     );
     if (error) {
       console.error("[document-center] refresh failed:", error);
@@ -613,6 +625,9 @@ export default function MasterDocumentCenterSection() {
                   <InspectorDocumentCard
                     document={document}
                     meta={inspectorMeta}
+                    notifications={
+                      inspectorNotificationsByDocumentId[document.id] ?? []
+                    }
                     buildingName={resolveBuildingName(document.building_id)}
                     actionId={actionId}
                     onClosed={(msg) => {

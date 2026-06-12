@@ -155,11 +155,19 @@ import {
   DOCUMENT_INSPECTOR_META_TABLE,
 } from "../lib/document-inspector-meta";
 import {
-  buildInspectorClosureEmailPayload,
-  buildInspectorClosureEmailSubject,
-  buildInspectorClosureEmailText,
+  DOCUMENT_INSPECTOR_NOTIFICATIONS_TABLE,
+  getInspectorNotificationSentLabel,
+  type InspectorNotificationType,
+} from "../lib/document-inspector-notifications";
+import {
+  buildInspectorNotificationEmailText,
+  buildInspectorNotificationSubject,
   INSPECTOR_NOTIFY_EMAIL,
-} from "../lib/inspector-closure-email";
+} from "../lib/inspector-notification-email";
+import {
+  pickInspectorNotificationToSend,
+  resolveInspectorNotificationType,
+} from "../lib/inspector-daily-notifications";
 import {
   buildInspectorReportPublicUrl,
   buildInspectorReportStoragePath,
@@ -2949,9 +2957,11 @@ assert(
     inspectorLib.includes('source: "document"') &&
     inspectorLib.includes('source: "legacy"') &&
     inspectorLib.includes("closeInspectorReportByDocumentId") &&
+    !inspectorLib.includes("notifyInspectorClosureByReport") &&
+    !inspectorLib.includes("sendInspectorClosureNotification") &&
     !inspectorLib.includes("openai") &&
     !inspectorLib.includes("ocr"),
-  "תסקיר בודק: adapter documents+meta, legacy נשמר, ללא AI/OCR"
+  "תסקיר בודק: adapter documents+meta, ללא מייל סגירה, ללא AI/OCR"
 );
 
 const inspectorFileMigration = path.join(
@@ -3355,65 +3365,144 @@ assert(
   inspectorPanelSource.includes("InspectorCreateFields") &&
     inspectorPanelSource.includes("InspectorDocumentCard") &&
     inspectorPanelSource.includes("סגור מעקב לאחר טיפול") &&
-    inspectorPanelSource.includes("closeInspectorReportByDocumentId"),
-  "תסקיר בודק: פאנל יצירה/מעקב במאגר מסמכים"
+    inspectorPanelSource.includes("closeInspectorReportByDocumentId") &&
+    inspectorPanelSource.includes("getInspectorNotificationSentLabel") &&
+    inspectorPanelSource.includes("formatNotificationSentAt") &&
+    inspectorPanelSource.includes("NOTIFICATION_DISPLAY_ORDER"),
+  "תסקיר בודק: פאנל יצירה/מעקב/התראות במאגר מסמכים"
 );
 assert(
   documentCenterSectionSource.includes("MasterDocumentInspectorPanel") &&
     documentCenterSectionSource.includes("createInspectorReportWithFile") &&
     documentCenterSectionSource.includes("listAllDocumentInspectorMeta") &&
+    documentCenterSectionSource.includes("listAllDocumentInspectorNotifications") &&
     documentCenterSectionSource.includes("inspector_report"),
-  "Document Center: אינטגרציית תסקיר בודק"
+  "Document Center: אינטגרציית תסקיר בודק + התראות"
 );
 
-const inspectorClosureEmailLib = fs.readFileSync(
-  path.join(process.cwd(), "lib/inspector-closure-email.ts"),
+const documentInspectorNotificationsMigration = path.join(
+  process.cwd(),
+  "supabase/migrations/012_document_inspector_notifications.sql"
+);
+assert(
+  fs.existsSync(documentInspectorNotificationsMigration),
+  "תסקיר בודק: migration 012 קיים"
+);
+const documentInspectorNotificationsMigrationSql = fs.readFileSync(
+  documentInspectorNotificationsMigration,
   "utf8"
 );
 assert(
-  inspectorClosureEmailLib.includes(INSPECTOR_NOTIFY_EMAIL) &&
-    inspectorClosureEmailLib.includes("buildInspectorClosureEmailSubject") &&
-    inspectorClosureEmailLib.includes("/api/master/inspector-closure-notify") &&
-    !inspectorClosureEmailLib.includes("RESEND_API_KEY"),
-  "תסקיר בודק: מייל סגירה — client fetch בלבד, ללא מפתח ב-client"
+  documentInspectorNotificationsMigrationSql.includes(
+    "document_inspector_notifications"
+  ) &&
+    documentInspectorNotificationsMigrationSql.includes("day_35") &&
+    documentInspectorNotificationsMigrationSql.includes("day_40") &&
+    documentInspectorNotificationsMigrationSql.includes("day_45_plus") &&
+    documentInspectorNotificationsMigrationSql.includes("unique (document_id, notification_type)") &&
+    !documentInspectorNotificationsMigrationSql.toLowerCase().includes("drop table"),
+  "תסקיר בודק: migration 012 — מעקב התראות, ללא DROP"
 );
 
-const closurePayload = buildInspectorClosureEmailPayload({
-  report: {
-    ...baseInspectorReport,
-    document_id: "doc-1",
-    source: "document",
-  },
+const documentInspectorNotificationsLib = fs.readFileSync(
+  path.join(process.cwd(), "lib/document-inspector-notifications.ts"),
+  "utf8"
+);
+assert(
+  documentInspectorNotificationsLib.includes("recordNotificationSent") &&
+    documentInspectorNotificationsLib.includes(
+      DOCUMENT_INSPECTOR_NOTIFICATIONS_TABLE
+    ) &&
+    documentInspectorNotificationsLib.includes("getInspectorNotificationSentLabel"),
+  "תסקיר בודק: lib document-inspector-notifications"
+);
+
+assert(
+  resolveInspectorNotificationType(34) === null &&
+    resolveInspectorNotificationType(35) === "day_35" &&
+    resolveInspectorNotificationType(39) === "day_35" &&
+    resolveInspectorNotificationType(40) === "day_40" &&
+    resolveInspectorNotificationType(44) === "day_40" &&
+    resolveInspectorNotificationType(45) === "day_45_plus" &&
+    resolveInspectorNotificationType(60) === "day_45_plus",
+  "תסקיר בודק: שלב התראה לפי ימים + catch-up"
+);
+
+assert(
+  pickInspectorNotificationToSend(50, new Set(["day_35", "day_40"])) ===
+    "day_45_plus" &&
+    pickInspectorNotificationToSend(50, new Set(["day_45_plus"])) === null &&
+    pickInspectorNotificationToSend(42, new Set()) === "day_40" &&
+    pickInspectorNotificationToSend(37, new Set()) === "day_35",
+  "תסקיר בודק: בחירת התראה יחידה — ללא הצפה"
+);
+
+const notificationPayloadText = buildInspectorNotificationEmailText({
   buildingName: "מגדל דוד 25",
   elevatorLabel: "ימין",
+  reportDate: "1 בינו׳ 2026",
+  inspectorName: "בודק",
+  daysSinceReport: 40,
+  statusLabel: "התראה — יום 40",
   documentUrl: "https://example.com/report.pdf",
-  dossierUrl: "https://example.com/master/elevator/md25/right",
-  closureNotes: "טופל",
 });
 assert(
-  buildInspectorClosureEmailSubject() ===
-    "עודכן תיעוד ביצוע הערות בודק מוסמך" &&
-    buildInspectorClosureEmailText(closurePayload).includes("מגדל דוד 25") &&
-    buildInspectorClosureEmailText(closurePayload).includes("טופל") &&
-    INSPECTOR_NOTIFY_EMAIL === "lifts.forte@gmail.com",
-  "תסקיר בודק: תוכן מייל סגירה"
+  buildInspectorNotificationSubject("day_35") ===
+    "תסקיר בודק מתקרב למועד היעד" &&
+    buildInspectorNotificationSubject("day_40") ===
+      "נותרו 5 ימים לסגירת הערות בודק" &&
+    buildInspectorNotificationSubject("day_45_plus") ===
+      "חריגה ממועד טיפול בתסקיר בודק" &&
+    notificationPayloadText.includes("מגדל דוד 25") &&
+    notificationPayloadText.includes("40") &&
+    INSPECTOR_NOTIFY_EMAIL === "lifts.forte@gmail.com" &&
+    getInspectorNotificationSentLabel("day_35") === "נשלחה התראת 35" &&
+    getInspectorNotificationSentLabel("day_40") === "נשלחה התראת 40" &&
+    getInspectorNotificationSentLabel("day_45_plus") === "נשלחה התראת חריגה",
+  "תסקיר בודק: תוכן מייל התראות"
 );
 
-const inspectorClosureApiPath = path.join(
+const inspectorDailyNotificationsLib = fs.readFileSync(
+  path.join(process.cwd(), "lib/inspector-daily-notifications.ts"),
+  "utf8"
+);
+assert(
+  inspectorDailyNotificationsLib.includes("runInspectorDailyNotifications") &&
+    inspectorDailyNotificationsLib.includes("listAllDocumentInspectorMeta") &&
+    !inspectorDailyNotificationsLib.includes("inspector_reports"),
+  "תסקיר בודק: job יומי — documents+meta בלבד"
+);
+
+const inspectorCronApiPath = path.join(
   process.cwd(),
-  "app/api/master/inspector-closure-notify/route.ts"
+  "app/api/cron/inspector-daily-notifications/route.ts"
 );
 assert(
-  fs.existsSync(inspectorClosureApiPath),
-  "תסקיר בודק: API route לשליחת מייל"
+  fs.existsSync(inspectorCronApiPath),
+  "תסקיר בודק: cron API route קיים"
 );
-const inspectorClosureApiSource = fs.readFileSync(inspectorClosureApiPath, "utf8");
+const inspectorCronApiSource = fs.readFileSync(inspectorCronApiPath, "utf8");
 assert(
-  inspectorClosureApiSource.includes("Resend") &&
-    inspectorClosureApiSource.includes("RESEND_API_KEY") &&
-    inspectorClosureApiSource.includes("INSPECTOR_NOTIFY_EMAIL") &&
-    inspectorClosureApiSource.includes("x-master-code"),
-  "תסקיר בודק: API route — Resend + auth + כתובת יעד"
+  inspectorCronApiSource.includes("runInspectorDailyNotifications") &&
+    inspectorCronApiSource.includes("CRON_SECRET") &&
+    inspectorCronApiSource.includes("authorization"),
+  "תסקיר בודק: cron route — auth + job"
+);
+
+const vercelConfigPath = path.join(process.cwd(), "vercel.json");
+assert(fs.existsSync(vercelConfigPath), "תסקיר בודק: vercel.json קיים");
+const vercelConfig = fs.readFileSync(vercelConfigPath, "utf8");
+assert(
+  vercelConfig.includes("/api/cron/inspector-daily-notifications") &&
+    vercelConfig.includes("0 5 * * *"),
+  "תסקיר בודק: vercel cron יומי 05:00 UTC"
+);
+
+assert(
+  !fs.existsSync(
+    path.join(process.cwd(), "app/api/master/inspector-closure-notify/route.ts")
+  ),
+  "תסקיר בודק: route מייל סגירה הוסר"
 );
 
 const masterAssessmentUi = fs.readFileSync(

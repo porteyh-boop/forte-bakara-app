@@ -18,11 +18,6 @@ import {
   uploadDocumentCenterFile,
 } from "./document-center";
 import type { DocumentRecord } from "./document-center";
-import {
-  buildInspectorClosureEmailPayload,
-  sendInspectorClosureNotification,
-} from "./inspector-closure-email";
-import { buildMasterElevatorDossierPath } from "./master-elevator-routes";
 
 export const INSPECTOR_REPORTS_TABLE = "inspector_reports";
 export const INSPECTOR_REPORTS_BUCKET = "inspector-reports";
@@ -137,30 +132,6 @@ function mapDocumentInspectorToReport(
     closure_notes: meta.closure_notes,
     created_at: document.created_at,
   };
-}
-
-async function notifyInspectorClosureByReport(
-  report: InspectorReportRecord,
-  closureNotes?: string,
-  buildingName?: string,
-  elevatorLabel?: string
-): Promise<void> {
-  const payload = buildInspectorClosureEmailPayload({
-    report,
-    buildingName: buildingName ?? report.building_id,
-    elevatorLabel: elevatorLabel ?? report.elevator_id ?? "—",
-    documentUrl: getInspectorReportDocumentUrl(report),
-    dossierUrl:
-      report.building_id && report.elevator_id
-        ? buildMasterElevatorDossierPath(report.building_id, report.elevator_id)
-        : "—",
-    closureNotes,
-  });
-
-  const result = await sendInspectorClosureNotification(payload);
-  if (!result.ok) {
-    console.warn("[inspector-report] closure email failed:", result.error);
-  }
 }
 
 function mapInspectorReportRow(row: Record<string, unknown>): Omit<
@@ -724,12 +695,6 @@ export async function closeInspectorReport(
     if (!document) return null;
 
     const closedReport = mapDocumentInspectorToReport(document, meta);
-    await notifyInspectorClosureByReport(
-      closedReport,
-      input.closureNotes,
-      context?.buildingName,
-      context?.elevatorLabel
-    );
     return closedReport;
   }
 
@@ -750,12 +715,6 @@ export async function closeInspectorReport(
   }
 
   const closedReport = mapLegacyInspectorReportRow(data);
-  await notifyInspectorClosureByReport(
-    closedReport,
-    input.closureNotes,
-    context?.buildingName,
-    context?.elevatorLabel
-  );
   return closedReport;
 }
 

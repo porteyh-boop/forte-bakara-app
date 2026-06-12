@@ -14,6 +14,18 @@ import {
 } from "@/lib/inspector-report-tracking";
 import type { DocumentInspectorMetaRecord } from "@/lib/document-inspector-meta";
 import type { DocumentRecord } from "@/lib/document-center";
+import {
+  formatNotificationSentAt,
+  getInspectorNotificationSentLabel,
+  type DocumentInspectorNotificationRecord,
+  type InspectorNotificationType,
+} from "@/lib/document-inspector-notifications";
+
+const NOTIFICATION_DISPLAY_ORDER: InspectorNotificationType[] = [
+  "day_35",
+  "day_40",
+  "day_45_plus",
+];
 
 interface InspectorCreateFieldsProps {
   reportDate: string;
@@ -74,6 +86,7 @@ export function InspectorCreateFields({
 interface InspectorDocumentCardProps {
   document: DocumentRecord;
   meta: DocumentInspectorMetaRecord;
+  notifications: DocumentInspectorNotificationRecord[];
   buildingName: string;
   buildingAddress?: string;
   actionId: string | null;
@@ -85,6 +98,7 @@ interface InspectorDocumentCardProps {
 export function InspectorDocumentCard({
   document,
   meta,
+  notifications,
   buildingName,
   buildingAddress,
   actionId,
@@ -117,6 +131,11 @@ export function InspectorDocumentCard({
 
   const phase = computeInspectorFollowUpPhase(report);
   const days = daysSinceReportDate(report.report_date);
+  const sentByType = Object.fromEntries(
+    notifications.map((row) => [row.notification_type, row])
+  ) as Partial<
+    Record<InspectorNotificationType, DocumentInspectorNotificationRecord>
+  >;
   const letterText = letterPreview
     ? generateUrgentLetterTemplate({
         buildingName,
@@ -140,7 +159,7 @@ export function InspectorDocumentCard({
       onClosed("סגירת המעקב נכשלה.");
       return;
     }
-    onClosed("המעקב נסגר לאחר טיפול. נשלח מייל עדכון (אם הוגדר Resend).");
+    onClosed("המעקב נסגר לאחר טיפול.");
   }
 
   async function handleCopyLetter() {
@@ -182,6 +201,21 @@ export function InspectorDocumentCard({
         </p>
         <p>בודק: {report.inspector_name ?? "—"}</p>
       </div>
+
+      {NOTIFICATION_DISPLAY_ORDER.some((type) => sentByType[type]) && (
+        <div className="space-y-1 pt-1 border-t border-gold/20">
+          {NOTIFICATION_DISPLAY_ORDER.map((type) => {
+            const row = sentByType[type];
+            if (!row) return null;
+            return (
+              <p key={type} className="text-xs text-blue-800">
+                ✓ {getInspectorNotificationSentLabel(type)} —{" "}
+                {formatNotificationSentAt(row.sent_at)}
+              </p>
+            );
+          })}
+        </div>
+      )}
 
       {phase === "urgent" && report.status === "open" && (
         <div className="flex flex-wrap gap-2">
