@@ -14,7 +14,6 @@ import {
   getDocumentTypeLabel,
   isDocumentCenterConfigured,
   parseDocumentTagsInput,
-  resolveDocumentContentType,
   uploadDocumentCenterFile,
   validateDocumentCenterFile,
   validateCreateDocumentInput,
@@ -243,11 +242,8 @@ export default function MasterDocumentCenterSection() {
       setCreating(false);
       setUploadProgress(null);
       setMessage(
-        uploaded.stage === "validation"
-          ? uploaded.error
-          : uploaded.details
-            ? `העלאת הקובץ נכשלה: ${uploaded.details}`
-            : "העלאת הקובץ נכשלה"
+        uploaded.details ??
+          (uploaded.stage === "validation" ? uploaded.error : "העלאת הקובץ נכשלה")
       );
       return;
     }
@@ -261,7 +257,7 @@ export default function MasterDocumentCenterSection() {
       fileName: selectedFile.name,
       fileUrl: uploaded.fileUrl,
       storagePath: uploaded.storagePath,
-      mimeType: resolveDocumentContentType(selectedFile.name, selectedFile.type),
+      mimeType: uploaded.contentType,
       fileSizeBytes: selectedFile.size,
       tags: parseDocumentTagsInput(tagsInput),
     };

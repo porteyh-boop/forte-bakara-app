@@ -136,6 +136,7 @@ import {
   buildDocumentStoragePath,
   collectDocumentTags,
   DOCUMENT_CENTER_BUCKET,
+  DOCUMENT_UNSUPPORTED_CONTENT_TYPE_ERROR,
   DOCUMENT_TYPES,
   extractDocumentStoragePath,
   filterDocuments,
@@ -146,6 +147,7 @@ import {
   normalizeDocumentTags,
   parseDocumentTagsInput,
   resolveDocumentContentType,
+  resolveStorageExtension,
   validateCreateDocumentInput,
   validateDocumentCenterFile,
   type DocumentRecord,
@@ -3006,10 +3008,18 @@ assert(
   "תסקיר בודק: ולידציית קובץ — דוחה EXE"
 );
 
-const storagePath = buildInspectorReportStoragePath("md25", "report.pdf");
+const storagePath = buildInspectorReportStoragePath(
+  "md25",
+  "report.pdf",
+  new Date("2026-06-12T10:00:00.000Z"),
+  "7f3a9c1e-8d4a-4e21-91ab"
+);
 assert(
-  storagePath.startsWith("md25/") && storagePath.endsWith("-report.pdf"),
-  "תסקיר בודק: נתיב Storage"
+  storagePath === "md25/2026-06-12/7f3a9c1e-8d4a-4e21-91ab.pdf" &&
+    storagePath.startsWith("md25/") &&
+    !storagePath.includes("T08-") &&
+    !/[\u0590-\u05FF]/.test(storagePath),
+  "תסקיר בודק: נתיב Storage — uuid/date בלבד"
 );
 
 const encodedStoragePath = storagePath
@@ -3178,14 +3188,21 @@ assert(
   "Document Center: ולידציית יצירה"
 );
 
-const docStoragePath = buildDocumentStoragePath("md25", "report.pdf");
+const docStoragePath = buildDocumentStoragePath(
+  "md25",
+  "report.pdf",
+  "application/pdf",
+  new Date("2026-06-12T10:00:00.000Z"),
+  "7f3a9c1e-8d4a-4e21-91ab"
+);
 const encodedDocPath = docStoragePath
   .split("/")
   .map((segment) => encodeURIComponent(segment))
   .join("/");
 const manualDocUrl = `https://example.supabase.co/storage/v1/object/public/${DOCUMENT_CENTER_BUCKET}/${encodedDocPath}`;
 assert(
-  docStoragePath.startsWith("md25/") &&
+  docStoragePath === "md25/2026-06-12/7f3a9c1e-8d4a-4e21-91ab.pdf" &&
+    docStoragePath.startsWith("md25/") &&
     extractDocumentStoragePath(manualDocUrl) === docStoragePath,
   "Document Center: Storage path ו-URL"
 );
@@ -3196,11 +3213,58 @@ assert(
   "Document Center: הכנה ל-OCR/AI — ללא הרצה"
 );
 
+const hebrewStoragePath = buildDocumentStoragePath(
+  "md25",
+  "תסקיר בודק.pdf",
+  "application/pdf",
+  new Date("2026-06-12T10:00:00.000Z"),
+  "7f3a9c1e-8d4a-4e21-91ab"
+);
 assert(
-  resolveDocumentContentType("report.pdf", "") === "application/pdf" &&
-    resolveDocumentContentType("photo.jpg", "application/octet-stream") ===
-      "image/jpeg",
-  "Document Center: MIME type לפי סיומת — PDF ב-Windows"
+  hebrewStoragePath === "md25/2026-06-12/7f3a9c1e-8d4a-4e21-91ab.pdf" &&
+    !/[\u0590-\u05FF]/.test(hebrewStoragePath) &&
+    !/\s/.test(hebrewStoragePath),
+  "Document Center: path בטוח — ללא עברית/רווחים"
+);
+
+const pdfResolved = resolveDocumentContentType("report.pdf", "");
+const jpegResolved = resolveDocumentContentType(
+  "photo.jpg",
+  "application/octet-stream"
+);
+const hebrewPdfResolved = resolveDocumentContentType(
+  "תסקיר בודק.pdf",
+  "application/octet-stream"
+);
+assert(
+  pdfResolved.ok &&
+    pdfResolved.contentType === "application/pdf" &&
+    jpegResolved.ok &&
+    jpegResolved.contentType === "image/jpeg" &&
+    hebrewPdfResolved.ok &&
+    hebrewPdfResolved.contentType === "application/pdf",
+  "Document Center: MIME type לפי סיומת — PDF ב-Windows ועברית"
+);
+
+const noExtensionResolved = resolveDocumentContentType(
+  "document",
+  "application/octet-stream"
+);
+assert(
+  !noExtensionResolved.ok &&
+    noExtensionResolved.error === DOCUMENT_UNSUPPORTED_CONTENT_TYPE_ERROR,
+  "Document Center: קובץ בלי סיומת — ללא octet-stream"
+);
+
+assert(
+  resolveStorageExtension("תסקיר בודק.pdf", "application/pdf") === ".pdf" &&
+    documentCenterLib.includes("crypto.randomUUID()") &&
+    documentCenterLib.includes("formatStorageUploadFailureDetails") &&
+    documentCenterLib.includes('pathVersion: "uuid-date-v2"') &&
+    documentCenterLib.includes("fileId: string = crypto.randomUUID()") &&
+    documentCenterLib.includes("file.name") &&
+    documentCenterLib.includes("contentType"),
+  "Document Center: extension ב-path + חסימת octet-stream + upload path v2"
 );
 
 const insertRow = buildDocumentInsertRow({

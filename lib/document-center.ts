@@ -86,7 +86,7 @@ export interface DocumentSearchFilters {
 export type DocumentCenterStage = "validation" | "upload" | "insert" | "list";
 
 export type UploadDocumentResult =
-  | { ok: true; fileUrl: string; storagePath: string }
+  | { ok: true; fileUrl: string; storagePath: string; contentType: string }
   | { ok: false; error: string; details?: string; stage: "upload" | "validation" };
 
 export interface DocumentListResult {
@@ -99,6 +99,9 @@ export interface CreateDocumentResult {
   error: string | null;
 }
 
+export const DOCUMENT_UNSUPPORTED_CONTENT_TYPE_ERROR =
+  "סוג הקובץ אינו נתמך. יש להעלות PDF או תמונה בפורמט נתמך.";
+
 const DOCUMENT_EXTENSION_MIME_MAP: Record<string, string> = {
   ".pdf": "application/pdf",
   ".jpg": "image/jpeg",
@@ -109,6 +112,19 @@ const DOCUMENT_EXTENSION_MIME_MAP: Record<string, string> = {
   ".xlsx":
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 };
+
+const DOCUMENT_MIME_TO_EXTENSION: Record<string, string> = {
+  "application/pdf": ".pdf",
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+    ".docx",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+};
+
+export type ResolveDocumentContentTypeResult =
+  | { ok: true; contentType: string }
+  | { ok: false; error: string };
 
 function formatSupabaseError(error: {
   message?: string;
@@ -129,7 +145,7 @@ function formatSupabaseError(error: {
 export function resolveDocumentContentType(
   fileName: string,
   fileType = ""
-): string {
+): ResolveDocumentContentTypeResult {
   const normalizedType = fileType.trim().toLowerCase();
   if (
     normalizedType &&
@@ -137,11 +153,40 @@ export function resolveDocumentContentType(
       normalizedType as (typeof DOCUMENT_CENTER_ALLOWED_MIME_TYPES)[number]
     )
   ) {
-    return normalizedType;
+    return { ok: true, contentType: normalizedType };
   }
 
   const extension = getDocumentFileExtension(fileName);
-  return DOCUMENT_EXTENSION_MIME_MAP[extension] ?? "application/octet-stream";
+  const fromExtension = DOCUMENT_EXTENSION_MIME_MAP[extension];
+  if (fromExtension) {
+    return { ok: true, contentType: fromExtension };
+  }
+
+  return { ok: false, error: DOCUMENT_UNSUPPORTED_CONTENT_TYPE_ERROR };
+}
+
+export function resolveStorageExtension(
+  fileName: string,
+  contentType: string
+): string {
+  const fromName = getDocumentFileExtension(fileName);
+  if (fromName && DOCUMENT_EXTENSION_MIME_MAP[fromName]) {
+    return fromName;
+  }
+  return DOCUMENT_MIME_TO_EXTENSION[contentType] ?? ".bin";
+}
+
+export function formatStorageUploadFailureDetails(params: {
+  contentType: string;
+  storagePath: string;
+  responseText: string;
+}): string {
+  return [
+    "העלאת הקובץ נכשלה",
+    `contentType: ${params.contentType}`,
+    `storagePath: ${params.storagePath}`,
+    `Supabase: ${params.responseText}`,
+  ].join("\n");
 }
 
 export function buildDocumentInsertRow(input: CreateDocumentInput) {
@@ -302,12 +347,15 @@ export function sanitizeDocumentFileName(fileName: string): string {
 export function buildDocumentStoragePath(
   buildingId: string,
   fileName: string,
-  now: Date = new Date()
+  contentType: string,
+  now: Date = new Date(),
+  fileId: string = crypto.randomUUID()
 ): string {
   const normalizedBuilding = buildingId.trim().toLowerCase();
-  const safeName = sanitizeDocumentFileName(fileName);
-  const stamp = now.toISOString().replace(/[:.]/g, "-");
-  return `${normalizedBuilding}/${stamp}-${safeName}`;
+  const datePart = now.toISOString().split("T")[0];
+  const extension = resolveStorageExtension(fileName, contentType);
+  const suffix = extension.startsWith(".") ? extension : `.${extension}`;
+  return `${normalizedBuilding}/${datePart}/${fileId}${suffix}`;
 }
 
 export function buildDocumentPublicUrl(storagePath: string): string | null {
@@ -428,8 +476,29 @@ export async function uploadDocumentCenterFile(
     };
   }
 
-  const contentType = resolveDocumentContentType(file.name, file.type);
-  const storagePath = buildDocumentStoragePath(buildingId, file.name);
+  const resolvedContentType = resolveDocumentContentType(file.name, file.type);
+  if (!resolvedContentType.ok) {
+    return {
+      ok: false,
+      stage: "validation",
+      error: resolvedContentType.error,
+    };
+  }
+
+  const contentType = resolvedContentType.contentType;
+  if (contentType === "application/octet-stream") {
+    return {
+      ok: false,
+      stage: "validation",
+      error: DOCUMENT_UNSUPPORTED_CONTENT_TYPE_ERROR,
+    };
+  }
+
+  const storagePath = buildDocumentStoragePath(
+    buildingId,
+    file.name,
+    contentType
+  );
   const encodedPath = storagePath
     .split("/")
     .map((segment) => encodeURIComponent(segment))
@@ -437,6 +506,20 @@ export async function uploadDocumentCenterFile(
   const uploadUrl = `${baseUrl}/storage/v1/object/${DOCUMENT_CENTER_BUCKET}/${encodedPath}`;
 
   onProgress?.(0);
+
+  const failUpload = (responseText: string): UploadDocumentResult => {
+    const details = formatStorageUploadFailureDetails({
+      contentType,
+      storagePath,
+      responseText,
+    });
+    return {
+      ok: false,
+      stage: "upload",
+      error: "העלאת הקובץ נכשלה",
+      details,
+    };
+  };
 
   try {
     await uploadDocumentWithProgress(
@@ -451,10 +534,13 @@ export async function uploadDocumentCenterFile(
       onProgress
     );
   } catch (xhrError) {
+    const xhrResponseText =
+      xhrError instanceof Error ? xhrError.message : String(xhrError);
     console.error("[document-center] xhr upload failed:", {
       bucket: DOCUMENT_CENTER_BUCKET,
       contentType,
       storagePath,
+      responseText: xhrResponseText,
       error: xhrError,
     });
 
@@ -463,21 +549,16 @@ export async function uploadDocumentCenterFile(
       await uploadDocumentViaSupabaseClient(file, storagePath, contentType);
       onProgress?.(100);
     } catch (clientError) {
+      const clientResponseText =
+        clientError instanceof Error ? clientError.message : String(clientError);
       console.error("[document-center] client upload failed:", {
         bucket: DOCUMENT_CENTER_BUCKET,
         contentType,
         storagePath,
+        responseText: clientResponseText,
         error: clientError,
       });
-      return {
-        ok: false,
-        stage: "upload",
-        error: "העלאת הקובץ נכשלה",
-        details:
-          clientError instanceof Error
-            ? clientError.message
-            : String(clientError),
-      };
+      return failUpload(clientResponseText);
     }
   }
 
@@ -492,13 +573,14 @@ export async function uploadDocumentCenterFile(
   }
 
   console.info("[document-center] upload success:", {
+    pathVersion: "uuid-date-v2",
     bucket: DOCUMENT_CENTER_BUCKET,
     contentType,
     storagePath,
     fileUrl,
   });
 
-  return { ok: true, fileUrl, storagePath };
+  return { ok: true, fileUrl, storagePath, contentType };
 }
 
 export async function deleteDocumentCenterStorageFile(

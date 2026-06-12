@@ -14,6 +14,7 @@ import {
   createDocument,
   deleteDocument,
   getDocumentById,
+  buildDocumentStoragePath,
   resolveDocumentContentType,
   uploadDocumentCenterFile,
 } from "./document-center";
@@ -287,12 +288,18 @@ export function sanitizeInspectorReportFileName(fileName: string): string {
 export function buildInspectorReportStoragePath(
   buildingId: string,
   fileName: string,
-  now: Date = new Date()
+  now: Date = new Date(),
+  fileId: string = crypto.randomUUID()
 ): string {
-  const normalizedBuilding = buildingId.trim().toLowerCase();
-  const safeName = sanitizeInspectorReportFileName(fileName);
-  const stamp = now.toISOString().replace(/[:.]/g, "-");
-  return `${normalizedBuilding}/${stamp}-${safeName}`;
+  const resolved = resolveDocumentContentType(fileName);
+  const contentType = resolved.ok ? resolved.contentType : "application/pdf";
+  return buildDocumentStoragePath(
+    buildingId,
+    fileName,
+    contentType,
+    now,
+    fileId
+  );
 }
 
 export function buildInspectorReportPublicUrl(storagePath: string): string | null {
@@ -613,12 +620,17 @@ export async function createInspectorReportWithFile(
     return null;
   }
 
+  const contentTypeResult = resolveDocumentContentType(file.name, file.type);
+  const mimeType = contentTypeResult.ok
+    ? contentTypeResult.contentType
+    : uploaded.contentType;
+
   return createInspectorReport({
     ...input,
     documentName: input.documentName || file.name.replace(/\.[^.]+$/, ""),
     fileUrl: uploaded.fileUrl,
     storagePath: uploaded.storagePath,
-    mimeType: resolveDocumentContentType(file.name, file.type),
+    mimeType,
     fileSizeBytes: file.size,
   });
 }
