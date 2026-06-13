@@ -497,13 +497,27 @@ export default function ClientAccessPageContent({
         {tab === "home" && (
           <section className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
-              <InfoCard label="מספר מעליות" value={stats.elevatorCount} delay={0} />
+              <InfoCard
+                label="מספר מעליות"
+                value={stats.elevatorCount}
+                delay={0}
+                icon={
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-5 h-5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                  </svg>
+                }
+              />
               {permissions.can_view_open_faults && (
                 <InfoCard
                   label="תקלות פתוחות"
                   value={stats.openFaultCount}
                   accent
                   delay={50}
+                  icon={
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-5 h-5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                    </svg>
+                  }
                 />
               )}
               {permissions.can_view_fault_history && (
@@ -511,6 +525,11 @@ export default function ClientAccessPageContent({
                   label="תקלות שטופלו"
                   value={stats.closedFaultCount}
                   delay={100}
+                  icon={
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-5 h-5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  }
                 />
               )}
               {permissions.can_view_availability && (
@@ -518,6 +537,11 @@ export default function ClientAccessPageContent({
                   label="זמינות חודשית"
                   value={`${stats.monthlyAvailabilityPercent}%`}
                   delay={150}
+                  icon={
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-5 h-5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                  }
                 />
               )}
             </div>

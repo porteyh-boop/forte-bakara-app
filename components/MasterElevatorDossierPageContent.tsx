@@ -58,6 +58,7 @@ function mapDemoFaultToPilot(
     created_at: fault.reportedAt,
     closed_at: fault.resolvedAt ?? null,
     source_device_id: null,
+    fault_source: null,
   };
 }
 

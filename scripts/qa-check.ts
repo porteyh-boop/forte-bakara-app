@@ -1789,6 +1789,7 @@ function makePilotFault(
     created_at: overrides.created_at ?? "2026-01-15T10:00:00.000Z",
     closed_at: overrides.closed_at ?? null,
     source_device_id: overrides.source_device_id ?? null,
+    fault_source: overrides.fault_source ?? null,
   };
 }
 
