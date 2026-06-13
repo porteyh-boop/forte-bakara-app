@@ -468,9 +468,10 @@ export default function ClientAccessPageContent({
         title={buildingResolve.buildingName}
         subtitle={`פורטל לקוח · ${scopeLabel}`}
         badge={buildingStatus}
+        wide
       />
 
-      <main className="max-w-lg mx-auto px-4 space-y-4 page-content -mt-2">
+      <main className="max-w-lg md:max-w-6xl mx-auto px-4 space-y-4 page-content -mt-2">
         <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-2">
           <p className="text-sm text-gray-text whitespace-pre-line">{welcomeMessage}</p>
           <p className="text-xs text-gray-text">
@@ -498,8 +499,85 @@ export default function ClientAccessPageContent({
         )}
 
         {tab === "home" && (
-          <section className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
+          <section className="flex flex-col gap-4">
+            {permissions.can_report_faults && !showReportForm && (
+              <button
+                type="button"
+                onClick={handleOpenReportForm}
+                className="order-1 md:order-2 btn-primary w-full text-lg font-bold py-4 min-h-[3.75rem] rounded-2xl shadow-md md:text-base md:font-semibold md:py-3 md:min-h-0 md:max-w-xs"
+              >
+                דווח תקלה
+              </button>
+            )}
+
+            {permissions.can_report_faults && showReportForm && (
+              <section className="order-1 md:order-2 space-y-3 md:max-w-2xl">
+                <SectionTitle title="דיווח תקלה" />
+                <ClientAccessReportForm
+                  buildingId={buildingResolve.loadedBuildingId}
+                  buildingName={buildingResolve.buildingName}
+                  elevators={effectiveElevators}
+                  lockedElevatorId={
+                    session.access.access_level === "elevator"
+                      ? session.access.elevator_id
+                      : null
+                  }
+                  allowImageUpload={permissions.can_upload_images}
+                  onSubmitSuccess={handleReportSubmitted}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowReportForm(false)}
+                  className="w-full rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-navy"
+                >
+                  ביטול
+                </button>
+              </section>
+            )}
+
+            <div
+              className={`order-2 md:order-3 flex flex-col gap-4 ${
+                permissions.can_view_open_faults
+                  ? "md:grid md:grid-cols-3 md:gap-6 md:items-start"
+                  : ""
+              }`}
+            >
+              {permissions.can_view_open_faults && (
+                <section className="space-y-3 md:col-span-2">
+                  <SectionTitle title="תקלות פתוחות" />
+                  {openFaults.length > 0 ? (
+                    <div className="flex flex-col gap-3">
+                      {openFaults.map((fault, index) => (
+                        <FaultCard
+                          key={fault.id}
+                          fault={fault}
+                          compact
+                          index={index}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="bg-white rounded-2xl border border-gray-200 p-6 text-center">
+                      <p className="text-sm text-gray-text">אין תקלות פתוחות</p>
+                    </div>
+                  )}
+                </section>
+              )}
+
+              <div
+                className={`space-y-3 ${
+                  permissions.can_view_open_faults ? "md:col-span-1" : ""
+                }`}
+              >
+                <SectionTitle title="סטטוס מעליות" />
+                <ElevatorStatusRow
+                  elevators={effectiveElevators}
+                  faultCounts={faultCounts}
+                />
+              </div>
+            </div>
+
+            <div className="order-4 md:order-1 grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3">
               <InfoCard
                 label="מספר מעליות"
                 value={stats.elevatorCount}
@@ -549,65 +627,9 @@ export default function ClientAccessPageContent({
               )}
             </div>
 
-            <SectionTitle title="סטטוס מעליות" />
-            <ElevatorStatusRow
-              elevators={effectiveElevators}
-              faultCounts={faultCounts}
-            />
-
-            {permissions.can_view_open_faults && (
-              <section className="space-y-3">
-                <SectionTitle title="תקלות פתוחות" />
-                {openFaults.length > 0 ? (
-                  <div className="flex flex-col gap-3">
-                    {openFaults.map((fault, index) => (
-                      <FaultCard key={fault.id} fault={fault} compact index={index} />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="bg-white rounded-2xl border border-gray-200 p-6 text-center">
-                    <p className="text-sm text-gray-text">אין תקלות פתוחות</p>
-                  </div>
-                )}
-              </section>
-            )}
-
-            {permissions.can_report_faults && !showReportForm && (
-              <button
-                type="button"
-                onClick={handleOpenReportForm}
-                className="btn-primary w-full"
-              >
-                דווח תקלה
-              </button>
-            )}
-
-            {permissions.can_report_faults && showReportForm && (
-              <section className="space-y-3">
-                <SectionTitle title="דיווח תקלה" />
-                <ClientAccessReportForm
-                  buildingId={buildingResolve.loadedBuildingId}
-                  buildingName={buildingResolve.buildingName}
-                  elevators={effectiveElevators}
-                  lockedElevatorId={
-                    session.access.access_level === "elevator"
-                      ? session.access.elevator_id
-                      : null
-                  }
-                  allowImageUpload={permissions.can_upload_images}
-                  onSubmitSuccess={handleReportSubmitted}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowReportForm(false)}
-                  className="w-full rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-navy"
-                >
-                  ביטול
-                </button>
-              </section>
-            )}
-
-            <ClientPortalInstallPrompt />
+            <div className="order-5">
+              <ClientPortalInstallPrompt />
+            </div>
           </section>
         )}
 
@@ -626,7 +648,7 @@ export default function ClientAccessPageContent({
                 אין מסמכים זמינים לבניין זה.
               </p>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-2 md:grid md:grid-cols-2 md:gap-3 md:space-y-0 lg:grid-cols-3">
                 {documents.map((document) => (
                   <article
                     key={document.id}

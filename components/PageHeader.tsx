@@ -8,16 +8,27 @@ interface PageHeaderProps {
   title: string;
   subtitle?: string;
   badge?: string;
+  wide?: boolean;
 }
 
-export default function PageHeader({ title, subtitle, badge }: PageHeaderProps) {
+export default function PageHeader({
+  title,
+  subtitle,
+  badge,
+  wide = false,
+}: PageHeaderProps) {
   const isHome = title === BRAND_APP;
+  const contentWidthClass = wide
+    ? "max-w-lg md:max-w-6xl"
+    : "max-w-lg md:max-w-2xl";
 
   return (
     <header dir="rtl" className="relative bg-navy text-white overflow-hidden">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(201,169,98,0.15),transparent_60%)]" />
       <div className="absolute -top-20 -left-20 w-64 h-64 bg-gold/5 rounded-full blur-3xl" />
-      <div className="relative max-w-lg md:max-w-2xl mx-auto px-5 pt-10 pb-8 md:pt-12 md:pb-10">
+      <div
+        className={`relative ${contentWidthClass} mx-auto px-5 pt-10 pb-8 md:pt-12 md:pb-10`}
+      >
         {badge && (
           <div className="flex justify-end mb-4 md:mb-5">
             <span className="text-[10px] md:text-xs font-medium bg-white/10 text-gold-light px-2.5 py-1 rounded-full">
