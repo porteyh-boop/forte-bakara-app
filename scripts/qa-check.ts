@@ -112,6 +112,10 @@ import {
   MASTER_ELEVATOR_DOSSIER_ROUTE_PREFIX,
 } from "../lib/master-elevator-routes";
 import {
+  buildMasterBuildingDossierPath,
+  MASTER_BUILDING_DOSSIER_ROUTE_PREFIX,
+} from "../lib/master-building-routes";
+import {
   clearElevatorFaultFilters,
   DEFAULT_ELEVATOR_FAULT_FILTERS,
   filterElevatorDossierFaults,
@@ -2539,10 +2543,57 @@ assert(
 
 assert(
   masterBuildingsUiDossier.includes("ElevatorDossierLink") &&
-    masterBuildingsUiDossier.includes("buildMasterElevatorDossierPath") &&
-    masterBuildingsUiDossier.includes("לחצו לצפייה בתיק המעלית") &&
-    masterBuildingsUiDossier.includes('href={href}'),
-  "תיק מעלית: קישור פעיל עם href במסך Master"
+    masterBuildingsUiDossier.includes("פתח תיק בניין") &&
+    masterBuildingsUiDossier.includes("buildMasterBuildingDossierPath"),
+  "תיק מעלית: קישור פעיל במסך Master + כפתור תיק בניין"
+);
+
+const masterBuildingDossierShared = fs.readFileSync(
+  path.join(process.cwd(), "components/MasterBuildingDossierShared.tsx"),
+  "utf8"
+);
+assert(
+  masterBuildingDossierShared.includes("buildMasterElevatorDossierPath") &&
+    masterBuildingDossierShared.includes('href={href}') &&
+    masterBuildingDossierShared.includes("לחצו לצפייה בתיק המעלית"),
+  "תיק מעלית: קישור href ברכיב משותף"
+);
+
+const buildingDossierRouteFile = path.join(
+  process.cwd(),
+  "app/master/building/[buildingId]/page.tsx"
+);
+const buildingDossierPageContent = path.join(
+  process.cwd(),
+  "components/MasterBuildingDossierPageContent.tsx"
+);
+assert(
+  fs.existsSync(buildingDossierRouteFile),
+  "תיק בניין: route קיים"
+);
+assert(
+  fs.existsSync(buildingDossierPageContent),
+  "תיק בניין: קומפוננטת עמוד קיימת"
+);
+
+const sampleBuildingHref = buildMasterBuildingDossierPath("md25");
+assert(
+  sampleBuildingHref.includes("md25") &&
+    sampleBuildingHref.startsWith(MASTER_BUILDING_DOSSIER_ROUTE_PREFIX),
+  "תיק בניין: קישור כולל buildingId"
+);
+
+const buildingPageSource = fs.readFileSync(buildingDossierPageContent, "utf8");
+assert(
+  buildingPageSource.includes("חזרה ל-Master") &&
+    buildingPageSource.includes("פרטי בניין") &&
+    buildingPageSource.includes("תקלות פתוחות") &&
+    buildingPageSource.includes("היסטוריית תקלות הבניין") &&
+    buildingPageSource.includes("מסמכים") &&
+    buildingPageSource.includes("לא נמצאו נתוני בניין") &&
+    buildingPageSource.includes("BuildingDossierPanel") &&
+    buildingPageSource.includes("MasterProfessionalAssessmentPanel"),
+  "תיק בניין: עמוד ייעודי עם כל הסקשנים"
 );
 
 assert(
