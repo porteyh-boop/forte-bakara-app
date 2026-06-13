@@ -1,19 +1,20 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import PageHeader from "@/components/PageHeader";
+import MasterBuildingDetailsPanel from "@/components/MasterBuildingDetailsPanel";
 import MasterProfessionalAssessmentPanel from "@/components/MasterProfessionalAssessmentPanel";
 import {
   BuildingDossierPanel,
-  DossierKpi,
   ElevatorDossierLink,
   FaultHistoryTable,
 } from "@/components/MasterBuildingDossierShared";
+import { BUILDINGS_CATALOG_UPDATED_EVENT } from "@/lib/buildings-catalog";
 import {
   getAllCloudBuildingsWithMeta,
   getAllCloudElevators,
   normalizeBuildingId,
+  updateCloudBuilding,
   type CloudBuildingRow,
   type CloudElevatorRow,
 } from "@/lib/buildings-cloud";
@@ -21,8 +22,16 @@ import { resolveLiveStartedAt } from "@/lib/building-live";
 import {
   getAllDemoBuildingIds,
   getBuildingDataset,
+  getDemoDatasets,
   getStaticDemoBuildingMeta,
+  refreshBuildingCatalog,
 } from "@/lib/buildings";
+import {
+  buildSaveBuildingPayload,
+  emptyMasterBuildingForm,
+  masterBuildingFormFromRow,
+  type MasterBuildingFormState,
+} from "@/lib/master-building-form";
 import {
   buildBuildingDossier,
   formatDossierDate,
@@ -109,6 +118,13 @@ export default function MasterBuildingDossierPageContent({
   const [cloudElevators, setCloudElevators] = useState<CloudElevatorRow[]>([]);
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editingDetails, setEditingDetails] = useState(false);
+  const [buildingForm, setBuildingForm] = useState<MasterBuildingFormState>(
+    emptyMasterBuildingForm
+  );
+  const [savingBuildingDetails, setSavingBuildingDetails] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const demoBuildingIds = useMemo(() => getAllDemoBuildingIds(), []);
   const isDemoBuilding = demoBuildingIds.includes(normalizedBuildingId);
@@ -265,6 +281,75 @@ export default function MasterBuildingDossierPageContent({
     cloudBuilding?.live_started_at ??
     resolveLiveStartedAt(normalizedBuildingId);
 
+  const buildingDetails = useMemo(
+    () => ({
+      buildingId: normalizedBuildingId,
+      name: buildingName,
+      city: buildingCity ?? null,
+      address: buildingAddress,
+      managementCompany,
+      elevatorCompany,
+      contactName,
+      contactPhone,
+      floorsCount,
+    }),
+    [
+      normalizedBuildingId,
+      buildingName,
+      buildingCity,
+      buildingAddress,
+      managementCompany,
+      elevatorCompany,
+      contactName,
+      contactPhone,
+      floorsCount,
+    ]
+  );
+
+  function startEditBuildingDetails() {
+    if (!cloudBuilding) return;
+    setBuildingForm(masterBuildingFormFromRow(cloudBuilding));
+    setEditingDetails(true);
+    setError(null);
+  }
+
+  function cancelEditBuildingDetails() {
+    setEditingDetails(false);
+    setBuildingForm(emptyMasterBuildingForm());
+    setError(null);
+  }
+
+  async function handleUpdateBuildingDetails(e: React.FormEvent) {
+    e.preventDefault();
+    if (!cloudReady || !cloudBuilding) return;
+    setError(null);
+    setSavingBuildingDetails(true);
+
+    const payload = buildSaveBuildingPayload(buildingForm);
+    if (!payload.name.trim()) {
+      setError("שם בניין הוא שדה חובה.");
+      setSavingBuildingDetails(false);
+      return;
+    }
+
+    const updated = await updateCloudBuilding(cloudBuilding.id, payload);
+    setSavingBuildingDetails(false);
+    if (!updated) {
+      setError("עדכון פרטי בניין נכשל.");
+      return;
+    }
+
+    setEditingDetails(false);
+    setBuildingForm(emptyMasterBuildingForm());
+    await refreshBuildingCatalog(getDemoDatasets());
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(BUILDINGS_CATALOG_UPDATED_EVENT));
+    }
+    await refresh();
+    setMessage("פרטי הבניין עודכנו בהצלחה.");
+    setTimeout(() => setMessage(null), 3000);
+  }
+
   if (!authed) {
     return <MasterCodeGate onSuccess={() => setAuthed(true)} />;
   }
@@ -274,19 +359,23 @@ export default function MasterBuildingDossierPageContent({
       <PageHeader title="תיק בניין" subtitle={buildingName} master />
 
       <main className="mx-auto w-full max-w-lg px-5 pb-8 md:max-w-7xl md:px-8 -mt-2 space-y-4 md:space-y-6">
-        <Link
-          href="/master"
-          className="inline-flex items-center gap-1.5 text-sm font-semibold text-navy hover:underline cursor-pointer"
-        >
-          ← חזרה ל-Master
-        </Link>
-
         {loading ? (
           <p className="text-sm text-gray-text">טוען תיק בניין...</p>
         ) : !hasBuildingData ? (
           <p className="text-sm text-gray-text">לא נמצאו נתוני בניין.</p>
         ) : (
           <>
+            {message && (
+              <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
+                {message}
+              </p>
+            )}
+            {error && (
+              <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+                {error}
+              </p>
+            )}
+
             <div className="bg-white rounded-2xl border border-gold/30 p-4 space-y-3">
               <div>
                 <h2 className="text-base font-bold text-navy">{buildingName}</h2>
@@ -305,27 +394,17 @@ export default function MasterBuildingDossierPageContent({
               </div>
             </div>
 
-            <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
-              <h3 className="text-sm font-bold text-navy">פרטי בניין</h3>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-                <DossierKpi
-                  label="חברת ניהול"
-                  value={managementCompany ?? "—"}
-                  small
-                />
-                <DossierKpi
-                  label="חברת מעליות"
-                  value={elevatorCompany ?? "—"}
-                  small
-                />
-                <DossierKpi label="איש קשר" value={contactName ?? "—"} small />
-                <DossierKpi label="טלפון" value={contactPhone ?? "—"} small />
-                <DossierKpi
-                  label="מספר קומות"
-                  value={floorsCount ?? "—"}
-                />
-              </div>
-            </div>
+            <MasterBuildingDetailsPanel
+              details={buildingDetails}
+              canEdit={Boolean(cloudBuilding)}
+              editing={editingDetails}
+              form={buildingForm}
+              onStartEdit={startEditBuildingDetails}
+              onCancelEdit={cancelEditBuildingDetails}
+              onChange={(patch) => setBuildingForm((f) => ({ ...f, ...patch }))}
+              onSubmit={(e) => void handleUpdateBuildingDetails(e)}
+              saving={savingBuildingDetails}
+            />
 
             <BuildingDossierPanel dossier={dossier} />
 

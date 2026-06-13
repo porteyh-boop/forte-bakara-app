@@ -34,6 +34,7 @@ import {
 import { BUILDING_LIVE_STARTED_EVENT } from "@/hooks/useBuildingLiveStarted";
 import {
   getAllDemoBuildingIds,
+  getBuildingDataset,
   getDemoDatasets,
   getStaticDemoBuildingMeta,
   getAllBuildingIds,
@@ -44,10 +45,6 @@ import {
   formatMasterBuildingSources,
   summarizeFaultBuildings,
 } from "@/lib/master-buildings-list";
-import {
-  DEFAULT_ELEVATOR_COMPANIES,
-  isOtherElevatorCompany,
-} from "@/lib/elevator-companies";
 import type { PilotCloudFault } from "@/lib/pilot-cloud";
 import {
   buildBuildingDossier,
@@ -60,12 +57,20 @@ import {
   validateNewBuildingElevators,
   type NewBuildingElevatorDraft,
 } from "@/lib/master-building-create";
+import MasterBuildingDetailsForm from "@/components/MasterBuildingDetailsForm";
+import MasterBuildingDetailsPanel from "@/components/MasterBuildingDetailsPanel";
 import MasterProfessionalAssessmentPanel from "@/components/MasterProfessionalAssessmentPanel";
 import {
   BuildingDossierPanel,
   ElevatorDossierLink,
   FaultHistoryTable,
 } from "@/components/MasterBuildingDossierShared";
+import {
+  buildSaveBuildingPayload,
+  emptyMasterBuildingForm,
+  masterBuildingFormFromRow,
+  type MasterBuildingFormState,
+} from "@/lib/master-building-form";
 
 interface MasterBuildingsSectionProps {
   cloudReady: boolean;
@@ -73,19 +78,6 @@ interface MasterBuildingsSectionProps {
   liveStartedAtByBuilding?: Record<string, string | null>;
   onDataChanged?: () => void | Promise<void>;
 }
-
-type BuildingFormState = {
-  buildingId: string;
-  name: string;
-  city: string;
-  address: string;
-  managementCompany: string;
-  elevatorCompany: string;
-  customElevatorCompany: string;
-  contactName: string;
-  contactPhone: string;
-  floorsCount: string;
-};
 
 type ElevatorFormState = {
   elevatorId: string;
@@ -95,19 +87,6 @@ type ElevatorFormState = {
   status: ElevatorStatusOption;
 };
 
-const emptyBuildingForm = (): BuildingFormState => ({
-  buildingId: "",
-  name: "",
-  city: "",
-  address: "",
-  managementCompany: "",
-  elevatorCompany: DEFAULT_ELEVATOR_COMPANIES[0],
-  customElevatorCompany: "",
-  contactName: "",
-  contactPhone: "",
-  floorsCount: "",
-});
-
 const emptyElevatorForm = (): ElevatorFormState => ({
   elevatorId: "",
   elevatorName: "",
@@ -115,35 +94,6 @@ const emptyElevatorForm = (): ElevatorFormState => ({
   elevatorType: "",
   status: "פעילה",
 });
-
-function resolveElevatorCompany(form: BuildingFormState): string {
-  if (isOtherElevatorCompany(form.elevatorCompany)) {
-    return form.customElevatorCompany.trim();
-  }
-  return form.elevatorCompany.trim();
-}
-
-function buildingFormFromRow(row: CloudBuildingRow): BuildingFormState {
-  const known = DEFAULT_ELEVATOR_COMPANIES.includes(
-    row.elevator_company as (typeof DEFAULT_ELEVATOR_COMPANIES)[number]
-  );
-  return {
-    buildingId: row.building_id,
-    name: row.name,
-    city: row.city ?? "",
-    address: row.address ?? "",
-    managementCompany: row.management_company ?? "",
-    elevatorCompany: known
-      ? (row.elevator_company as string)
-      : row.elevator_company
-        ? "אחר"
-        : DEFAULT_ELEVATOR_COMPANIES[0],
-    customElevatorCompany: known ? "" : (row.elevator_company ?? ""),
-    contactName: row.contact_name ?? "",
-    contactPhone: row.contact_phone ?? "",
-    floorsCount: row.floors_count != null ? String(row.floors_count) : "",
-  };
-}
 
 function elevatorFormFromRow(row: CloudElevatorRow): ElevatorFormState {
   const status = ELEVATOR_STATUS_OPTIONS.includes(
@@ -178,12 +128,12 @@ export default function MasterBuildingsSection({
   const [error, setError] = useState<string | null>(null);
 
   const [showBuildingForm, setShowBuildingForm] = useState(false);
-  const [editingBuilding, setEditingBuilding] = useState<CloudBuildingRow | null>(
-    null
+  const [editingBuildingDetails, setEditingBuildingDetails] =
+    useState<CloudBuildingRow | null>(null);
+  const [buildingForm, setBuildingForm] = useState<MasterBuildingFormState>(
+    emptyMasterBuildingForm
   );
-  const [buildingForm, setBuildingForm] = useState<BuildingFormState>(
-    emptyBuildingForm
-  );
+  const [savingBuildingDetails, setSavingBuildingDetails] = useState(false);
 
   const [showElevatorForm, setShowElevatorForm] = useState(false);
   const [editingElevator, setEditingElevator] = useState<CloudElevatorRow | null>(
@@ -302,6 +252,50 @@ export default function MasterBuildingsSection({
     selectedBuildingId ??
     "";
 
+  const selectedBuildingDetails = useMemo(() => {
+    if (!selectedBuildingId) return null;
+    if (selectedBuilding) {
+      return {
+        buildingId: selectedBuilding.building_id,
+        name: selectedBuilding.name,
+        city: selectedBuilding.city,
+        address: selectedBuilding.address,
+        managementCompany: selectedBuilding.management_company,
+        elevatorCompany: selectedBuilding.elevator_company,
+        contactName: selectedBuilding.contact_name,
+        contactPhone: selectedBuilding.contact_phone,
+        floorsCount: selectedBuilding.floors_count,
+      };
+    }
+    try {
+      const dataset = getBuildingDataset(selectedBuildingId);
+      return {
+        buildingId: selectedBuildingId,
+        name: dataset.building.name,
+        city: dataset.building.city ?? null,
+        address: dataset.building.address ?? null,
+        managementCompany: dataset.building.managementCompany ?? null,
+        elevatorCompany: dataset.building.elevatorCompany ?? null,
+        contactName: dataset.building.contactPerson ?? null,
+        contactPhone: dataset.building.phone ?? null,
+        floorsCount: null,
+      };
+    } catch {
+      const demo = getStaticDemoBuildingMeta(selectedBuildingId);
+      return {
+        buildingId: selectedBuildingId,
+        name: demo.name,
+        city: demo.city,
+        address: null,
+        managementCompany: null,
+        elevatorCompany: null,
+        contactName: null,
+        contactPhone: null,
+        floorsCount: null,
+      };
+    }
+  }, [selectedBuilding, selectedBuildingId]);
+
   const selectedDossier = useMemo(() => {
     if (!selectedBuildingId) return null;
     return buildBuildingDossier({
@@ -342,6 +336,7 @@ export default function MasterBuildingsSection({
     setSelectedBuildingId(buildingId);
     setShowBuildingForm(false);
     setShowElevatorForm(false);
+    setEditingBuildingDetails(null);
   }
 
   function faultCountForElevator(elevatorId: string): number {
@@ -352,11 +347,25 @@ export default function MasterBuildingsSection({
   }
 
   function openAddBuilding() {
-    setEditingBuilding(null);
-    setBuildingForm(emptyBuildingForm());
+    setEditingBuildingDetails(null);
+    setBuildingForm(emptyMasterBuildingForm());
     setNewBuildingElevators([emptyNewBuildingElevatorDraft()]);
     setShowBuildingForm(true);
     setError(null);
+  }
+
+  function openEditBuildingDetails(row: CloudBuildingRow) {
+    setSelectedBuildingId(row.building_id);
+    setEditingBuildingDetails(row);
+    setBuildingForm(masterBuildingFormFromRow(row));
+    setShowBuildingForm(false);
+    setShowElevatorForm(false);
+    setError(null);
+  }
+
+  function cancelEditBuildingDetails() {
+    setEditingBuildingDetails(null);
+    setBuildingForm(emptyMasterBuildingForm());
   }
 
   function addNewBuildingElevatorRow() {
@@ -382,10 +391,7 @@ export default function MasterBuildingsSection({
   }
 
   function openEditBuilding(row: CloudBuildingRow) {
-    setEditingBuilding(row);
-    setBuildingForm(buildingFormFromRow(row));
-    setShowBuildingForm(true);
-    setError(null);
+    openEditBuildingDetails(row);
   }
 
   function openAddElevator() {
@@ -419,34 +425,11 @@ export default function MasterBuildingsSection({
     if (!cloudReady) return;
     setError(null);
 
-    const floorsCount = buildingForm.floorsCount
-      ? Number(buildingForm.floorsCount)
-      : null;
-    const payload = {
-      buildingId: normalizeBuildingId(buildingForm.buildingId),
-      name: buildingForm.name,
-      city: buildingForm.city,
-      address: buildingForm.address,
-      managementCompany: buildingForm.managementCompany,
-      elevatorCompany: resolveElevatorCompany(buildingForm),
-      contactName: buildingForm.contactName,
-      contactPhone: buildingForm.contactPhone,
-      floorsCount: Number.isFinite(floorsCount) ? floorsCount : null,
-    };
+    const payload = buildSaveBuildingPayload(buildingForm);
+    payload.buildingId = normalizeBuildingId(payload.buildingId);
 
     if (!payload.name.trim()) {
       setError("שם בניין הוא שדה חובה.");
-      return;
-    }
-
-    if (editingBuilding) {
-      const updated = await updateCloudBuilding(editingBuilding.id, payload);
-      if (!updated) {
-        setError("עדכון בניין נכשל.");
-        return;
-      }
-      setShowBuildingForm(false);
-      await afterMutation("הבניין עודכן בהצלחה.");
       return;
     }
 
@@ -483,6 +466,31 @@ export default function MasterBuildingsSection({
         ? "הבניין נוסף; חלק מהמעליות לא נשמרו."
         : `הבניין נוסף בהצלחה עם ${result.elevators.length} מעליות.`
     );
+  }
+
+  async function handleUpdateBuildingDetails(e: React.FormEvent) {
+    e.preventDefault();
+    if (!cloudReady || !editingBuildingDetails) return;
+    setError(null);
+    setSavingBuildingDetails(true);
+
+    const payload = buildSaveBuildingPayload(buildingForm);
+    if (!payload.name.trim()) {
+      setError("שם בניין הוא שדה חובה.");
+      setSavingBuildingDetails(false);
+      return;
+    }
+
+    const updated = await updateCloudBuilding(editingBuildingDetails.id, payload);
+    setSavingBuildingDetails(false);
+    if (!updated) {
+      setError("עדכון פרטי בניין נכשל.");
+      return;
+    }
+
+    setEditingBuildingDetails(null);
+    setBuildingForm(emptyMasterBuildingForm());
+    await afterMutation("פרטי הבניין עודכנו בהצלחה.");
   }
 
   async function handleToggleBuilding(row: CloudBuildingRow) {
@@ -785,132 +793,13 @@ export default function MasterBuildingsSection({
           onSubmit={(e) => void handleSaveBuilding(e)}
           className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3"
         >
-          <h3 className="text-sm font-bold text-navy">
-            {editingBuilding ? "עריכת בניין" : "הוספת בניין"}
-          </h3>
-          <FormField label="מזהה בניין (building_id)">
-            <input
-              className="form-input"
-              value={buildingForm.buildingId}
-              onChange={(e) =>
-                setBuildingForm((f) => ({ ...f, buildingId: e.target.value }))
-              }
-              disabled={Boolean(editingBuilding)}
-              dir="ltr"
-              required={!editingBuilding}
-            />
-          </FormField>
-          <FormField label="שם בניין">
-            <input
-              className="form-input"
-              value={buildingForm.name}
-              onChange={(e) =>
-                setBuildingForm((f) => ({ ...f, name: e.target.value }))
-              }
-              required
-            />
-          </FormField>
-          <div className="grid grid-cols-2 gap-2">
-            <FormField label="עיר">
-              <input
-                className="form-input"
-                value={buildingForm.city}
-                onChange={(e) =>
-                  setBuildingForm((f) => ({ ...f, city: e.target.value }))
-                }
-              />
-            </FormField>
-            <FormField label="כתובת">
-              <input
-                className="form-input"
-                value={buildingForm.address}
-                onChange={(e) =>
-                  setBuildingForm((f) => ({ ...f, address: e.target.value }))
-                }
-              />
-            </FormField>
-          </div>
-          <FormField label="חברת ניהול">
-            <input
-              className="form-input"
-              value={buildingForm.managementCompany}
-              onChange={(e) =>
-                setBuildingForm((f) => ({
-                  ...f,
-                  managementCompany: e.target.value,
-                }))
-              }
-            />
-          </FormField>
-          <FormField label="חברת מעליות">
-            <select
-              className="form-input"
-              value={buildingForm.elevatorCompany}
-              onChange={(e) =>
-                setBuildingForm((f) => ({
-                  ...f,
-                  elevatorCompany: e.target.value,
-                }))
-              }
-            >
-              {DEFAULT_ELEVATOR_COMPANIES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </FormField>
-          {isOtherElevatorCompany(buildingForm.elevatorCompany) && (
-            <FormField label="שם חברת מעליות">
-              <input
-                className="form-input"
-                value={buildingForm.customElevatorCompany}
-                onChange={(e) =>
-                  setBuildingForm((f) => ({
-                    ...f,
-                    customElevatorCompany: e.target.value,
-                  }))
-                }
-              />
-            </FormField>
-          )}
-          <div className="grid grid-cols-2 gap-2">
-            <FormField label="איש קשר">
-              <input
-                className="form-input"
-                value={buildingForm.contactName}
-                onChange={(e) =>
-                  setBuildingForm((f) => ({ ...f, contactName: e.target.value }))
-                }
-              />
-            </FormField>
-            <FormField label="טלפון">
-              <input
-                className="form-input"
-                value={buildingForm.contactPhone}
-                onChange={(e) =>
-                  setBuildingForm((f) => ({
-                    ...f,
-                    contactPhone: e.target.value,
-                  }))
-                }
-                dir="ltr"
-              />
-            </FormField>
-          </div>
-          <FormField label="מספר קומות">
-            <input
-              type="number"
-              className="form-input"
-              value={buildingForm.floorsCount}
-              onChange={(e) =>
-                setBuildingForm((f) => ({ ...f, floorsCount: e.target.value }))
-              }
-              min={0}
-            />
-          </FormField>
-          {!editingBuilding && (
-            <div className="space-y-3 border-t border-gray-100 pt-3">
+          <h3 className="text-sm font-bold text-navy">הוספת בניין</h3>
+          <MasterBuildingDetailsForm
+            form={buildingForm}
+            onChange={(patch) => setBuildingForm((f) => ({ ...f, ...patch }))}
+            isEdit={false}
+          />
+          <div className="space-y-3 border-t border-gray-100 pt-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h4 className="text-sm font-bold text-navy">מעליות בבניין</h4>
                 <button
@@ -1001,7 +890,6 @@ export default function MasterBuildingsSection({
                 </div>
               ))}
             </div>
-          )}
           <div className="flex gap-2">
             <button type="submit" className="btn-primary flex-1">
               שמור
@@ -1047,6 +935,27 @@ export default function MasterBuildingsSection({
               </button>
             </div>
           </div>
+
+          {selectedBuildingDetails && (
+            <MasterBuildingDetailsPanel
+              details={selectedBuildingDetails}
+              canEdit={Boolean(selectedBuilding)}
+              editing={Boolean(
+                editingBuildingDetails &&
+                  editingBuildingDetails.building_id === selectedBuildingId
+              )}
+              form={buildingForm}
+              onStartEdit={() => {
+                if (selectedBuilding) openEditBuildingDetails(selectedBuilding);
+              }}
+              onCancelEdit={cancelEditBuildingDetails}
+              onChange={(patch) =>
+                setBuildingForm((f) => ({ ...f, ...patch }))
+              }
+              onSubmit={(e) => void handleUpdateBuildingDetails(e)}
+              saving={savingBuildingDetails}
+            />
+          )}
 
           <BuildingDossierPanel dossier={selectedDossier} />
 

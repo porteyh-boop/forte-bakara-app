@@ -269,6 +269,11 @@ import {
   validateNewBuildingElevators,
 } from "../lib/master-building-create";
 import {
+  buildSaveBuildingPayload,
+  masterBuildingFormFromRow,
+  MASTER_BUILDING_EDITABLE_FIELD_LABELS,
+} from "../lib/master-building-form";
+import {
   buildCloudCatalogSnapshot,
   buildDemoCatalogSnapshot,
   buildMergedClientCatalogSnapshot,
@@ -2355,8 +2360,56 @@ assert(
     masterBuildingsUi.includes("הוסף מעלית") &&
     masterBuildingsUi.includes("מעליות בבניין") &&
     masterBuildingsUi.includes("createCloudBuildingWithElevators") &&
-    masterBuildingsUi.includes("validateNewBuildingElevators"),
+    masterBuildingsUi.includes("validateNewBuildingElevators") &&
+    masterBuildingsUi.includes("MasterBuildingDetailsPanel") &&
+    masterBuildingsUi.includes("ערוך פרטי בניין") &&
+    masterBuildingsUi.includes("handleUpdateBuildingDetails") &&
+    masterBuildingsUi.includes("updateCloudBuilding"),
   "ניהול בניינים: טאב ו-UI ב-/master בלבד"
+);
+
+const masterBuildingFormLib = fs.readFileSync(
+  path.join(process.cwd(), "lib/master-building-form.ts"),
+  "utf8"
+);
+const masterBuildingDetailsPanel = fs.readFileSync(
+  path.join(process.cwd(), "components/MasterBuildingDetailsPanel.tsx"),
+  "utf8"
+);
+assert(
+  MASTER_BUILDING_EDITABLE_FIELD_LABELS.length === 8 &&
+    masterBuildingFormLib.includes("buildSaveBuildingPayload") &&
+    masterBuildingDetailsPanel.includes("שמור פרטי בניין"),
+  "עריכת פרטי בניין: שדות וטופס משותף"
+);
+
+const sampleCloudBuilding: CloudBuildingRow = {
+  id: "row-1",
+  building_id: "qa-edit",
+  name: "בניין QA",
+  city: "תל אביב",
+  address: "רחוב 1",
+  management_company: "ניהול",
+  elevator_company: "KONE",
+  contact_name: "ישראל",
+  contact_phone: "050-0000000",
+  floors_count: 10,
+  is_active: true,
+  live_started_at: null,
+  created_at: "2026-01-01T00:00:00.000Z",
+};
+const editForm = masterBuildingFormFromRow(sampleCloudBuilding);
+const editPayload = buildSaveBuildingPayload({
+  ...editForm,
+  name: "בניין מעודכן",
+  city: "חיפה",
+});
+assert(
+  editPayload.name === "בניין מעודכן" &&
+    editPayload.city === "חיפה" &&
+    editPayload.elevatorCompany === "KONE" &&
+    editPayload.floorsCount === 10,
+  "עריכת פרטי בניין: מיפוי שמירה לענן"
 );
 assert(
   !bottomNavMasterCheck.includes("ניהול בניינים"),
@@ -2714,6 +2767,9 @@ const buildingPageSource = fs.readFileSync(buildingDossierPageContent, "utf8");
 assert(
   masterSubpageBackSource.includes("חזרה למאסטר") &&
     buildingPageSource.includes("פרטי בניין") &&
+    buildingPageSource.includes("MasterBuildingDetailsPanel") &&
+    buildingPageSource.includes("ערוך פרטי בניין") &&
+    buildingPageSource.includes("updateCloudBuilding") &&
     buildingPageSource.includes("תקלות פתוחות") &&
     buildingPageSource.includes("היסטוריית תקלות הבניין") &&
     buildingPageSource.includes("מסמכים") &&
