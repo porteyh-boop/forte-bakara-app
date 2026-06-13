@@ -11,16 +11,60 @@ export type ClientType = (typeof CLIENT_TYPE_OPTIONS)[number];
 export const DEFAULT_CLIENT_WELCOME_MESSAGE =
   "ברוכים הבאים לפורטל הלקוח של פורטה בקרה.\nלהלן המידע הזמין עבורכם במערכת.";
 
+export const CLIENT_TYPE_WELCOME_MESSAGES: Record<ClientType, string> = {
+  "ועד בית":
+    "שלום ועד הבית,\nברוכים הבאים לפורטל הלקוח של פורטה בקרה.\nלהלן נתוני הבניין המעודכנים הזמינים עבורכם במערכת.",
+  "חברת ניהול":
+    "שלום לצוות הניהול,\nברוכים הבאים לפורטל הבקרה של פורטה.\nלהלן נתוני הבניינים והמידע התפעולי הזמין עבורכם במערכת.",
+  דייר:
+    "שלום,\nברוכים הבאים לפורטל הדיירים של פורטה בקרה.\nכאן ניתן לצפות במידע שהוגדר עבורכם ולדווח על תקלות.",
+  "נציג בניין":
+    "שלום נציג הבניין,\nברוכים הבאים לפורטל הלקוח של פורטה בקרה.\nלהלן נתוני הבניין והמידע הזמין עבורכם במערכת.",
+  אחר: DEFAULT_CLIENT_WELCOME_MESSAGE,
+};
+
 export function isClientType(value: string | null | undefined): value is ClientType {
   if (!value) return false;
   return (CLIENT_TYPE_OPTIONS as readonly string[]).includes(value);
 }
 
+export function getDefaultWelcomeMessageForClientType(
+  clientType: ClientType | null | undefined
+): string {
+  if (clientType && isClientType(clientType)) {
+    return CLIENT_TYPE_WELCOME_MESSAGES[clientType];
+  }
+  return DEFAULT_CLIENT_WELCOME_MESSAGE;
+}
+
 export function resolveClientWelcomeMessage(
-  welcomeMessage: string | null | undefined
+  welcomeMessage: string | null | undefined,
+  clientType?: ClientType | null
 ): string {
   const trimmed = welcomeMessage?.trim();
-  return trimmed || DEFAULT_CLIENT_WELCOME_MESSAGE;
+  if (trimmed) return trimmed;
+  return getDefaultWelcomeMessageForClientType(clientType);
+}
+
+export function hydrateWelcomeMessageForEdit(
+  welcomeMessage: string | null | undefined,
+  clientType: ClientType | null | undefined
+): string {
+  const trimmed = welcomeMessage?.trim();
+  if (trimmed) return trimmed;
+  return getDefaultWelcomeMessageForClientType(clientType);
+}
+
+export function normalizeWelcomeMessageForSave(
+  welcomeMessage: string,
+  clientType: ClientType | null | undefined
+): string | null {
+  const trimmed = welcomeMessage.trim();
+  if (!trimmed) return null;
+  if (trimmed === getDefaultWelcomeMessageForClientType(clientType).trim()) {
+    return null;
+  }
+  return trimmed;
 }
 
 export function formatClientPortalLastUpdated(iso: string | null): string {
@@ -37,7 +81,9 @@ export function formatClientPortalLastUpdated(iso: string | null): string {
   return `${day}/${month}/${year} ${hours}:${minutes}`;
 }
 
-export function computePortalDataLastUpdated(timestamps: Array<string | null | undefined>): string | null {
+export function computePortalDataLastUpdated(
+  timestamps: Array<string | null | undefined>
+): string | null {
   let maxMs = 0;
 
   for (const value of timestamps) {

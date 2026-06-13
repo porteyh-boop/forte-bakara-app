@@ -140,9 +140,12 @@ import {
 } from "../lib/client-permissions";
 import {
   CLIENT_TYPE_OPTIONS,
+  CLIENT_TYPE_WELCOME_MESSAGES,
   computePortalDataLastUpdated,
   DEFAULT_CLIENT_WELCOME_MESSAGE,
   formatClientPortalLastUpdated,
+  getDefaultWelcomeMessageForClientType,
+  hydrateWelcomeMessageForEdit,
   resolveClientWelcomeMessage,
 } from "../lib/client-profile";
 import {
@@ -2994,8 +2997,20 @@ assert(
 assert(
   resolveClientWelcomeMessage(null) === DEFAULT_CLIENT_WELCOME_MESSAGE &&
     resolveClientWelcomeMessage("  ") === DEFAULT_CLIENT_WELCOME_MESSAGE &&
-    resolveClientWelcomeMessage("הודעה מותאמת") === "הודעה מותאמת",
-  "פרופיל לקוח: תאימות לאחור להודעת פתיחה"
+    resolveClientWelcomeMessage("הודעה מותאמת") === "הודעה מותאמת" &&
+    resolveClientWelcomeMessage(null, "ועד בית") ===
+      CLIENT_TYPE_WELCOME_MESSAGES["ועד בית"] &&
+    resolveClientWelcomeMessage(null, "דייר") === CLIENT_TYPE_WELCOME_MESSAGES.דייר,
+  "פרופיל לקוח: תאימות לאחור והודעות לפי סוג"
+);
+
+assert(
+  getDefaultWelcomeMessageForClientType("חברת ניהול") ===
+    CLIENT_TYPE_WELCOME_MESSAGES["חברת ניהול"] &&
+    hydrateWelcomeMessageForEdit(null, "נציג בניין") ===
+      CLIENT_TYPE_WELCOME_MESSAGES["נציג בניין"] &&
+    hydrateWelcomeMessageForEdit("הודעה שמורה", "ועד בית") === "הודעה שמורה",
+  "פרופיל לקוח: הודעות ברירת מחדל לפי סוג וטעינה לעריכה"
 );
 
 assert(
@@ -3018,23 +3033,45 @@ const clientAccessLibSource = fs.readFileSync(
 );
 assert(
   clientAccessLibSource.includes("updateClientUserProfile") &&
+    clientAccessLibSource.includes("getClientUserById") &&
     clientAccessLibSource.includes("client_type") &&
     clientAccessLibSource.includes("welcome_message"),
   "פרופיל לקוח: CRUD ב-lib/client-access"
 );
 
 assert(
-  masterClientAccessUiSource.includes("סוג לקוח") &&
-    masterClientAccessUiSource.includes("הודעת פתיחה לפורטל") &&
-    masterClientAccessUiSource.includes("ערוך לקוח") &&
+  masterClientAccessUiSource.includes("ערוך לקוח") &&
     masterClientAccessUiSource.includes("MasterClientEditModal") &&
-    masterClientAccessUiSource.includes("DEFAULT_CLIENT_WELCOME_MESSAGE"),
+    masterClientAccessUiSource.includes("ClientWelcomeFields") &&
+    masterClientAccessUiSource.includes("useClientWelcomeFields"),
   "פרופיל לקוח: UI יצירה ועריכה ב-Master"
 );
 
 assert(
-  fs.existsSync(path.join(process.cwd(), "components/MasterClientEditModal.tsx")),
-  "פרופיל לקוח: מודל עריכת לקוח קיים"
+  fs.existsSync(path.join(process.cwd(), "components/ClientWelcomeFields.tsx")) &&
+    fs.existsSync(path.join(process.cwd(), "lib/use-client-welcome-fields.ts")),
+  "פרופיל לקוח: רכיב ו-hook להודעות פתיחה"
+);
+
+const clientWelcomeFieldsSource = fs.readFileSync(
+  path.join(process.cwd(), "components/ClientWelcomeFields.tsx"),
+  "utf8"
+);
+assert(
+  clientWelcomeFieldsSource.includes("אפס להודעת ברירת מחדל") &&
+    clientWelcomeFieldsSource.includes("סוג לקוח") &&
+    clientWelcomeFieldsSource.includes("הודעת פתיחה לפורטל"),
+  "פרופיל לקוח: כפתור איפוס ושדות הודעת פתיחה"
+);
+
+const editModalSource = fs.readFileSync(
+  path.join(process.cwd(), "components/MasterClientEditModal.tsx"),
+  "utf8"
+);
+assert(
+  editModalSource.includes("getClientUserById") &&
+    editModalSource.includes("hydrateFromUser"),
+  "פרופיל לקוח: עריכת לקוח טוענת נתונים ישירות"
 );
 
 assert(

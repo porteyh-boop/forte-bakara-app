@@ -1,6 +1,8 @@
 import {
   DEFAULT_CLIENT_WELCOME_MESSAGE,
+  getDefaultWelcomeMessageForClientType,
   isClientType,
+  normalizeWelcomeMessageForSave,
   type ClientType,
 } from "./client-profile";
 import { getPilotSupabaseClient, isPilotCloudConfigured } from "./pilot-cloud";
@@ -10,7 +12,11 @@ import type { PilotCloudFault } from "./pilot-cloud";
 export type { ClientType } from "./client-profile";
 export {
   CLIENT_TYPE_OPTIONS,
+  CLIENT_TYPE_WELCOME_MESSAGES,
   DEFAULT_CLIENT_WELCOME_MESSAGE,
+  getDefaultWelcomeMessageForClientType,
+  hydrateWelcomeMessageForEdit,
+  normalizeWelcomeMessageForSave,
   resolveClientWelcomeMessage,
 } from "./client-profile";
 
@@ -220,14 +226,6 @@ function mapClientUserRow(row: Record<string, unknown>): ClientUserRecord {
   };
 }
 
-function normalizeWelcomeMessage(
-  welcomeMessage?: string | null
-): string | null {
-  const trimmed = welcomeMessage?.trim();
-  if (!trimmed) return null;
-  return trimmed;
-}
-
 function mapClientAccessRow(row: Record<string, unknown>): ClientAccessRecord {
   return {
     id: String(row.id),
@@ -266,8 +264,13 @@ export async function createClientUserAccess(
 
   const token = generateAccessToken();
   const welcomeMessage =
-    normalizeWelcomeMessage(input.welcomeMessage) ??
-    DEFAULT_CLIENT_WELCOME_MESSAGE;
+    normalizeWelcomeMessageForSave(
+      input.welcomeMessage ?? "",
+      input.clientType && isClientType(input.clientType) ? input.clientType : null
+    ) ??
+    getDefaultWelcomeMessageForClientType(
+      input.clientType && isClientType(input.clientType) ? input.clientType : null
+    );
   const clientType =
     input.clientType && isClientType(input.clientType) ? input.clientType : null;
 
@@ -391,6 +394,29 @@ export async function getClientAccessByToken(
   };
 }
 
+export async function getClientUserById(
+  userId: string
+): Promise<ClientUserRecord | null> {
+  const client = getPilotSupabaseClient();
+  const trimmedId = userId.trim();
+  if (!client || !trimmedId) return null;
+
+  const { data, error } = await client
+    .from(CLIENT_USERS_TABLE)
+    .select("*")
+    .eq("id", trimmedId)
+    .maybeSingle();
+
+  if (error || !data) {
+    if (error) {
+      console.warn("[client-access] get user by id failed:", error.message);
+    }
+    return null;
+  }
+
+  return mapClientUserRow(data);
+}
+
 export async function getAllClientUserAccessRecords(): Promise<
   ClientUserAccessListItem[]
 > {
@@ -473,7 +499,10 @@ export async function updateClientUserProfile(
       phone: input.phone?.trim() || null,
       email: input.email?.trim() || null,
       client_type: clientType,
-      welcome_message: normalizeWelcomeMessage(input.welcomeMessage),
+      welcome_message: normalizeWelcomeMessageForSave(
+        input.welcomeMessage ?? "",
+        clientType
+      ),
     })
     .eq("id", userId)
     .select("*")

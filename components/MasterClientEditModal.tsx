@@ -1,17 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import ClientWelcomeFields from "@/components/ClientWelcomeFields";
 import {
-  CLIENT_TYPE_OPTIONS,
-  DEFAULT_CLIENT_WELCOME_MESSAGE,
-  resolveClientWelcomeMessage,
-  type ClientType,
-} from "@/lib/client-profile";
-import {
-  getAllClientUserAccessRecords,
+  getClientUserById,
   updateClientUserProfile,
-  type ClientUserAccessListItem,
 } from "@/lib/client-access";
+import { useClientWelcomeFields } from "@/lib/use-client-welcome-fields";
 
 interface MasterClientEditModalProps {
   clientUserId: string;
@@ -32,10 +27,15 @@ export default function MasterClientEditModal({
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
-  const [clientType, setClientType] = useState<ClientType | "">("");
-  const [welcomeMessage, setWelcomeMessage] = useState(
-    DEFAULT_CLIENT_WELCOME_MESSAGE
-  );
+  const {
+    clientType,
+    welcomeMessage,
+    setClientType,
+    setWelcomeMessage,
+    resetWelcomeToDefault,
+    hydrateFromUser,
+    getWelcomeMessageForSave,
+  } = useClientWelcomeFields();
 
   useEffect(() => {
     if (!open) return;
@@ -44,32 +44,26 @@ export default function MasterClientEditModal({
     setLoading(true);
     setError(null);
 
-    void getAllClientUserAccessRecords().then((records) => {
+    void getClientUserById(clientUserId).then((user) => {
       if (cancelled) return;
 
-      const item = records.find((row) => row.user.id === clientUserId);
-      if (!item) {
+      if (!user) {
         setError("לא נמצא לקוח לעריכה.");
         setLoading(false);
         return;
       }
 
-      hydrateForm(item);
+      setName(user.name);
+      setPhone(user.phone ?? "");
+      setEmail(user.email ?? "");
+      hydrateFromUser(user);
       setLoading(false);
     });
 
     return () => {
       cancelled = true;
     };
-  }, [open, clientUserId]);
-
-  function hydrateForm(item: ClientUserAccessListItem) {
-    setName(item.user.name);
-    setPhone(item.user.phone ?? "");
-    setEmail(item.user.email ?? "");
-    setClientType(item.user.client_type ?? "");
-    setWelcomeMessage(resolveClientWelcomeMessage(item.user.welcome_message));
-  }
+  }, [open, clientUserId, hydrateFromUser]);
 
   if (!open) return null;
 
@@ -82,17 +76,13 @@ export default function MasterClientEditModal({
     setSaving(true);
     setError(null);
 
-    const trimmedWelcome = welcomeMessage.trim();
     const saved = await updateClientUserProfile({
       userId: clientUserId,
       name: name.trim(),
       phone: phone.trim() || null,
       email: email.trim() || null,
       clientType: clientType || null,
-      welcomeMessage:
-        trimmedWelcome === DEFAULT_CLIENT_WELCOME_MESSAGE.trim()
-          ? null
-          : trimmedWelcome || null,
+      welcomeMessage: getWelcomeMessageForSave(),
     });
 
     setSaving(false);
@@ -136,7 +126,7 @@ export default function MasterClientEditModal({
         {loading ? (
           <p className="text-sm text-gray-text">טוען פרטי לקוח...</p>
         ) : (
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="text-xs text-gray-text">שם</label>
               <input
@@ -154,7 +144,7 @@ export default function MasterClientEditModal({
                 className="form-input mt-1"
               />
             </div>
-            <div>
+            <div className="sm:col-span-2">
               <label className="text-xs text-gray-text">אימייל</label>
               <input
                 type="email"
@@ -163,32 +153,13 @@ export default function MasterClientEditModal({
                 className="form-input mt-1"
               />
             </div>
-            <div>
-              <label className="text-xs text-gray-text">סוג לקוח</label>
-              <select
-                value={clientType}
-                onChange={(e) =>
-                  setClientType(e.target.value as ClientType | "")
-                }
-                className="form-input mt-1"
-              >
-                <option value="">לא הוגדר</option>
-                {CLIENT_TYPE_OPTIONS.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-gray-text">הודעת פתיחה לפורטל</label>
-              <textarea
-                value={welcomeMessage}
-                onChange={(e) => setWelcomeMessage(e.target.value)}
-                rows={4}
-                className="form-input mt-1 resize-y min-h-[6rem]"
-              />
-            </div>
+            <ClientWelcomeFields
+              clientType={clientType}
+              welcomeMessage={welcomeMessage}
+              onClientTypeChange={setClientType}
+              onWelcomeMessageChange={setWelcomeMessage}
+              onResetWelcomeToDefault={resetWelcomeToDefault}
+            />
           </div>
         )}
 

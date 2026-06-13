@@ -359,7 +359,10 @@ export default function ClientAccessPageContent({
   const welcomeMessage = useMemo(
     () =>
       session
-        ? resolveClientWelcomeMessage(session.user.welcome_message)
+        ? resolveClientWelcomeMessage(
+            session.user.welcome_message,
+            session.user.client_type
+          )
         : "",
     [session]
   );

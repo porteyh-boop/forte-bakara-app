@@ -1,22 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import ClientWelcomeFields from "@/components/ClientWelcomeFields";
 import MasterClientEditModal from "@/components/MasterClientEditModal";
 import MasterClientPermissionsModal from "@/components/MasterClientPermissionsModal";
 import {
   buildClientAccessUrl,
-  CLIENT_TYPE_OPTIONS,
   createClientUserAccess,
   deactivateClientAccess,
-  DEFAULT_CLIENT_WELCOME_MESSAGE,
   formatClientAccessExpiry,
   getAllClientUserAccessRecords,
   isClientAccessCloudConfigured,
   reactivateClientAccess,
   type ClientAccessLevel,
-  type ClientType,
   type ClientUserAccessListItem,
 } from "@/lib/client-access";
+import { useClientWelcomeFields } from "@/lib/use-client-welcome-fields";
 import {
   formatClientActivityAction,
   formatClientActivityDate,
@@ -59,10 +58,15 @@ export default function MasterClientAccessSection() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
-  const [clientType, setClientType] = useState<ClientType | "">("");
-  const [welcomeMessage, setWelcomeMessage] = useState(
-    DEFAULT_CLIENT_WELCOME_MESSAGE
-  );
+  const {
+    clientType,
+    welcomeMessage,
+    setClientType,
+    setWelcomeMessage,
+    resetWelcomeToDefault,
+    resetForNewClient,
+    getWelcomeMessageForSave,
+  } = useClientWelcomeFields();
   const [buildingId, setBuildingId] = useState(() => getAllBuildingIds()[0] ?? "");
   const [accessLevel, setAccessLevel] = useState<ClientAccessLevel>("building");
   const [elevatorId, setElevatorId] = useState("");
@@ -150,7 +154,7 @@ export default function MasterClientAccessSection() {
       phone: phone.trim() || undefined,
       email: email.trim() || undefined,
       clientType: clientType || null,
-      welcomeMessage: welcomeMessage.trim() || DEFAULT_CLIENT_WELCOME_MESSAGE,
+      welcomeMessage: getWelcomeMessageForSave(),
       buildingId,
       elevatorId: accessLevel === "elevator" ? elevatorId : null,
       accessLevel,
@@ -167,8 +171,7 @@ export default function MasterClientAccessSection() {
     setName("");
     setPhone("");
     setEmail("");
-    setClientType("");
-    setWelcomeMessage(DEFAULT_CLIENT_WELCOME_MESSAGE);
+    resetForNewClient();
     setExpiresAt("");
     setMessage(`נוצר קישור גישה עבור ${created.user.name}`);
     await refresh();
@@ -287,32 +290,13 @@ export default function MasterClientAccessSection() {
                   className="form-input mt-1"
                 />
               </div>
-              <div>
-                <label className="text-xs text-gray-text">סוג לקוח</label>
-                <select
-                  value={clientType}
-                  onChange={(e) =>
-                    setClientType(e.target.value as ClientType | "")
-                  }
-                  className="form-input mt-1"
-                >
-                  <option value="">בחרו סוג לקוח</option>
-                  {CLIENT_TYPE_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="sm:col-span-2">
-                <label className="text-xs text-gray-text">הודעת פתיחה לפורטל</label>
-                <textarea
-                  value={welcomeMessage}
-                  onChange={(e) => setWelcomeMessage(e.target.value)}
-                  rows={4}
-                  className="form-input mt-1 resize-y min-h-[6rem]"
-                />
-              </div>
+              <ClientWelcomeFields
+                clientType={clientType}
+                welcomeMessage={welcomeMessage}
+                onClientTypeChange={setClientType}
+                onWelcomeMessageChange={setWelcomeMessage}
+                onResetWelcomeToDefault={resetWelcomeToDefault}
+              />
               <div>
                 <label className="text-xs text-gray-text">תוקף קישור (אופציונלי)</label>
                 <input
