@@ -8,7 +8,7 @@ import {
 import {
   canDeleteBuilding,
   canDeleteElevator,
-  createCloudBuilding,
+  createCloudBuildingWithElevators,
   createCloudElevator,
   deleteCloudBuilding,
   deleteCloudElevator,
@@ -54,6 +54,12 @@ import {
   formatDossierDate,
 } from "@/lib/master-building-dossier";
 import { buildMasterBuildingDossierPath } from "@/lib/master-building-routes";
+import {
+  emptyNewBuildingElevatorDraft,
+  toSaveElevatorInputs,
+  validateNewBuildingElevators,
+  type NewBuildingElevatorDraft,
+} from "@/lib/master-building-create";
 import MasterProfessionalAssessmentPanel from "@/components/MasterProfessionalAssessmentPanel";
 import {
   BuildingDossierPanel,
@@ -186,6 +192,9 @@ export default function MasterBuildingsSection({
   const [elevatorForm, setElevatorForm] = useState<ElevatorFormState>(
     emptyElevatorForm
   );
+  const [newBuildingElevators, setNewBuildingElevators] = useState<
+    NewBuildingElevatorDraft[]
+  >([emptyNewBuildingElevatorDraft()]);
 
   const [cloudLoadError, setCloudLoadError] = useState<string | null>(null);
   const [listVersion, setListVersion] = useState(0);
@@ -345,8 +354,31 @@ export default function MasterBuildingsSection({
   function openAddBuilding() {
     setEditingBuilding(null);
     setBuildingForm(emptyBuildingForm());
+    setNewBuildingElevators([emptyNewBuildingElevatorDraft()]);
     setShowBuildingForm(true);
     setError(null);
+  }
+
+  function addNewBuildingElevatorRow() {
+    setNewBuildingElevators((rows) => [
+      ...rows,
+      emptyNewBuildingElevatorDraft(),
+    ]);
+  }
+
+  function removeNewBuildingElevatorRow(index: number) {
+    setNewBuildingElevators((rows) =>
+      rows.length <= 1 ? rows : rows.filter((_, i) => i !== index)
+    );
+  }
+
+  function updateNewBuildingElevatorRow(
+    index: number,
+    patch: Partial<NewBuildingElevatorDraft>
+  ) {
+    setNewBuildingElevators((rows) =>
+      rows.map((row, i) => (i === index ? { ...row, ...patch } : row))
+    );
   }
 
   function openEditBuilding(row: CloudBuildingRow) {
@@ -423,14 +455,34 @@ export default function MasterBuildingsSection({
       return;
     }
 
-    const created = await createCloudBuilding(payload);
-    if (!created) {
+    const elevatorValidation = validateNewBuildingElevators(newBuildingElevators);
+    if (!elevatorValidation.ok) {
+      setError(elevatorValidation.message);
+      return;
+    }
+
+    const elevatorPayloads = toSaveElevatorInputs(
+      payload.buildingId,
+      newBuildingElevators
+    );
+    const result = await createCloudBuildingWithElevators(
+      payload,
+      elevatorPayloads
+    );
+    if (!result.building) {
       setError("הוספת בניין נכשלה. ודאו שמזהה הבניין ייחודי.");
       return;
     }
+    if (result.partialFailure) {
+      setError(result.partialFailure);
+    }
     setShowBuildingForm(false);
-    setSelectedBuildingId(created.building_id);
-    await afterMutation("הבניין נוסף בהצלחה.");
+    setSelectedBuildingId(result.building.building_id);
+    await afterMutation(
+      result.partialFailure
+        ? "הבניין נוסף; חלק מהמעליות לא נשמרו."
+        : `הבניין נוסף בהצלחה עם ${result.elevators.length} מעליות.`
+    );
   }
 
   async function handleToggleBuilding(row: CloudBuildingRow) {
@@ -857,6 +909,99 @@ export default function MasterBuildingsSection({
               min={0}
             />
           </FormField>
+          {!editingBuilding && (
+            <div className="space-y-3 border-t border-gray-100 pt-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h4 className="text-sm font-bold text-navy">מעליות בבניין</h4>
+                <button
+                  type="button"
+                  onClick={addNewBuildingElevatorRow}
+                  className="text-xs font-semibold bg-navy text-white px-3 py-1.5 rounded-lg"
+                >
+                  הוסף מעלית
+                </button>
+              </div>
+              <p className="text-xs text-gray-text">
+                יש להוסיף לפחות מעלית אחת. סטטוס ברירת מחדל: פעילה.
+              </p>
+              {newBuildingElevators.map((draft, index) => (
+                <div
+                  key={`new-elevator-${index}`}
+                  className="rounded-xl border border-gray-100 p-3 space-y-2"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold text-gold">
+                      מעלית {index + 1}
+                    </p>
+                    {newBuildingElevators.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeNewBuildingElevatorRow(index)}
+                        className="text-xs font-semibold text-red-600"
+                      >
+                        הסר
+                      </button>
+                    )}
+                  </div>
+                  <FormField label="שם/מספר מעלית">
+                    <input
+                      className="form-input"
+                      value={draft.elevatorName}
+                      onChange={(e) =>
+                        updateNewBuildingElevatorRow(index, {
+                          elevatorName: e.target.value,
+                        })
+                      }
+                      required
+                    />
+                  </FormField>
+                  <FormField label="מזהה מעלית (אופציונלי)">
+                    <input
+                      className="form-input"
+                      value={draft.elevatorId}
+                      onChange={(e) =>
+                        updateNewBuildingElevatorRow(index, {
+                          elevatorId: e.target.value,
+                        })
+                      }
+                      dir="ltr"
+                      placeholder="אם ריק — ייווצר אוטומטית"
+                    />
+                  </FormField>
+                  <div className="grid grid-cols-2 gap-2">
+                    <FormField label="סוג מעלית">
+                      <input
+                        className="form-input"
+                        value={draft.elevatorType}
+                        onChange={(e) =>
+                          updateNewBuildingElevatorRow(index, {
+                            elevatorType: e.target.value,
+                          })
+                        }
+                      />
+                    </FormField>
+                    <FormField label="סטטוס">
+                      <select
+                        className="form-input"
+                        value={draft.status}
+                        onChange={(e) =>
+                          updateNewBuildingElevatorRow(index, {
+                            status: e.target.value as ElevatorStatusOption,
+                          })
+                        }
+                      >
+                        {ELEVATOR_STATUS_OPTIONS.map((status) => (
+                          <option key={status} value={status}>
+                            {status}
+                          </option>
+                        ))}
+                      </select>
+                    </FormField>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="flex gap-2">
             <button type="submit" className="btn-primary flex-1">
               שמור

@@ -264,6 +264,11 @@ import {
   type CloudElevatorRow,
 } from "../lib/buildings-cloud";
 import {
+  emptyNewBuildingElevatorDraft,
+  toSaveElevatorInputs,
+  validateNewBuildingElevators,
+} from "../lib/master-building-create";
+import {
   buildCloudCatalogSnapshot,
   buildDemoCatalogSnapshot,
   buildMergedClientCatalogSnapshot,
@@ -1752,6 +1757,14 @@ assert(
   "ענן פיילוט: אין קישור ל-/master בתפריט לקוח"
 );
 
+const masterLayoutSource = fs.readFileSync(
+  path.join(process.cwd(), "app/master/layout.tsx"),
+  "utf8"
+);
+const masterSubpageBackSource = fs.readFileSync(
+  path.join(process.cwd(), "components/MasterSubpageBackBar.tsx"),
+  "utf8"
+);
 const masterReturnSource = fs.readFileSync(
   path.join(process.cwd(), "components/MasterReturnButton.tsx"),
   "utf8"
@@ -1759,6 +1772,16 @@ const masterReturnSource = fs.readFileSync(
 const rootLayoutSource = fs.readFileSync(
   path.join(process.cwd(), "app/layout.tsx"),
   "utf8"
+);
+assert(
+  masterLayoutSource.includes("MasterSubpageBackBar"),
+  "מאסטר: כפתור חזרה משולב ב-layout של /master"
+);
+assert(
+  masterSubpageBackSource.includes("חזרה למאסטר") &&
+    masterSubpageBackSource.includes('href="/master"') &&
+    masterSubpageBackSource.includes('pathname === "/master"'),
+  "מאסטר: כפתור חזרה למאסטר בדפי משנה בלבד"
 );
 assert(
   masterReturnSource.includes("isMasterAuthenticated") &&
@@ -2272,6 +2295,7 @@ const buildingsCloudSource = fs.readFileSync(
 );
 assert(
   buildingsCloudSource.includes("createCloudBuilding") &&
+    buildingsCloudSource.includes("createCloudBuildingWithElevators") &&
     buildingsCloudSource.includes("updateCloudBuilding") &&
     buildingsCloudSource.includes("setCloudBuildingActive") &&
     buildingsCloudSource.includes("deleteCloudBuilding") &&
@@ -2282,6 +2306,44 @@ assert(
   "ניהול בניינים: כל פונקציות CRUD מוגדרות"
 );
 
+const emptyElevatorDraft = validateNewBuildingElevators([]);
+assert(!emptyElevatorDraft.ok, "יצירת בניין: ללא מעליות — נדחה");
+
+const singleElevatorDraft = validateNewBuildingElevators([
+  { elevatorId: "", elevatorName: "מעלית א", elevatorType: "נוסעים", status: "פעילה" },
+]);
+assert(singleElevatorDraft.ok, "יצירת בניין: מעלית אחת תקינה");
+
+const multiElevatorDraft = validateNewBuildingElevators([
+  { elevatorId: "", elevatorName: "מעלית א", elevatorType: "", status: "פעילה" },
+  { elevatorId: "", elevatorName: "מעלית ב", elevatorType: "משא", status: "בטיפול" },
+]);
+assert(multiElevatorDraft.ok, "יצירת בניין: כמה מעליות תקינות");
+
+const duplicateElevatorNames = validateNewBuildingElevators([
+  { elevatorId: "", elevatorName: "מעלית א", elevatorType: "", status: "פעילה" },
+  { elevatorId: "", elevatorName: "מעלית א", elevatorType: "", status: "פעילה" },
+]);
+assert(!duplicateElevatorNames.ok, "יצירת בניין: שמות מעליות כפולים נדחים");
+
+const elevatorInputs = toSaveElevatorInputs("qa-bld", [
+  { elevatorId: "", elevatorName: "מעלית 1", elevatorType: "נוסעים", status: "פעילה" },
+  { elevatorId: "custom-2", elevatorName: "מעלית 2", elevatorType: "", status: "פעילה" },
+]);
+assert(
+  elevatorInputs.length === 2 &&
+    elevatorInputs[0].elevatorId === "qa-bld-e1" &&
+    elevatorInputs[0].status === "פעילה" &&
+    elevatorInputs[0].elevatorType === "נוסעים" &&
+    elevatorInputs[1].elevatorId === "custom-2",
+  "יצירת בניין: מיפוי מעליות לשמירה"
+);
+
+assert(
+  emptyNewBuildingElevatorDraft().status === "פעילה",
+  "יצירת בניין: סטטוס ברירת מחדל פעילה"
+);
+
 const masterBuildingsUi = fs.readFileSync(
   path.join(process.cwd(), "components/MasterBuildingsSection.tsx"),
   "utf8"
@@ -2290,7 +2352,10 @@ assert(
   masterSource.includes("MasterBuildingsSection") &&
     masterSource.includes("ניהול בניינים") &&
     masterBuildingsUi.includes("הוסף בניין") &&
-    masterBuildingsUi.includes("הוסף מעלית"),
+    masterBuildingsUi.includes("הוסף מעלית") &&
+    masterBuildingsUi.includes("מעליות בבניין") &&
+    masterBuildingsUi.includes("createCloudBuildingWithElevators") &&
+    masterBuildingsUi.includes("validateNewBuildingElevators"),
   "ניהול בניינים: טאב ו-UI ב-/master בלבד"
 );
 assert(
@@ -2647,7 +2712,7 @@ assert(
 
 const buildingPageSource = fs.readFileSync(buildingDossierPageContent, "utf8");
 assert(
-  buildingPageSource.includes("חזרה ל-Master") &&
+  masterSubpageBackSource.includes("חזרה למאסטר") &&
     buildingPageSource.includes("פרטי בניין") &&
     buildingPageSource.includes("תקלות פתוחות") &&
     buildingPageSource.includes("היסטוריית תקלות הבניין") &&
@@ -2665,7 +2730,7 @@ assert(
 
 const elevatorPageSource = fs.readFileSync(elevatorDossierPageContent, "utf8");
 assert(
-  elevatorPageSource.includes("חזרה ל-Master") &&
+  masterSubpageBackSource.includes("חזרה למאסטר") &&
     elevatorPageSource.includes("היסטוריית תקלות") &&
     elevatorPageSource.includes("סטטוס מעלית") &&
     elevatorPageSource.includes("מספר תחנות"),

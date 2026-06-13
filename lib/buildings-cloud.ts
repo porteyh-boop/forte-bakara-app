@@ -232,6 +232,38 @@ export async function createCloudBuilding(
   return data as CloudBuildingRow;
 }
 
+export async function createCloudBuildingWithElevators(
+  buildingInput: SaveBuildingInput,
+  elevators: SaveElevatorInput[]
+): Promise<{
+  building: CloudBuildingRow | null;
+  elevators: CloudElevatorRow[];
+  partialFailure?: string;
+}> {
+  const building = await createCloudBuilding(buildingInput);
+  if (!building) {
+    return { building: null, elevators: [] };
+  }
+
+  const created: CloudElevatorRow[] = [];
+  for (const elevator of elevators) {
+    const row = await createCloudElevator({
+      ...elevator,
+      buildingId: building.building_id,
+    });
+    if (!row) {
+      return {
+        building,
+        elevators: created,
+        partialFailure: `שמירת מעלית "${elevator.elevatorName}" נכשלה.`,
+      };
+    }
+    created.push(row);
+  }
+
+  return { building, elevators: created };
+}
+
 export async function updateCloudBuilding(
   rowId: string,
   input: Partial<SaveBuildingInput>
