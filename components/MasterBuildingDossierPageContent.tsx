@@ -17,6 +17,7 @@ import {
   type CloudBuildingRow,
   type CloudElevatorRow,
 } from "@/lib/buildings-cloud";
+import { resolveLiveStartedAt } from "@/lib/building-live";
 import {
   getAllDemoBuildingIds,
   getBuildingDataset,
@@ -43,34 +44,9 @@ import {
   verifyMasterCode,
   type PilotCloudFault,
 } from "@/lib/pilot-cloud";
-import type { Fault } from "@/lib/types";
+import { mergeMasterBuildingPilotFaults } from "@/lib/master-live-faults";
 
 const OPEN_FAULT_STATUSES = new Set(["פתוחה", "בטיפול", "מושבתת"]);
-
-function mapDemoFaultToPilot(
-  fault: Fault,
-  buildingId: string,
-  buildingName: string
-): PilotCloudFault {
-  return {
-    id: fault.id,
-    building_id: buildingId,
-    building_name: buildingName,
-    elevator_id: fault.elevatorId,
-    elevator_name: fault.elevatorName,
-    fault_type: fault.type,
-    description: fault.description,
-    is_disabled: fault.isDisabled ?? false,
-    status: fault.status,
-    ticket_number: fault.ticketNumber ?? null,
-    image_data: null,
-    image_url: null,
-    created_at: fault.reportedAt,
-    closed_at: fault.resolvedAt ?? null,
-    source_device_id: null,
-    fault_source: null,
-  };
-}
 
 function MasterCodeGate({ onSuccess }: { onSuccess: () => void }) {
   const [code, setCode] = useState("");
@@ -177,15 +153,20 @@ export default function MasterBuildingDossierPageContent({
       );
     }
 
-    if (isDemoBuilding && demoDataset) {
-      const demoFaults = demoDataset.faults.map((f) =>
-        mapDemoFaultToPilot(f, normalizedBuildingId, demoDataset.building.name)
-      );
-      const seen = new Set(loaded.map((f) => f.id));
-      for (const f of demoFaults) {
-        if (!seen.has(f.id)) loaded.push(f);
-      }
-    }
+    const liveStartedAt =
+      building?.live_started_at ?? resolveLiveStartedAt(normalizedBuildingId);
+    const buildingNameForMerge =
+      building?.name ??
+      demoDataset?.building.name ??
+      getStaticDemoBuildingMeta(normalizedBuildingId).name;
+
+    loaded = mergeMasterBuildingPilotFaults({
+      cloudFaults: loaded,
+      buildingId: normalizedBuildingId,
+      buildingName: buildingNameForMerge,
+      demoFaults: isDemoBuilding && demoDataset ? demoDataset.faults : [],
+      liveStartedAt,
+    });
 
     setFaults(loaded);
     setCloudBuilding(building);
@@ -280,7 +261,9 @@ export default function MasterBuildingDossierPageContent({
 
   const demoElevators = demoDataset?.elevators ?? [];
 
-  const liveStartedAt = cloudBuilding?.live_started_at ?? null;
+  const liveStartedAt =
+    cloudBuilding?.live_started_at ??
+    resolveLiveStartedAt(normalizedBuildingId);
 
   if (!authed) {
     return <MasterCodeGate onSuccess={() => setAuthed(true)} />;

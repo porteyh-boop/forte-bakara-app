@@ -1,4 +1,5 @@
 import { getCatalogSnapshot } from "./buildings-catalog";
+import type { PilotCloudFault } from "./pilot-cloud";
 import type { Fault } from "./types";
 
 export const LIVE_STARTED_STORAGE_PREFIX = "forte-live-started-at";
@@ -20,6 +21,40 @@ export function filterFaultsForLiveStart(
 ): Fault[] {
   if (!liveStartedAt) return faults;
   return faults.filter((fault) => isAfterLiveStart(fault.reportedAt, liveStartedAt));
+}
+
+export function filterPilotFaultsForLiveStart(
+  faults: PilotCloudFault[],
+  liveStartedAt: string | null | undefined
+): PilotCloudFault[] {
+  if (!liveStartedAt) return faults;
+  return faults.filter((fault) =>
+    isAfterLiveStart(fault.created_at, liveStartedAt)
+  );
+}
+
+export function filterPilotFaultsByBuildingLiveStart(
+  faults: PilotCloudFault[],
+  liveStartedAtByBuilding: Record<string, string | null | undefined>
+): PilotCloudFault[] {
+  return faults.filter((fault) => {
+    const liveStartedAt = liveStartedAtByBuilding[fault.building_id];
+    if (!liveStartedAt) return true;
+    return isAfterLiveStart(fault.created_at, liveStartedAt);
+  });
+}
+
+export function buildLiveStartedAtByBuilding(
+  buildingIds: string[],
+  cloudLiveStartedAt: Record<string, string | null | undefined> = {}
+): Record<string, string | null> {
+  const map: Record<string, string | null> = {};
+  for (const id of buildingIds) {
+    map[id] =
+      cloudLiveStartedAt[id] ??
+      resolveLiveStartedAt(id);
+  }
+  return map;
 }
 
 export function logLiveStartFaultFilter(params: {

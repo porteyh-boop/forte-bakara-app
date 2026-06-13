@@ -105,8 +105,11 @@ import {
 } from "../lib/report-cloud-sync";
 import {
   filterFaultsForLiveStart,
+  filterPilotFaultsByBuildingLiveStart,
+  filterPilotFaultsForLiveStart,
   isAfterLiveStart,
 } from "../lib/building-live";
+import { mergeMasterBuildingPilotFaults } from "../lib/master-live-faults";
 import {
   buildMasterElevatorDossierPath,
   MASTER_ELEVATOR_DOSSIER_ROUTE_PREFIX,
@@ -2505,6 +2508,63 @@ assert(
   "תיק בניין: סינון לפי building_id"
 );
 
+const masterLiveStartedAt = "2026-06-02T12:00:00.000Z";
+const liveFilteredDossierFaults = filterPilotFaultsForLiveStart(
+  dossierFaults,
+  masterLiveStartedAt
+);
+assert(
+  liveFilteredDossierFaults.length === 1,
+  "Master live_started_at: סינון תקלות לפי created_at"
+);
+const liveBuildingDossier = buildBuildingDossier({
+  buildingId: "md25",
+  buildingName: "מגדל דוד 25",
+  faults: liveFilteredDossierFaults,
+  registeredElevatorIds: ["e1", "e2"],
+});
+assert(
+  liveBuildingDossier.totalFaults === 1 && liveBuildingDossier.openFaults === 0,
+  "Master live_started_at: KPI תיק בניין אחרי סינון"
+);
+assert(
+  filterPilotFaultsByBuildingLiveStart(dossierFaults, {
+    md25: masterLiveStartedAt,
+    other: null,
+  }).length === 1,
+  "Master live_started_at: סינון לפי בניין"
+);
+const mergedLiveMasterFaults = mergeMasterBuildingPilotFaults({
+  cloudFaults: dossierFaults,
+  buildingId: "md25",
+  buildingName: "מגדל דוד 25",
+  demoFaults: getBuildingDataset("md25").faults,
+  liveStartedAt: masterLiveStartedAt,
+});
+assert(
+  mergedLiveMasterFaults.length === 1 &&
+    !mergedLiveMasterFaults.some((f) => f.id.startsWith("MD25-")),
+  "Master live_started_at: דמו לא מתמזג אחרי live_started_at"
+);
+const mergedNoLiveMasterFaults = mergeMasterBuildingPilotFaults({
+  cloudFaults: dossierFaults,
+  buildingId: "md25",
+  buildingName: "מגדל דוד 25",
+  demoFaults: getBuildingDataset("md25").faults,
+  liveStartedAt: null,
+});
+assert(
+  mergedNoLiveMasterFaults.length > dossierFaults.length,
+  "Master live_started_at: דמו מתמזג ללא live_started_at"
+);
+const liveMasterAnalytics = buildMasterAnalytics(liveFilteredDossierFaults, {
+  buildingId: "md25",
+});
+assert(
+  liveMasterAnalytics.kpis.totalFaults === 1,
+  "Master live_started_at: analytics KPI"
+);
+
 const masterBuildingsUiDossier = fs.readFileSync(
   path.join(process.cwd(), "components/MasterBuildingsSection.tsx"),
   "utf8"
@@ -2512,7 +2572,9 @@ const masterBuildingsUiDossier = fs.readFileSync(
 assert(
   masterBuildingsUiDossier.includes("היסטוריית תקלות הבניין") &&
     masterBuildingsUiDossier.includes("תיק בניין") &&
-    masterBuildingsUiDossier.includes("buildBuildingDossier"),
+    masterBuildingsUiDossier.includes("buildBuildingDossier") &&
+    masterBuildingsUiDossier.includes("dossierFaults") &&
+    masterBuildingsUiDossier.includes("filterPilotFaultsByBuildingLiveStart"),
   "תיק בניין: UI במסך ניהול בניינים"
 );
 

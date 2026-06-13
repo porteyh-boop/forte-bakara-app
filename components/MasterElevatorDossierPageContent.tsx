@@ -4,9 +4,11 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import PageHeader from "@/components/PageHeader";
 import {
+  getAllCloudBuildingsWithMeta,
   getAllCloudElevators,
   type CloudElevatorRow,
 } from "@/lib/buildings-cloud";
+import { resolveLiveStartedAt } from "@/lib/building-live";
 import {
   getBuildingDataset,
   getStaticDemoBuildingMeta,
@@ -35,32 +37,7 @@ import {
   verifyMasterCode,
   type PilotCloudFault,
 } from "@/lib/pilot-cloud";
-import type { Fault } from "@/lib/types";
-
-function mapDemoFaultToPilot(
-  fault: Fault,
-  buildingId: string,
-  buildingName: string
-): PilotCloudFault {
-  return {
-    id: fault.id,
-    building_id: buildingId,
-    building_name: buildingName,
-    elevator_id: fault.elevatorId,
-    elevator_name: fault.elevatorName,
-    fault_type: fault.type,
-    description: fault.description,
-    is_disabled: fault.isDisabled ?? false,
-    status: fault.status,
-    ticket_number: fault.ticketNumber ?? null,
-    image_data: null,
-    image_url: null,
-    created_at: fault.reportedAt,
-    closed_at: fault.resolvedAt ?? null,
-    source_device_id: null,
-    fault_source: null,
-  };
-}
+import { mergeMasterBuildingPilotFaults } from "@/lib/master-live-faults";
 
 function MasterCodeGate({ onSuccess }: { onSuccess: () => void }) {
   const [code, setCode] = useState("");
@@ -158,29 +135,46 @@ export default function MasterElevatorDossierPageContent({
   const refresh = useCallback(async () => {
     setLoading(true);
     let loaded: PilotCloudFault[] = [];
+    let liveStartedAt: string | null = null;
+    let mergeBuildingName = getStaticDemoBuildingMeta(buildingId).name;
 
     if (isPilotCloudConfigured()) {
-      loaded = await getAllPilotFaults();
-      const elevators = await getAllCloudElevators();
+      const [faultRows, cloudResult, elevators] = await Promise.all([
+        getAllPilotFaults(),
+        getAllCloudBuildingsWithMeta(),
+        getAllCloudElevators(),
+      ]);
+      loaded = faultRows;
+      const cloudBuilding =
+        cloudResult.rows.find((row) => row.building_id === buildingId) ?? null;
+      liveStartedAt =
+        cloudBuilding?.live_started_at ?? resolveLiveStartedAt(buildingId);
+      if (cloudBuilding?.name) mergeBuildingName = cloudBuilding.name;
       setCloudElevator(
         elevators.find(
           (e) => e.building_id === buildingId && e.elevator_id === elevatorId
         ) ?? null
       );
+    } else {
+      liveStartedAt = resolveLiveStartedAt(buildingId);
     }
 
+    let demoFaults: ReturnType<typeof getBuildingDataset>["faults"] = [];
     try {
       const demo = getBuildingDataset(buildingId);
-      const demoFaults = demo.faults.map((f) =>
-        mapDemoFaultToPilot(f, buildingId, demo.building.name)
-      );
-      const seen = new Set(loaded.map((f) => f.id));
-      for (const f of demoFaults) {
-        if (!seen.has(f.id)) loaded.push(f);
-      }
+      mergeBuildingName = demo.building.name;
+      demoFaults = demo.faults;
     } catch {
       /* building not in demo catalog */
     }
+
+    loaded = mergeMasterBuildingPilotFaults({
+      cloudFaults: loaded,
+      buildingId,
+      buildingName: mergeBuildingName,
+      demoFaults,
+      liveStartedAt,
+    });
 
     setFaults(loaded);
     setLoading(false);

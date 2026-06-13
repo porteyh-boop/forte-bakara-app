@@ -30,6 +30,12 @@ import {
   getMasterFeedbackEmptyMessage,
 } from "@/lib/master-feedback-view";
 import { getAllBuildingIds, getBuildingDataset } from "@/lib/buildings";
+import { getAllCloudBuildingsWithMeta } from "@/lib/buildings-cloud";
+import {
+  buildLiveStartedAtByBuilding,
+  filterPilotFaultsByBuildingLiveStart,
+} from "@/lib/building-live";
+import { BUILDING_LIVE_STARTED_EVENT } from "@/hooks/useBuildingLiveStarted";
 type Tab = "faults" | "feedback" | "buildings" | "clientAccess" | "inspectorReports" | "documentCenter";
 
 function formatCloudDate(iso: string): string {
@@ -98,6 +104,9 @@ export default function MasterPageContent() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [liveStartedAtByBuilding, setLiveStartedAtByBuilding] = useState<
+    Record<string, string | null>
+  >({});
 
   const [cloudReady, setCloudReady] = useState(false);
   const [resetBuildingId, setResetBuildingId] = useState(
@@ -113,17 +122,36 @@ export default function MasterPageContent() {
   const refresh = useCallback(async () => {
     if (!cloudReady) return;
     setLoading(true);
-    const [f, fb] = await Promise.all([
+    const [f, fb, cloudResult] = await Promise.all([
       getAllPilotFaults(),
       getAllPilotFeedback(),
+      getAllCloudBuildingsWithMeta(),
     ]);
     setFaults(f);
     setFeedback(fb);
+    const cloudLiveMap: Record<string, string | null> = {};
+    for (const row of cloudResult.rows) {
+      cloudLiveMap[row.building_id] = row.live_started_at ?? null;
+    }
+    setLiveStartedAtByBuilding(
+      buildLiveStartedAtByBuilding(getAllBuildingIds(), cloudLiveMap)
+    );
     setLoading(false);
   }, [cloudReady]);
 
   useEffect(() => {
     if (authed && cloudReady) void refresh();
+  }, [authed, cloudReady, refresh]);
+
+  useEffect(() => {
+    if (!authed || !cloudReady) return;
+    function onLiveStarted() {
+      void refresh();
+    }
+    window.addEventListener(BUILDING_LIVE_STARTED_EVENT, onLiveStarted);
+    return () => {
+      window.removeEventListener(BUILDING_LIVE_STARTED_EVENT, onLiveStarted);
+    };
   }, [authed, cloudReady, refresh]);
 
   useEffect(() => {
@@ -150,15 +178,21 @@ export default function MasterPageContent() {
     return true;
   }
 
+  const faultsForDisplay = useMemo(
+    () =>
+      filterPilotFaultsByBuildingLiveStart(faults, liveStartedAtByBuilding),
+    [faults, liveStartedAtByBuilding]
+  );
+
   const filteredFaults = useMemo(
     () =>
-      faults.filter((f) => {
+      faultsForDisplay.filter((f) => {
         if (buildingFilter !== "all" && f.building_id !== buildingFilter) return false;
         if (statusFilter !== "all" && f.status !== statusFilter) return false;
         if (!inDateRange(f.created_at)) return false;
         return true;
       }),
-    [faults, buildingFilter, statusFilter, dateFrom, dateTo]
+    [faultsForDisplay, buildingFilter, statusFilter, dateFrom, dateTo]
   );
 
   const filteredFeedback = useMemo(
@@ -468,7 +502,7 @@ export default function MasterPageContent() {
             )}
 
             <MasterAnalyticsSection
-              faults={faults}
+              faults={faultsForDisplay}
               buildingOptions={buildingOptions}
               dateFrom={dateFrom}
               dateTo={dateTo}
@@ -547,6 +581,7 @@ export default function MasterPageContent() {
           <MasterBuildingsSection
             cloudReady={cloudReady}
             faults={faults}
+            liveStartedAtByBuilding={liveStartedAtByBuilding}
             onDataChanged={refresh}
           />
         )}

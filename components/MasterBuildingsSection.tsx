@@ -26,12 +26,17 @@ import {
   type CloudElevatorRow,
   type ElevatorStatusOption,
 } from "@/lib/buildings-cloud";
-import { setCachedLiveStartedAt } from "@/lib/building-live";
+import {
+  buildLiveStartedAtByBuilding,
+  filterPilotFaultsByBuildingLiveStart,
+  setCachedLiveStartedAt,
+} from "@/lib/building-live";
 import { BUILDING_LIVE_STARTED_EVENT } from "@/hooks/useBuildingLiveStarted";
 import {
   getAllDemoBuildingIds,
   getDemoDatasets,
   getStaticDemoBuildingMeta,
+  getAllBuildingIds,
   refreshBuildingCatalog,
 } from "@/lib/buildings";
 import {
@@ -59,6 +64,7 @@ import {
 interface MasterBuildingsSectionProps {
   cloudReady: boolean;
   faults: PilotCloudFault[];
+  liveStartedAtByBuilding?: Record<string, string | null>;
   onDataChanged?: () => void | Promise<void>;
 }
 
@@ -151,6 +157,7 @@ function elevatorFormFromRow(row: CloudElevatorRow): ElevatorFormState {
 export default function MasterBuildingsSection({
   cloudReady,
   faults,
+  liveStartedAtByBuilding = {},
   onDataChanged,
 }: MasterBuildingsSectionProps) {
   const [buildings, setBuildings] = useState<CloudBuildingRow[]>([]);
@@ -183,9 +190,29 @@ export default function MasterBuildingsSection({
   const [cloudLoadError, setCloudLoadError] = useState<string | null>(null);
   const [listVersion, setListVersion] = useState(0);
 
+  const resolvedLiveStartedAtByBuilding = useMemo(() => {
+    const cloudMap: Record<string, string | null | undefined> = {
+      ...liveStartedAtByBuilding,
+    };
+    for (const row of buildings) {
+      cloudMap[row.building_id] =
+        row.live_started_at ?? cloudMap[row.building_id] ?? null;
+    }
+    return buildLiveStartedAtByBuilding(getAllBuildingIds(), cloudMap);
+  }, [buildings, liveStartedAtByBuilding]);
+
+  const dossierFaults = useMemo(
+    () =>
+      filterPilotFaultsByBuildingLiveStart(
+        faults,
+        resolvedLiveStartedAtByBuilding
+      ),
+    [faults, resolvedLiveStartedAtByBuilding]
+  );
+
   const faultBuildingSummaries = useMemo(
-    () => summarizeFaultBuildings(faults),
-    [faults]
+    () => summarizeFaultBuildings(dossierFaults),
+    [dossierFaults]
   );
 
   const masterBuildingList = useMemo(
@@ -271,13 +298,13 @@ export default function MasterBuildingsSection({
     return buildBuildingDossier({
       buildingId: selectedBuildingId,
       buildingName: selectedBuildingName,
-      faults,
+      faults: dossierFaults,
       registeredElevatorIds: selectedElevators.map((e) => e.elevator_id),
     });
   }, [
     selectedBuildingId,
     selectedBuildingName,
-    faults,
+    dossierFaults,
     selectedElevators,
   ]);
 
@@ -292,7 +319,7 @@ export default function MasterBuildingsSection({
         buildBuildingDossier({
           buildingId: entry.buildingId,
           buildingName: entry.name,
-          faults,
+          faults: dossierFaults,
           registeredElevatorIds: (
             elevatorsByBuilding[entry.buildingId] ?? []
           ).map((e) => e.elevator_id),
@@ -300,7 +327,7 @@ export default function MasterBuildingsSection({
       );
     }
     return map;
-  }, [masterBuildingList, elevatorsByBuilding, faults]);
+  }, [masterBuildingList, elevatorsByBuilding, dossierFaults]);
 
   function selectBuilding(buildingId: string) {
     setSelectedBuildingId(buildingId);
