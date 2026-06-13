@@ -9,6 +9,7 @@ interface PageHeaderProps {
   subtitle?: string;
   badge?: string;
   wide?: boolean;
+  master?: boolean;
 }
 
 export default function PageHeader({
@@ -16,11 +17,14 @@ export default function PageHeader({
   subtitle,
   badge,
   wide = false,
+  master = false,
 }: PageHeaderProps) {
   const isHome = title === BRAND_APP;
-  const contentWidthClass = wide
-    ? "max-w-lg md:max-w-6xl"
-    : "max-w-lg md:max-w-2xl";
+  const contentWidthClass = master
+    ? "max-w-lg md:max-w-7xl"
+    : wide
+      ? "max-w-lg md:max-w-6xl"
+      : "max-w-lg md:max-w-2xl";
 
   return (
     <header dir="rtl" className="relative bg-navy text-white overflow-hidden">

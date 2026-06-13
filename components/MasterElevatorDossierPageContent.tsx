@@ -249,9 +249,9 @@ export default function MasterElevatorDossierPageContent({
 
   return (
     <div className="min-h-screen bg-gray-light pb-8">
-      <PageHeader title="תיק מעלית" subtitle={buildingName} />
+      <PageHeader title="תיק מעלית" subtitle={buildingName} master />
 
-      <main className="max-w-3xl mx-auto px-4 space-y-4">
+      <main className="mx-auto w-full max-w-lg px-5 pb-8 md:max-w-7xl md:px-8 -mt-2 space-y-4 md:space-y-6">
         <Link
           href="/master"
           className="inline-flex items-center gap-1.5 text-sm font-semibold text-navy hover:underline cursor-pointer"
@@ -273,7 +273,7 @@ export default function MasterElevatorDossierPageContent({
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
                 <DossierKpi label="סטטוס מעלית" value={elevatorStatus} small />
                 <DossierKpi
                   label="מספר תחנות"

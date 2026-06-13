@@ -1119,7 +1119,7 @@ function BuildingDossierPanel({
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
         <DossierKpi label='סה"כ תקלות' value={dossier.totalFaults} />
         <DossierKpi label="תקלות פתוחות" value={dossier.openFaults} />
         <DossierKpi label="תקלות סגורות" value={dossier.closedFaults} />

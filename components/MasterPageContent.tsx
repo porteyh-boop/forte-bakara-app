@@ -256,9 +256,10 @@ export default function MasterPageContent() {
         title="ניהול פיילוט"
         subtitle="יהודה פורטה — דיווחים ומשובים מכל המכשירים"
         badge="פנימי"
+        master
       />
 
-      <main className="page-content -mt-2 space-y-4">
+      <main className="mx-auto w-full max-w-lg px-5 pb-[calc(6rem+env(safe-area-inset-bottom))] md:max-w-7xl md:px-8 -mt-2 space-y-4">
         {!cloudReady && (
           <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             Supabase לא מוגדר. הגדירו NEXT_PUBLIC_SUPABASE_URL ו-
@@ -267,9 +268,9 @@ export default function MasterPageContent() {
           </div>
         )}
 
-        <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
+        <div className="bg-white rounded-2xl border border-gray-200 p-4 md:p-5 space-y-3">
           <p className="text-xs font-semibold text-gold">סינון (דיווחים ומשובים)</p>
-          <div className="grid grid-cols-1 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
             <select
               value={buildingFilter}
               onChange={(e) => setBuildingFilter(e.target.value)}
@@ -283,7 +284,7 @@ export default function MasterPageContent() {
               ))}
             </select>
 
-            {tab === "faults" && (
+            {tab === "faults" ? (
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
@@ -295,27 +296,27 @@ export default function MasterPageContent() {
                 <option value="סגורה">סגורה</option>
                 <option value="מושבתת">מושבתת</option>
               </select>
+            ) : (
+              <div className="hidden xl:block" aria-hidden="true" />
             )}
 
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-xs text-gray-text">מתאריך</label>
-                <input
-                  type="date"
-                  value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                  className="form-input mt-1"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-gray-text">עד תאריך</label>
-                <input
-                  type="date"
-                  value={dateTo}
-                  onChange={(e) => setDateTo(e.target.value)}
-                  className="form-input mt-1"
-                />
-              </div>
+            <div>
+              <label className="text-xs text-gray-text">מתאריך</label>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="form-input mt-1"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-gray-text">עד תאריך</label>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="form-input mt-1"
+              />
             </div>
           </div>
 
@@ -348,14 +349,14 @@ export default function MasterPageContent() {
             </button>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-100">
-            <p className="text-xs font-semibold text-gray-text w-full">
+          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-100 md:flex-nowrap">
+            <p className="text-xs font-semibold text-gray-text w-full md:w-auto md:shrink-0">
               איפוס לפי בניין (Supabase בלבד)
             </p>
             <select
               value={resetBuildingId}
               onChange={(e) => setResetBuildingId(e.target.value)}
-              className="form-input flex-1 min-w-[12rem]"
+              className="form-input flex-1 min-w-[12rem] md:min-w-0"
               disabled={!cloudReady || loading}
             >
               {buildingOptions.map((b) => (
@@ -375,11 +376,11 @@ export default function MasterPageContent() {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-6">
           <button
             type="button"
             onClick={() => setTab("faults")}
-            className={`flex-1 min-w-[7rem] rounded-xl py-2.5 text-sm font-semibold transition-colors ${
+            className={`rounded-xl py-2.5 text-sm font-semibold transition-colors ${
               tab === "faults"
                 ? "bg-navy text-white"
                 : "bg-white border border-gray-200 text-navy"
@@ -390,7 +391,7 @@ export default function MasterPageContent() {
           <button
             type="button"
             onClick={() => setTab("feedback")}
-            className={`flex-1 min-w-[7rem] rounded-xl py-2.5 text-sm font-semibold transition-colors ${
+            className={`rounded-xl py-2.5 text-sm font-semibold transition-colors ${
               tab === "feedback"
                 ? "bg-navy text-white"
                 : "bg-white border border-gray-200 text-navy"
@@ -401,7 +402,7 @@ export default function MasterPageContent() {
           <button
             type="button"
             onClick={() => setTab("buildings")}
-            className={`flex-1 min-w-[7rem] rounded-xl py-2.5 text-sm font-semibold transition-colors ${
+            className={`rounded-xl py-2.5 text-sm font-semibold transition-colors ${
               tab === "buildings"
                 ? "bg-navy text-white"
                 : "bg-white border border-gray-200 text-navy"
@@ -412,7 +413,7 @@ export default function MasterPageContent() {
           <button
             type="button"
             onClick={() => setTab("clientAccess")}
-            className={`flex-1 min-w-[7rem] rounded-xl py-2.5 text-sm font-semibold transition-colors ${
+            className={`rounded-xl py-2.5 text-sm font-semibold transition-colors ${
               tab === "clientAccess"
                 ? "bg-navy text-white"
                 : "bg-white border border-gray-200 text-navy"
@@ -423,7 +424,7 @@ export default function MasterPageContent() {
           <button
             type="button"
             onClick={() => setTab("inspectorReports")}
-            className={`flex-1 min-w-[7rem] rounded-xl py-2.5 text-sm font-semibold transition-colors ${
+            className={`rounded-xl py-2.5 text-sm font-semibold transition-colors ${
               tab === "inspectorReports"
                 ? "bg-navy text-white"
                 : "bg-white border border-gray-200 text-navy"
@@ -434,7 +435,7 @@ export default function MasterPageContent() {
           <button
             type="button"
             onClick={() => setTab("documentCenter")}
-            className={`flex-1 min-w-[7rem] rounded-xl py-2.5 text-sm font-semibold transition-colors ${
+            className={`rounded-xl py-2.5 text-sm font-semibold transition-colors ${
               tab === "documentCenter"
                 ? "bg-navy text-white"
                 : "bg-white border border-gray-200 text-navy"
@@ -451,17 +452,19 @@ export default function MasterPageContent() {
                 {cloudReady ? "אין דיווחים בענן" : "Supabase לא מחובר"}
               </p>
             ) : (
-              filteredFaults.map((f) => (
-                <MasterCloudFaultCard
-                  key={f.id}
-                  fault={f}
-                  actionId={actionId}
-                  formatDate={formatCloudDate}
-                  onClose={(faultId) => void handleClose(faultId)}
-                  onReopen={(faultId) => void handleReopen(faultId)}
-                  onDelete={(faultId) => void handleDelete(faultId)}
-                />
-              ))
+              <div className="space-y-3 xl:grid xl:grid-cols-2 xl:gap-4 xl:space-y-0">
+                {filteredFaults.map((f) => (
+                  <MasterCloudFaultCard
+                    key={f.id}
+                    fault={f}
+                    actionId={actionId}
+                    formatDate={formatCloudDate}
+                    onClose={(faultId) => void handleClose(faultId)}
+                    onReopen={(faultId) => void handleReopen(faultId)}
+                    onDelete={(faultId) => void handleDelete(faultId)}
+                  />
+                ))}
+              </div>
             )}
 
             <MasterAnalyticsSection

@@ -379,7 +379,7 @@ export default function MasterClientAccessSection() {
                 {cloudReady ? "אין לקוחות עם גישה." : "Supabase לא מחובר."}
               </p>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-3 xl:grid xl:grid-cols-2 xl:gap-4 xl:space-y-0">
                 {records.map((item) => {
                   const buildingLabel =
                     buildingOptions.find(

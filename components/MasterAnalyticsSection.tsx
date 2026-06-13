@@ -196,7 +196,7 @@ export default function MasterAnalyticsSection({
 
       {isPortfolio ? (
         <>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-3">
             <KpiCard label="מספר בניינים" value={portfolio.buildingCount} />
             <KpiCard label="מספר מעליות" value={portfolio.elevatorCount} />
             <KpiCard label="מספר תקלות" value={portfolio.totalFaults} />
@@ -254,7 +254,7 @@ export default function MasterAnalyticsSection({
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
             <KpiCard label="סך תקלות" value={analytics.kpis.totalFaults} />
             <KpiCard label="תקלות פתוחות" value={analytics.kpis.openFaults} />
             <KpiCard label="תקלות סגורות" value={analytics.kpis.closedFaults} />

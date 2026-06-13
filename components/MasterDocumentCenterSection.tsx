@@ -345,7 +345,7 @@ export default function MasterDocumentCenterSection() {
         className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3"
       >
         <h3 className="text-sm font-bold text-navy">הוספת מסמך</h3>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           <div>
             <label className="text-xs text-gray-text">בניין</label>
             <select
