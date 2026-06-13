@@ -9,7 +9,12 @@ export default function ActiveBuildingBar() {
   const pathname = usePathname();
   const { ctx, ready } = useBuilding();
 
-  if (!ready || pathname === "/buildings" || isClientAccessPath(pathname)) {
+  if (
+    !ready ||
+    pathname === "/buildings" ||
+    isClientAccessPath(pathname) ||
+    pathname.startsWith("/master")
+  ) {
     return null;
   }
 
