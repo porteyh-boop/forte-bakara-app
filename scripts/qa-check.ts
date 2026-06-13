@@ -131,6 +131,29 @@ import {
   type ClientAccessSession,
 } from "../lib/client-access";
 import {
+  CLIENT_PERMISSION_KEYS,
+  CLIENT_PERMISSION_LABELS,
+  DEFAULT_CLIENT_PERMISSIONS,
+  extractClientPermissionFlags,
+  formatClientActivityAction,
+  formatClientActivityDetails,
+} from "../lib/client-permissions";
+import {
+  CLIENT_TYPE_OPTIONS,
+  computePortalDataLastUpdated,
+  DEFAULT_CLIENT_WELCOME_MESSAGE,
+  formatClientPortalLastUpdated,
+  resolveClientWelcomeMessage,
+} from "../lib/client-profile";
+import {
+  CLIENT_PORTAL_BUILDING_NOT_FOUND_TITLE,
+} from "../lib/client-portal-building";
+import {
+  CLIENT_PORTAL_ACTIVITY,
+  CLIENT_PORTAL_FAULT_SOURCE,
+  computeClientPortalStats,
+} from "../lib/client-portal";
+import {
   clampFaultImageZoom,
   isFaultImageLightboxCloseKey,
   isRemoteFaultImageSrc,
@@ -234,7 +257,9 @@ import {
   buildCloudCatalogSnapshot,
   buildDemoCatalogSnapshot,
   buildMergedClientCatalogSnapshot,
+  getCatalogSnapshot,
   resolveAllBuildingIdsForMaster,
+  resolveBuildingDatasetStrict,
   setCatalogSnapshot,
 } from "../lib/buildings-catalog";
 import {
@@ -2701,6 +2726,8 @@ const activeSession: ClientAccessSession = {
     name: "לקוח בדיקה",
     phone: null,
     email: null,
+    client_type: null,
+    welcome_message: null,
     access_token: sampleToken,
     is_active: true,
     expires_at: "2026-12-31T23:59:59.000Z",
@@ -2851,6 +2878,277 @@ assert(
     "isClientAccessPath"
   ),
   "גישת לקוח: תפריט תחתון מוסתר בנתיב access"
+);
+
+const clientPermissionsMigration = path.join(
+  process.cwd(),
+  "supabase/migrations/013_client_permissions.sql"
+);
+assert(
+  fs.existsSync(clientPermissionsMigration),
+  "הרשאות לקוח: migration 013 קיים"
+);
+
+const clientPermissionsMigrationSql = fs.readFileSync(
+  clientPermissionsMigration,
+  "utf8"
+);
+assert(
+  clientPermissionsMigrationSql.includes("client_permissions") &&
+    clientPermissionsMigrationSql.includes("client_activity_log") &&
+    clientPermissionsMigrationSql.includes("can_report_faults") &&
+    clientPermissionsMigrationSql.includes("can_receive_notifications"),
+  "הרשאות לקוח: טבלאות ושדות במigration"
+);
+
+const clientPermissionsLib = path.join(
+  process.cwd(),
+  "lib/client-permissions.ts"
+);
+assert(
+  fs.existsSync(clientPermissionsLib),
+  "הרשאות לקוח: ספריית client-permissions קיימת"
+);
+
+assert(
+  CLIENT_PERMISSION_KEYS.length === 8 &&
+    CLIENT_PERMISSION_KEYS.every((key) => DEFAULT_CLIENT_PERMISSIONS[key] === false),
+  "הרשאות לקוח: ברירת מחדל false לכל ההרשאות"
+);
+assert(
+  CLIENT_PERMISSION_LABELS.can_view_building_dashboard === "גישה לפורטל לקוח" &&
+    CLIENT_PERMISSION_LABELS.can_report_faults === "דיווח תקלות" &&
+    CLIENT_PERMISSION_LABELS.can_receive_notifications === "קבלת התראות",
+  "הרשאות לקוח: תוויות עברית"
+);
+assert(
+  formatClientActivityAction("permissions_updated") === "עדכון הרשאות" &&
+    formatClientActivityDetails(
+      JSON.stringify({
+        can_report_faults: true,
+        can_view_documents: false,
+      })
+    ).includes("דיווח תקלות: כן"),
+  "הרשאות לקוח: פורמט יומן פעילות"
+);
+
+const samplePermissionFlags = extractClientPermissionFlags({
+  id: "perm-1",
+  client_user_id: "user-1",
+  can_view_building_dashboard: true,
+  can_report_faults: true,
+  can_view_open_faults: false,
+  can_view_fault_history: false,
+  can_view_availability: true,
+  can_view_documents: false,
+  can_upload_images: false,
+  can_receive_notifications: true,
+  created_at: "2026-06-01T10:00:00.000Z",
+  updated_at: "2026-06-01T10:00:00.000Z",
+});
+assert(
+  samplePermissionFlags.can_report_faults &&
+    !samplePermissionFlags.can_view_documents &&
+    samplePermissionFlags.can_view_availability,
+  "הרשאות לקוח: extractClientPermissionFlags"
+);
+
+const masterClientAccessUiSource = fs.readFileSync(masterClientAccessUi, "utf8");
+assert(
+  masterClientAccessUiSource.includes("ניהול הרשאות") &&
+    masterClientAccessUiSource.includes("יומן פעילות") &&
+    masterClientAccessUiSource.includes("MasterClientPermissionsModal"),
+  "הרשאות לקוח: UI Master — ניהול הרשאות ויומן פעילות"
+);
+
+const clientProfileMigration = path.join(
+  process.cwd(),
+  "supabase/migrations/015_client_user_profile.sql"
+);
+assert(
+  fs.existsSync(clientProfileMigration),
+  "פרופיל לקוח: migration 015 קיים"
+);
+
+const clientProfileMigrationSql = fs.readFileSync(clientProfileMigration, "utf8");
+assert(
+  clientProfileMigrationSql.includes("client_type") &&
+    clientProfileMigrationSql.includes("welcome_message") &&
+    clientProfileMigrationSql.includes("client_users"),
+  "פרופיל לקוח: שדות client_type ו-welcome_message במigration"
+);
+
+assert(
+  fs.existsSync(path.join(process.cwd(), "lib/client-profile.ts")),
+  "פרופיל לקוח: ספריית client-profile קיימת"
+);
+
+assert(
+  CLIENT_TYPE_OPTIONS.length === 5 &&
+    CLIENT_TYPE_OPTIONS.includes("ועד בית") &&
+    CLIENT_TYPE_OPTIONS.includes("אחר"),
+  "פרופיל לקוח: סוגי לקוח מוגדרים"
+);
+
+assert(
+  resolveClientWelcomeMessage(null) === DEFAULT_CLIENT_WELCOME_MESSAGE &&
+    resolveClientWelcomeMessage("  ") === DEFAULT_CLIENT_WELCOME_MESSAGE &&
+    resolveClientWelcomeMessage("הודעה מותאמת") === "הודעה מותאמת",
+  "פרופיל לקוח: תאימות לאחור להודעת פתיחה"
+);
+
+assert(
+  formatClientPortalLastUpdated("2026-06-13T14:30:00.000Z").includes("/") &&
+    formatClientPortalLastUpdated(null) === "—",
+  "פרופיל לקוח: פורמט עודכן לאחרונה"
+);
+
+assert(
+  computePortalDataLastUpdated([
+    "2026-06-01T10:00:00.000Z",
+    "2026-06-10T12:00:00.000Z",
+  ]) === "2026-06-10T12:00:00.000Z",
+  "פרופיל לקוח: חישוב זמן עדכון אחרון"
+);
+
+const clientAccessLibSource = fs.readFileSync(
+  path.join(process.cwd(), "lib/client-access.ts"),
+  "utf8"
+);
+assert(
+  clientAccessLibSource.includes("updateClientUserProfile") &&
+    clientAccessLibSource.includes("client_type") &&
+    clientAccessLibSource.includes("welcome_message"),
+  "פרופיל לקוח: CRUD ב-lib/client-access"
+);
+
+assert(
+  masterClientAccessUiSource.includes("סוג לקוח") &&
+    masterClientAccessUiSource.includes("הודעת פתיחה לפורטל") &&
+    masterClientAccessUiSource.includes("ערוך לקוח") &&
+    masterClientAccessUiSource.includes("MasterClientEditModal") &&
+    masterClientAccessUiSource.includes("DEFAULT_CLIENT_WELCOME_MESSAGE"),
+  "פרופיל לקוח: UI יצירה ועריכה ב-Master"
+);
+
+assert(
+  fs.existsSync(path.join(process.cwd(), "components/MasterClientEditModal.tsx")),
+  "פרופיל לקוח: מודל עריכת לקוח קיים"
+);
+
+assert(
+  fs.existsSync(
+    path.join(process.cwd(), "components/MasterClientPermissionsModal.tsx")
+  ),
+  "הרשאות לקוח: מודל ניהול הרשאות קיים"
+);
+
+const clientPortalMigration = path.join(
+  process.cwd(),
+  "supabase/migrations/014_client_portal_permissions.sql"
+);
+assert(
+  fs.existsSync(clientPortalMigration),
+  "פורטל לקוח: migration 014 קיים"
+);
+
+const clientPortalMigrationSql = fs.readFileSync(clientPortalMigration, "utf8");
+assert(
+  clientPortalMigrationSql.includes("can_view_building_dashboard") &&
+    clientPortalMigrationSql.includes("fault_source"),
+  "פורטל לקוח: הרשאת כניסה ומקור תקלה במigration"
+);
+
+assert(
+  fs.existsSync(path.join(process.cwd(), "lib/client-portal.ts")),
+  "פורטל לקוח: ספריית client-portal קיימת"
+);
+assert(
+  CLIENT_PORTAL_FAULT_SOURCE === "Client Portal" &&
+    CLIENT_PORTAL_ACTIVITY.LOGIN === "LOGIN" &&
+    CLIENT_PORTAL_ACTIVITY.LOGOUT === "LOGOUT",
+  "פורטל לקוח: קבועי מקור ופעילות"
+);
+
+const portalStats = computeClientPortalStats(
+  getBuildingDataset("md25").elevators,
+  getBuildingDataset("md25").faults
+);
+assert(
+  portalStats.elevatorCount > 0 &&
+    portalStats.monthlyAvailabilityPercent >= 0 &&
+    portalStats.monthlyAvailabilityPercent <= 100,
+  "פורטל לקוח: computeClientPortalStats"
+);
+
+const clientPortalPageSource = fs.readFileSync(clientAccessPage, "utf8");
+assert(
+  clientPortalPageSource.includes("can_view_building_dashboard") &&
+    clientPortalPageSource.includes("אין לך הרשאה לגשת לפורטל") &&
+    clientPortalPageSource.includes("דווח תקלה") &&
+    clientPortalPageSource.includes("ClientPortalInstallPrompt") &&
+    clientPortalPageSource.includes("getClientPermissionsOrDefaults") &&
+    clientPortalPageSource.includes("resolveClientPortalBuilding") &&
+    clientPortalPageSource.includes("CLIENT_PORTAL_BUILDING_NOT_FOUND_TITLE") &&
+    clientPortalPageSource.includes("resolveClientWelcomeMessage") &&
+    clientPortalPageSource.includes("formatClientPortalLastUpdated") &&
+    clientPortalPageSource.includes("עודכן לאחרונה") &&
+    !clientPortalPageSource.includes("getBuildingDataset") &&
+    !clientPortalPageSource.includes("שלום {session.user.name}"),
+  "פורטל לקוח: UI עם אכיפת הרשאות, ללא getBuildingDataset"
+);
+
+assert(
+  resolveBuildingDatasetStrict("unknown-building-xyz", getDemoDatasets()) === null,
+  "פורטל לקוח: resolveBuildingDatasetStrict — בניין לא קיים מחזיר null"
+);
+assert(
+  resolveBuildingDatasetStrict("md25", getDemoDatasets())?.building.name ===
+    "מגדל דוד 25",
+  "פורטל לקוח: resolveBuildingDatasetStrict — md25 רק כשהמזהה md25"
+);
+assert(
+  resolveBuildingDatasetStrict("beit-yehoshua-4", getDemoDatasets()) === null,
+  "פורטל לקוח: בניין ענן לא בדמו — לא נופל ל-md25"
+);
+
+const priorCatalogSnapshot = getCatalogSnapshot();
+setCatalogSnapshot(buildDemoCatalogSnapshot(getDemoDatasets()));
+assert(
+  resolveBuildingDatasetStrict("md25", getDemoDatasets())?.id === "md25" &&
+    resolveBuildingDatasetStrict("fake-cloud-id", getDemoDatasets()) === null,
+  "פורטל לקוח: קטלוג טעון — אין fallback ל-md25"
+);
+setCatalogSnapshot(priorCatalogSnapshot);
+
+assert(
+  fs.existsSync(path.join(process.cwd(), "lib/client-portal-building.ts")),
+  "פורטל לקוח: ספריית client-portal-building קיימת"
+);
+
+const clientPortalReportSource = fs.readFileSync(
+  path.join(process.cwd(), "components/ClientAccessReportForm.tsx"),
+  "utf8"
+);
+assert(
+  clientPortalReportSource.includes("saveClientPortalFault") &&
+    clientPortalReportSource.includes("allowImageUpload"),
+  "פורטל לקוח: דיווח עם מקור Client Portal"
+);
+
+assert(
+  fs.existsSync(path.join(process.cwd(), "components/ClientPortalInstallPrompt.tsx")),
+  "פורטל לקוח: רכיב הוסף למסך הבית קיים"
+);
+
+const clientPortalPilotCloudSource = fs.readFileSync(
+  path.join(process.cwd(), "lib/pilot-cloud.ts"),
+  "utf8"
+);
+assert(
+  clientPortalPilotCloudSource.includes("fault_source") &&
+    clientPortalPilotCloudSource.includes("faultSource"),
+  "פורטל לקוח: שמירת fault_source ב-pilot-cloud"
 );
 
 const inspectorMigration = path.join(
@@ -3470,9 +3768,20 @@ assert(
 );
 
 let documentCenterLeakToClient = 0;
+const clientAccessPortalPage = path.join(
+  process.cwd(),
+  "components/ClientAccessPageContent.tsx"
+);
 for (const file of clientPagesForInspector) {
   if (!fs.existsSync(file)) continue;
   const content = fs.readFileSync(file, "utf8");
+  if (
+    file === clientAccessPortalPage &&
+    content.includes("can_view_documents") &&
+    content.includes("getAllDocuments")
+  ) {
+    continue;
+  }
   if (
     content.includes("MasterDocumentCenterSection") ||
     content.includes("document-center")

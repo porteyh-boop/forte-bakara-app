@@ -15,7 +15,7 @@ import {
   REPORT_SAVED_HEADLINE,
   REPORT_SAVED_INFO,
 } from "@/lib/pilot-copy";
-import { savePilotFaultFromLocalFault } from "@/lib/pilot-cloud";
+import { saveClientPortalFault } from "@/lib/client-portal";
 import type { ReportImageAttachment } from "@/lib/report-image";
 
 interface ClientAccessReportFormProps {
@@ -23,7 +23,9 @@ interface ClientAccessReportFormProps {
   buildingName: string;
   elevators: Elevator[];
   lockedElevatorId?: string | null;
+  allowImageUpload?: boolean;
   onSubmitted?: () => void;
+  onSubmitSuccess?: (ticketNumber: string) => void;
 }
 
 export default function ClientAccessReportForm({
@@ -31,13 +33,14 @@ export default function ClientAccessReportForm({
   buildingName,
   elevators,
   lockedElevatorId,
+  allowImageUpload = true,
   onSubmitted,
+  onSubmitSuccess,
 }: ClientAccessReportFormProps) {
   const [elevatorId, setElevatorId] = useState(
     lockedElevatorId ?? elevators[0]?.id ?? ""
   );
   const [faultType, setFaultType] = useState("");
-  const [isDisabled, setIsDisabled] = useState(false);
   const [description, setDescription] = useState("");
   const [imageAttachment, setImageAttachment] =
     useState<ReportImageAttachment | null>(null);
@@ -56,7 +59,6 @@ export default function ClientAccessReportForm({
     setTicketNumber("");
     setElevatorId(lockedElevatorId ?? elevators[0]?.id ?? "");
     setFaultType("");
-    setIsDisabled(false);
     setDescription("");
     setImageAttachment(null);
     setSubmitting(false);
@@ -75,20 +77,33 @@ export default function ClientAccessReportForm({
         elevatorName: selectedElevator.name,
         faultType: faultType as FaultType,
         description,
-        isDisabled,
-        image: imageAttachment,
+        isDisabled: false,
+        image: allowImageUpload ? imageAttachment : null,
       },
       existingCount
     );
 
     saveSubmittedReport(fault, buildingId);
-    savePilotFaultFromLocalFault(fault, buildingId, buildingName);
+    void saveClientPortalFault({
+      buildingId,
+      buildingName,
+      elevatorId: fault.elevatorId,
+      elevatorName: fault.elevatorName,
+      faultType: fault.type,
+      description: fault.description,
+      isDisabled: Boolean(fault.isDisabled),
+      status: fault.status,
+      ticketNumber: fault.ticketNumber,
+      imageData: fault.image?.dataUrl ?? null,
+    });
 
     setTimeout(() => {
-      setTicketNumber(fault.ticketNumber ?? "");
+      const savedTicket = fault.ticketNumber ?? "";
+      setTicketNumber(savedTicket);
       setSubmitted(true);
       setSubmitting(false);
       onSubmitted?.();
+      onSubmitSuccess?.(savedTicket);
     }, 300);
   }
 
@@ -159,19 +174,12 @@ export default function ClientAccessReportForm({
         />
       </div>
 
-      <label className="flex items-center gap-2 text-sm text-navy">
-        <input
-          type="checkbox"
-          checked={isDisabled}
-          onChange={(e) => setIsDisabled(e.target.checked)}
+      {allowImageUpload && (
+        <ReportImagePicker
+          attachment={imageAttachment}
+          onChange={setImageAttachment}
         />
-        המעלית מושבתת / לא ניתן להשתמש בה
-      </label>
-
-      <ReportImagePicker
-        attachment={imageAttachment}
-        onChange={setImageAttachment}
-      />
+      )}
 
       <p className="text-xs text-gray-text">{REPORT_MAINTENANCE_RESPONSIBILITY}</p>
 

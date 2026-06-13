@@ -23,6 +23,7 @@ export interface PilotCloudFault {
   created_at: string;
   closed_at: string | null;
   source_device_id: string | null;
+  fault_source: string | null;
 }
 
 export interface PilotCloudFeedback {
@@ -52,6 +53,7 @@ export interface SavePilotFaultInput {
   ticketNumber?: string;
   imageData?: string | null;
   imageUrl?: string | null;
+  faultSource?: string | null;
 }
 
 let supabaseClient: SupabaseClient | null | undefined;
@@ -181,6 +183,7 @@ export async function savePilotFault(
     image_data: input.imageData ?? null,
     image_url: input.imageUrl ?? null,
     source_device_id: getOrCreatePilotDeviceId(),
+    fault_source: input.faultSource ?? null,
   };
 
   const { data, error } = await client

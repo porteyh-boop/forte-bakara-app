@@ -220,6 +220,30 @@ export function ensureBuildingCatalogLoaded(
   return catalogLoadPromise;
 }
 
+/** ללא fallback — מחזיר null אם הבניין לא קיים בקטלוג או בדמו. */
+export function resolveBuildingDatasetStrict(
+  id: string,
+  demoDatasets: Record<string, BuildingDataContext>
+): BuildingDataContext | null {
+  const normalizedId = normalizeBuildingId(id);
+  if (catalogSnapshot) {
+    const fromCatalog =
+      catalogSnapshot.buildings[normalizedId] ?? catalogSnapshot.buildings[id];
+    if (fromCatalog) return fromCatalog;
+  }
+  return demoDatasets[normalizedId] ?? demoDatasets[id] ?? null;
+}
+
+export function buildCloudBuildingContext(
+  building: CloudBuildingRow,
+  elevators: CloudElevatorRow[],
+  demoDatasets: Record<string, BuildingDataContext>
+): BuildingDataContext {
+  const normalizedId = normalizeBuildingId(building.building_id);
+  const demoCtx = demoDatasets[normalizedId] ?? demoDatasets[building.building_id];
+  return mapCloudBuildingToContext(building, elevators, demoCtx);
+}
+
 export function resolveBuildingDataset(
   id: string,
   demoDatasets: Record<string, BuildingDataContext>,

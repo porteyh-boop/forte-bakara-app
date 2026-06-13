@@ -1,11 +1,18 @@
+"use client";
+
+import { usePathname } from "next/navigation";
 import {
   BRAND_APP,
   BRAND_EDITOR_NAME,
   BRAND_EDITOR_TITLE,
   BRAND_FORTE,
 } from "@/lib/brand";
+import { isClientAccessPath } from "@/lib/client-access";
 
 export default function AppFooter() {
+  const pathname = usePathname();
+  if (isClientAccessPath(pathname)) return null;
+
   return (
     <footer className="print:hidden max-w-lg mx-auto px-5 py-6 pb-28 text-center">
       <p className="text-xs font-bold text-navy">{BRAND_EDITOR_NAME}</p>

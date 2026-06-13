@@ -1,6 +1,18 @@
+import {
+  DEFAULT_CLIENT_WELCOME_MESSAGE,
+  isClientType,
+  type ClientType,
+} from "./client-profile";
 import { getPilotSupabaseClient, isPilotCloudConfigured } from "./pilot-cloud";
 import type { Elevator, Fault } from "./types";
 import type { PilotCloudFault } from "./pilot-cloud";
+
+export type { ClientType } from "./client-profile";
+export {
+  CLIENT_TYPE_OPTIONS,
+  DEFAULT_CLIENT_WELCOME_MESSAGE,
+  resolveClientWelcomeMessage,
+} from "./client-profile";
 
 export const CLIENT_USERS_TABLE = "client_users";
 export const CLIENT_ACCESS_TABLE = "client_access";
@@ -18,6 +30,8 @@ export interface ClientUserRecord {
   name: string;
   phone: string | null;
   email: string | null;
+  client_type: ClientType | null;
+  welcome_message: string | null;
   access_token: string;
   is_active: boolean;
   expires_at: string | null;
@@ -47,10 +61,21 @@ export interface CreateClientUserAccessInput {
   name: string;
   phone?: string;
   email?: string;
+  clientType?: ClientType | null;
+  welcomeMessage?: string | null;
   buildingId: string;
   elevatorId?: string | null;
   accessLevel: ClientAccessLevel;
   expiresAt?: string | null;
+}
+
+export interface UpdateClientUserProfileInput {
+  userId: string;
+  name: string;
+  phone?: string | null;
+  email?: string | null;
+  clientType?: ClientType | null;
+  welcomeMessage?: string | null;
 }
 
 export interface UpdateClientAccessScopeInput {
@@ -176,16 +201,31 @@ export function scopeFaultsForClientAccess<T extends Fault | PilotCloudFault>(
 }
 
 function mapClientUserRow(row: Record<string, unknown>): ClientUserRecord {
+  const rawClientType = row.client_type ? String(row.client_type) : null;
+  const rawWelcomeMessage = row.welcome_message
+    ? String(row.welcome_message)
+    : null;
+
   return {
     id: String(row.id),
     name: String(row.name),
     phone: row.phone ? String(row.phone) : null,
     email: row.email ? String(row.email) : null,
+    client_type: isClientType(rawClientType) ? rawClientType : null,
+    welcome_message: rawWelcomeMessage?.trim() ? rawWelcomeMessage : null,
     access_token: String(row.access_token),
     is_active: Boolean(row.is_active),
     expires_at: row.expires_at ? String(row.expires_at) : null,
     created_at: String(row.created_at),
   };
+}
+
+function normalizeWelcomeMessage(
+  welcomeMessage?: string | null
+): string | null {
+  const trimmed = welcomeMessage?.trim();
+  if (!trimmed) return null;
+  return trimmed;
 }
 
 function mapClientAccessRow(row: Record<string, unknown>): ClientAccessRecord {
@@ -225,39 +265,82 @@ export async function createClientUserAccess(
   }
 
   const token = generateAccessToken();
+  const welcomeMessage =
+    normalizeWelcomeMessage(input.welcomeMessage) ??
+    DEFAULT_CLIENT_WELCOME_MESSAGE;
+  const clientType =
+    input.clientType && isClientType(input.clientType) ? input.clientType : null;
+
+  const userInsertPayload = {
+    name: input.name.trim(),
+    phone: input.phone?.trim() || null,
+    email: input.email?.trim() || null,
+    client_type: clientType,
+    welcome_message: welcomeMessage,
+    access_token: token,
+    is_active: true,
+    expires_at: input.expiresAt ?? null,
+  };
   const { data: userRow, error: userError } = await client
     .from(CLIENT_USERS_TABLE)
-    .insert({
-      name: input.name.trim(),
-      phone: input.phone?.trim() || null,
-      email: input.email?.trim() || null,
-      access_token: token,
-      is_active: true,
-      expires_at: input.expiresAt ?? null,
-    })
+    .insert(userInsertPayload)
     .select("*")
     .single();
 
   if (userError || !userRow) {
-    console.warn("[client-access] create user failed:", userError?.message);
+    console.error("[client-access] createClientUserAccess — insert failed", {
+      table: CLIENT_USERS_TABLE,
+      fields: userInsertPayload,
+      supabaseError: userError,
+      errorMessage: userError?.message ?? null,
+      errorDetails: userError?.details ?? null,
+      errorHint: userError?.hint ?? null,
+      errorCode: userError?.code ?? null,
+    });
     return null;
   }
 
   const user = mapClientUserRow(userRow);
+  const accessInsertPayload = {
+    client_user_id: user.id,
+    building_id: input.buildingId.trim().toLowerCase(),
+    elevator_id: scope.elevatorId,
+    access_level: scope.accessLevel,
+  };
   const { data: accessRow, error: accessError } = await client
     .from(CLIENT_ACCESS_TABLE)
-    .insert({
-      client_user_id: user.id,
-      building_id: input.buildingId.trim().toLowerCase(),
-      elevator_id: scope.elevatorId,
-      access_level: scope.accessLevel,
-    })
+    .insert(accessInsertPayload)
     .select("*")
     .single();
 
   if (accessError || !accessRow) {
-    console.warn("[client-access] create access failed:", accessError?.message);
-    await client.from(CLIENT_USERS_TABLE).delete().eq("id", user.id);
+    console.error("[client-access] createClientUserAccess — insert failed", {
+      table: CLIENT_ACCESS_TABLE,
+      fields: accessInsertPayload,
+      supabaseError: accessError,
+      errorMessage: accessError?.message ?? null,
+      errorDetails: accessError?.details ?? null,
+      errorHint: accessError?.hint ?? null,
+      errorCode: accessError?.code ?? null,
+    });
+    const { error: rollbackError } = await client
+      .from(CLIENT_USERS_TABLE)
+      .delete()
+      .eq("id", user.id);
+    if (rollbackError) {
+      console.error(
+        "[client-access] createClientUserAccess — rollback delete failed",
+        {
+          table: CLIENT_USERS_TABLE,
+          fields: { id: user.id },
+          supabaseError: rollbackError,
+          errorMessage: rollbackError.message,
+          errorDetails: rollbackError.details ?? null,
+          errorHint: rollbackError.hint ?? null,
+          errorCode: rollbackError.code ?? null,
+        }
+      );
+    }
     return null;
   }
 
@@ -369,6 +452,39 @@ export async function deactivateClientAccess(userId: string): Promise<boolean> {
     return false;
   }
   return true;
+}
+
+export async function updateClientUserProfile(
+  input: UpdateClientUserProfileInput
+): Promise<ClientUserRecord | null> {
+  const client = getPilotSupabaseClient();
+  const userId = input.userId.trim();
+  const name = input.name.trim();
+
+  if (!client || !userId || !name) return null;
+
+  const clientType =
+    input.clientType && isClientType(input.clientType) ? input.clientType : null;
+
+  const { data, error } = await client
+    .from(CLIENT_USERS_TABLE)
+    .update({
+      name,
+      phone: input.phone?.trim() || null,
+      email: input.email?.trim() || null,
+      client_type: clientType,
+      welcome_message: normalizeWelcomeMessage(input.welcomeMessage),
+    })
+    .eq("id", userId)
+    .select("*")
+    .maybeSingle();
+
+  if (error || !data) {
+    console.warn("[client-access] update profile failed:", error?.message);
+    return null;
+  }
+
+  return mapClientUserRow(data);
 }
 
 export async function reactivateClientAccess(userId: string): Promise<boolean> {
