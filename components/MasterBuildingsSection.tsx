@@ -59,6 +59,7 @@ import {
 } from "@/lib/master-building-create";
 import MasterBuildingDetailsForm from "@/components/MasterBuildingDetailsForm";
 import MasterBuildingDetailsPanel from "@/components/MasterBuildingDetailsPanel";
+import MasterExistingBuildingSearch from "@/components/MasterExistingBuildingSearch";
 import MasterInspectorReportsSection from "@/components/MasterInspectorReportsSection";
 import MasterProfessionalAssessmentPanel from "@/components/MasterProfessionalAssessmentPanel";
 import {
@@ -72,6 +73,11 @@ import {
   masterBuildingFormFromRow,
   type MasterBuildingFormState,
 } from "@/lib/master-building-form";
+import {
+  cloudBuildingIdExists,
+  findMasterBuildingById,
+  type MasterBuildingSearchHit,
+} from "@/lib/master-building-search";
 
 interface MasterBuildingsSectionProps {
   cloudReady: boolean;
@@ -150,6 +156,8 @@ export default function MasterBuildingsSection({
   const [newBuildingElevators, setNewBuildingElevators] = useState<
     NewBuildingElevatorDraft[]
   >([emptyNewBuildingElevatorDraft()]);
+  const [existingBuildingHit, setExistingBuildingHit] =
+    useState<MasterBuildingSearchHit | null>(null);
 
   const [cloudLoadError, setCloudLoadError] = useState<string | null>(null);
   const [listVersion, setListVersion] = useState(0);
@@ -316,6 +324,19 @@ export default function MasterBuildingsSection({
     selectedElevators,
   ]);
 
+  const resolveElevatorCount = useCallback(
+    (buildingId: string) => {
+      const cloudCount = elevatorsByBuilding[buildingId]?.length ?? 0;
+      if (cloudCount > 0) return cloudCount;
+      try {
+        return getBuildingDataset(buildingId).elevators.length;
+      } catch {
+        return 0;
+      }
+    },
+    [elevatorsByBuilding]
+  );
+
   const dossierByBuildingId = useMemo(() => {
     const map = new Map<
       string,
@@ -356,6 +377,7 @@ export default function MasterBuildingsSection({
     setEditingBuildingDetails(null);
     setBuildingForm(emptyMasterBuildingForm());
     setNewBuildingElevators([emptyNewBuildingElevatorDraft()]);
+    setExistingBuildingHit(null);
     setShowBuildingForm(true);
     setError(null);
   }
@@ -441,6 +463,22 @@ export default function MasterBuildingsSection({
 
     if (!payload.buildingId) {
       setError("מזהה בניין הוא שדה חובה.");
+      return;
+    }
+
+    if (existingBuildingHit) {
+      setError("הבניין כבר קיים במערכת. עברו לתיק הבניין הקיים.");
+      return;
+    }
+
+    if (cloudBuildingIdExists(buildings, payload.buildingId)) {
+      const hit = findMasterBuildingById(
+        masterBuildingList,
+        payload.buildingId,
+        resolveElevatorCount
+      );
+      if (hit) setExistingBuildingHit(hit);
+      setError("הבניין כבר קיים במערכת. עברו לתיק הבניין הקיים.");
       return;
     }
 
@@ -800,6 +838,19 @@ export default function MasterBuildingsSection({
           className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3"
         >
           <h3 className="text-sm font-bold text-navy">הוספת בניין</h3>
+          <MasterExistingBuildingSearch
+            entries={masterBuildingList}
+            resolveElevatorCount={resolveElevatorCount}
+            selectedHit={existingBuildingHit}
+            onSelectHit={setExistingBuildingHit}
+            onShowInList={(buildingId) => {
+              setShowBuildingForm(false);
+              setExistingBuildingHit(null);
+              selectBuilding(buildingId);
+            }}
+          />
+          {!existingBuildingHit && (
+            <>
           <MasterBuildingDetailsForm
             form={buildingForm}
             onChange={(patch) => setBuildingForm((f) => ({ ...f, ...patch }))}
@@ -902,12 +953,29 @@ export default function MasterBuildingsSection({
             </button>
             <button
               type="button"
-              onClick={() => setShowBuildingForm(false)}
+              onClick={() => {
+                setShowBuildingForm(false);
+                setExistingBuildingHit(null);
+              }}
               className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold"
             >
               ביטול
             </button>
           </div>
+            </>
+          )}
+          {existingBuildingHit && (
+            <button
+              type="button"
+              onClick={() => {
+                setShowBuildingForm(false);
+                setExistingBuildingHit(null);
+              }}
+              className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold w-full"
+            >
+              סגור
+            </button>
+          )}
         </form>
       )}
 

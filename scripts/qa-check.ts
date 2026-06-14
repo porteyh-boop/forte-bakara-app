@@ -274,6 +274,12 @@ import {
   MASTER_BUILDING_EDITABLE_FIELD_LABELS,
 } from "../lib/master-building-form";
 import {
+  cloudBuildingIdExists,
+  masterBuildingMatchesSearch,
+  resolveMasterBuildingSearchProfile,
+  searchMasterBuildings,
+} from "../lib/master-building-search";
+import {
   buildCloudCatalogSnapshot,
   buildDemoCatalogSnapshot,
   buildMergedClientCatalogSnapshot,
@@ -2376,8 +2382,39 @@ assert(
     masterBuildingsUi.includes("MasterBuildingDetailsPanel") &&
     masterBuildingsUi.includes("ערוך פרטי בניין") &&
     masterBuildingsUi.includes("handleUpdateBuildingDetails") &&
-    masterBuildingsUi.includes("updateCloudBuilding"),
+    masterBuildingsUi.includes("updateCloudBuilding") &&
+    masterBuildingsUi.includes("MasterExistingBuildingSearch") &&
+    masterBuildingsUi.includes("הבניין כבר קיים במערכת") &&
+    masterBuildingsUi.includes("cloudBuildingIdExists"),
   "ניהול בניינים: טאב ו-UI ב-/master בלבד"
+);
+
+const masterExistingBuildingSearchUi = fs.readFileSync(
+  path.join(process.cwd(), "components/MasterExistingBuildingSearch.tsx"),
+  "utf8"
+);
+assert(
+  masterExistingBuildingSearchUi.includes("חיפוש בניין קיים") &&
+    masterExistingBuildingSearchUi.includes("מעבר לתיק הבניין") &&
+    masterExistingBuildingSearchUi.includes("buildMasterBuildingDossierPath"),
+  "הוספת בניין: חיפוש בניין קיים ומניעת כפילויות"
+);
+
+const searchSampleEntry = unifiedWithCloud.find((e) => e.cloudRow);
+if (searchSampleEntry) {
+  const searchProfile = resolveMasterBuildingSearchProfile(searchSampleEntry, 2);
+  assert(
+    masterBuildingMatchesSearch(searchSampleEntry, searchProfile, searchSampleEntry.buildingId) &&
+      searchMasterBuildings(unifiedWithCloud, searchSampleEntry.name, () => 2).length >= 1,
+    "חיפוש בניין: התאמה לפי מזהה ושם"
+  );
+}
+assert(
+  cloudBuildingIdExists(
+    [{ building_id: "md25" }],
+    " MD25 "
+  ),
+  "חיפוש בניין: זיהוי מזהה קיים בענן"
 );
 
 const masterBuildingFormLib = fs.readFileSync(
