@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import { buildMasterBuildingDossierPath } from "@/lib/master-building-routes";
 import type { MasterBuildingEntry } from "@/lib/master-buildings-list";
 import {
@@ -42,7 +43,7 @@ export function MasterBuildingProfileCard({
           </dd>
         </div>
         <div className="flex flex-wrap gap-x-2">
-          <dt className="text-gray-text">חברת ניהול:</dt>
+          <dt className="text-gray-text">חברת ניהול של הבניין:</dt>
           <dd className="text-navy font-medium">
             {formatValue(profile.managementCompany)}
           </dd>
@@ -81,13 +82,39 @@ export default function MasterExistingBuildingSearch({
   onShowInList,
   mode = "prevent-duplicate",
 }: MasterExistingBuildingSearchProps) {
+  const router = useRouter();
   const isSelectMode = mode === "select";
   const [query, setQuery] = useState("");
+  const [focusedResultIndex, setFocusedResultIndex] = useState(0);
 
   const results = useMemo(
     () => searchMasterBuildings(entries, query, resolveElevatorCount),
     [entries, query, resolveElevatorCount]
   );
+
+  useEffect(() => {
+    setFocusedResultIndex(0);
+  }, [results]);
+
+  function openBuildingDossier(buildingId: string) {
+    router.push(buildMasterBuildingDossierPath(buildingId));
+  }
+
+  function resolveEnterTargetHit(): MasterBuildingSearchHit | null {
+    if (selectedHit) return selectedHit;
+    if (!query.trim() || results.length === 0) return null;
+    return results[Math.min(focusedResultIndex, results.length - 1)] ?? results[0];
+  }
+
+  function handleSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key !== "Enter" || isSelectMode) return;
+
+    const targetHit = resolveEnterTargetHit();
+    if (!targetHit) return;
+
+    e.preventDefault();
+    openBuildingDossier(targetHit.profile.buildingId);
+  }
 
   function handleQueryChange(value: string) {
     setQuery(value);
@@ -125,6 +152,7 @@ export default function MasterExistingBuildingSearch({
           className="form-input mt-1"
           value={query}
           onChange={(e) => handleQueryChange(e.target.value)}
+          onKeyDown={handleSearchKeyDown}
           placeholder="לדוגמה: אורן, הרצל 12, תל אביב, md25"
           disabled={Boolean(selectedHit)}
         />
@@ -149,7 +177,7 @@ export default function MasterExistingBuildingSearch({
                   href={buildMasterBuildingDossierPath(selectedHit.profile.buildingId)}
                   className="text-sm font-semibold bg-navy text-white px-4 py-2 rounded-xl"
                 >
-                  מעבר לתיק הבניין
+                  פתח תיק בניין
                 </Link>
                 {onShowInList && (
                   <button
@@ -183,15 +211,35 @@ export default function MasterExistingBuildingSearch({
 
           {results.length > 0 && (
             <ul className="space-y-2 max-h-64 overflow-y-auto">
-              {results.map((hit) => (
+              {results.map((hit, index) => (
                 <li key={hit.entry.buildingId}>
-                  <button
-                    type="button"
-                    onClick={() => handleSelect(hit)}
-                    className="w-full text-right rounded-xl border border-gray-200 bg-white px-3 py-2 hover:border-navy/40 hover:bg-gray-50 transition-colors"
+                  <div
+                    className={`rounded-xl border bg-white px-3 py-2 transition-colors ${
+                      index === focusedResultIndex
+                        ? "border-navy/50 bg-gray-50"
+                        : "border-gray-200"
+                    }`}
+                    onMouseEnter={() => setFocusedResultIndex(index)}
                   >
-                    <MasterBuildingProfileCard profile={hit.profile} compact />
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSelect(hit)}
+                      className="w-full text-right hover:bg-transparent"
+                    >
+                      <MasterBuildingProfileCard profile={hit.profile} compact />
+                    </button>
+                    {!isSelectMode && (
+                      <div className="mt-2 flex justify-end">
+                        <Link
+                          href={buildMasterBuildingDossierPath(hit.profile.buildingId)}
+                          className="text-sm font-semibold bg-navy text-white px-4 py-2 rounded-xl"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          פתח תיק בניין
+                        </Link>
+                      </div>
+                    )}
+                  </div>
                 </li>
               ))}
             </ul>

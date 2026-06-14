@@ -74,7 +74,7 @@ export default function MasterBuildingDetailsForm({
           />
         </FormField>
       </div>
-      <FormField label="חברת ניהול">
+      <FormField label="חברת ניהול של הבניין">
         <input
           className="form-input"
           value={form.managementCompany}
@@ -104,14 +104,14 @@ export default function MasterBuildingDetailsForm({
         </FormField>
       )}
       <div className="grid grid-cols-2 gap-2">
-        <FormField label="איש קשר">
+        <FormField label="איש קשר תפעולי של הבניין">
           <input
             className="form-input"
             value={form.contactName}
             onChange={(e) => onChange({ contactName: e.target.value })}
           />
         </FormField>
-        <FormField label="טלפון">
+        <FormField label="טלפון איש קשר תפעולי">
           <input
             className="form-input"
             value={form.contactPhone}

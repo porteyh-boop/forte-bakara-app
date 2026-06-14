@@ -26,7 +26,7 @@ export default function ClientWelcomeFields({
   onWelcomeMessageChange,
   onResetWelcomeToDefault,
   showResetButton = true,
-  clientTypeLabel = "סוג לקוח",
+  clientTypeLabel = "סוג לקוח / גורם מקבל גישה",
   welcomeLabel = "הודעת פתיחה לפורטל",
 }: ClientWelcomeFieldsProps) {
   return (

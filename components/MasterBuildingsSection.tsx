@@ -838,6 +838,9 @@ export default function MasterBuildingsSection({
           className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3"
         >
           <h3 className="text-sm font-bold text-navy">הוספת בניין</h3>
+          <p className="text-[11px] text-gray-text">
+            פרטים אלה שייכים לבניין ואינם מעדכנים משתמשי פורטל.
+          </p>
           <MasterExistingBuildingSearch
             entries={masterBuildingList}
             resolveElevatorCount={resolveElevatorCount}

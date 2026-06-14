@@ -60,7 +60,12 @@ export default function MasterBuildingDetailsPanel({
   return (
     <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-bold text-navy">פרטי בניין</h3>
+        <div>
+          <h3 className="text-sm font-bold text-navy">פרטי בניין</h3>
+          <p className="text-[11px] text-gray-text mt-0.5">
+            פרטים אלה שייכים לבניין ואינם מעדכנים משתמשי פורטל.
+          </p>
+        </div>
         {!editing && (
           <button
             type="button"
@@ -101,7 +106,7 @@ export default function MasterBuildingDetailsPanel({
           <DossierKpi label="עיר" value={details.city ?? "—"} small />
           <DossierKpi label="כתובת" value={details.address ?? "—"} small />
           <DossierKpi
-            label="חברת ניהול"
+            label="חברת ניהול של הבניין"
             value={details.managementCompany ?? "—"}
             small
           />
@@ -110,8 +115,16 @@ export default function MasterBuildingDetailsPanel({
             value={details.elevatorCompany ?? "—"}
             small
           />
-          <DossierKpi label="איש קשר" value={details.contactName ?? "—"} small />
-          <DossierKpi label="טלפון" value={details.contactPhone ?? "—"} small />
+          <DossierKpi
+            label="איש קשר תפעולי של הבניין"
+            value={details.contactName ?? "—"}
+            small
+          />
+          <DossierKpi
+            label="טלפון איש קשר תפעולי"
+            value={details.contactPhone ?? "—"}
+            small
+          />
           <DossierKpi
             label="מספר קומות"
             value={details.floorsCount ?? "—"}

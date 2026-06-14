@@ -311,9 +311,12 @@ export default function MasterClientAccessSection({
             className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3"
           >
             <h3 className="text-sm font-bold text-navy">יצירת לקוח חדש</h3>
+            <p className="text-[11px] text-gray-text">
+              פרטים אלה שייכים למשתמש הפורטל ואינם מעדכנים את כרטיס הבניין.
+            </p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
-                <label className="text-xs text-gray-text">שם</label>
+                <label className="text-xs text-gray-text">שם משתמש בפורטל</label>
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -322,7 +325,7 @@ export default function MasterClientAccessSection({
                 />
               </div>
               <div>
-                <label className="text-xs text-gray-text">טלפון</label>
+                <label className="text-xs text-gray-text">טלפון משתמש בפורטל</label>
                 <input
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
@@ -344,6 +347,7 @@ export default function MasterClientAccessSection({
                 onClientTypeChange={setClientType}
                 onWelcomeMessageChange={setWelcomeMessage}
                 onResetWelcomeToDefault={resetWelcomeToDefault}
+                clientTypeLabel="סוג לקוח / גורם מקבל גישה"
               />
               <div>
                 <label className="text-xs text-gray-text">תוקף קישור (אופציונלי)</label>
@@ -451,7 +455,8 @@ export default function MasterClientAccessSection({
                             {item.user.phone || "—"} · {item.user.email || "—"}
                           </p>
                           <p className="text-xs text-gray-text">
-                            סוג לקוח: {formatClientTypeDisplay(item.user.client_type)}
+                            סוג לקוח / גורם מקבל גישה:{" "}
+                            {formatClientTypeDisplay(item.user.client_type)}
                           </p>
                         </div>
                         <span

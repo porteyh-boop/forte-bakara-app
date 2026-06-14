@@ -112,6 +112,9 @@ export default function MasterClientEditModal({
             <p className="text-xs text-gray-text mt-0.5">
               עדכון פרטי לקוח ללא שינוי בקישור הגישה
             </p>
+            <p className="text-[11px] text-gray-text mt-1">
+              פרטים אלה שייכים למשתמש הפורטל ואינם מעדכנים את כרטיס הבניין.
+            </p>
           </div>
           <button
             type="button"
@@ -128,7 +131,7 @@ export default function MasterClientEditModal({
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
-              <label className="text-xs text-gray-text">שם</label>
+              <label className="text-xs text-gray-text">שם משתמש בפורטל</label>
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -137,7 +140,7 @@ export default function MasterClientEditModal({
               />
             </div>
             <div>
-              <label className="text-xs text-gray-text">טלפון</label>
+              <label className="text-xs text-gray-text">טלפון משתמש בפורטל</label>
               <input
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
@@ -159,6 +162,7 @@ export default function MasterClientEditModal({
               onClientTypeChange={setClientType}
               onWelcomeMessageChange={setWelcomeMessage}
               onResetWelcomeToDefault={resetWelcomeToDefault}
+              clientTypeLabel="סוג לקוח / גורם מקבל גישה"
             />
           </div>
         )}
