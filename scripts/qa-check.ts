@@ -1689,6 +1689,14 @@ const masterSource = fs.readFileSync(
   path.join(process.cwd(), "components/MasterPageContent.tsx"),
   "utf8"
 );
+const masterClientAccessSource = fs.readFileSync(
+  path.join(process.cwd(), "components/MasterClientAccessSection.tsx"),
+  "utf8"
+);
+const masterSystemManagementSource = fs.readFileSync(
+  path.join(process.cwd(), "components/MasterSystemManagementSection.tsx"),
+  "utf8"
+);
 assert(
   masterSource.includes("verifyMasterCode") &&
     masterSource.includes("קוד גישה שגוי"),
@@ -1706,8 +1714,12 @@ assert(
   "ענן פיילוט: מסך master מציג ומנהל נתוני ענן"
 );
 assert(
-  masterSource.includes("איפוס לבניין הנבחר") &&
-    masterSource.includes("נתוני בניינים אחרים לא יושפעו"),
+  masterSource.includes("resetPilotCloudDataByBuilding") &&
+    masterSource.includes("onResetPilotDataByBuilding") &&
+    masterSource.includes("נתוני בניינים אחרים לא יושפעו") &&
+    masterClientAccessSource.includes("ניהול מערכת") &&
+    masterClientAccessSource.includes("MasterSystemManagementSection") &&
+    masterSystemManagementSource.includes("איפוס לבניין הנבחר"),
   "ענן פיילוט: /master — איפוס לפי בניין עם אישור ברור"
 );
 assert(
@@ -3560,9 +3572,14 @@ const masterPageForInspector = fs.readFileSync(
   path.join(process.cwd(), "components/MasterPageContent.tsx"),
   "utf8"
 );
+const masterBuildingsForInspector = fs.readFileSync(
+  path.join(process.cwd(), "components/MasterBuildingsSection.tsx"),
+  "utf8"
+);
 assert(
-  masterPageForInspector.includes("MasterInspectorReportsSection") &&
-    masterPageForInspector.includes("תסקירי בודק") &&
+  !masterPageForInspector.includes('setTab("inspectorReports")') &&
+    masterBuildingsForInspector.includes("MasterInspectorReportsSection") &&
+    masterBuildingsForInspector.includes("תסקירי בודק") &&
     inspectorSectionSource.includes("העתק מכתב בהול") &&
     inspectorSectionSource.includes("סגור מעקב לאחר טיפול"),
   "תסקיר בודק: Master UI — מעקב וסגירה"

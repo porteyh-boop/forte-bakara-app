@@ -6,7 +6,6 @@ import MasterAnalyticsSection from "@/components/MasterAnalyticsSection";
 import MasterBuildingsSection from "@/components/MasterBuildingsSection";
 import MasterClientAccessSection from "@/components/MasterClientAccessSection";
 import MasterDocumentCenterSection from "@/components/MasterDocumentCenterSection";
-import MasterInspectorReportsSection from "@/components/MasterInspectorReportsSection";
 import PageHeader from "@/components/PageHeader";
 import {
   closePilotFault,
@@ -36,7 +35,7 @@ import {
   filterPilotFaultsByBuildingLiveStart,
 } from "@/lib/building-live";
 import { BUILDING_LIVE_STARTED_EVENT } from "@/hooks/useBuildingLiveStarted";
-type Tab = "faults" | "feedback" | "buildings" | "clientAccess" | "inspectorReports" | "documentCenter";
+type Tab = "faults" | "feedback" | "buildings" | "clientAccess" | "documentCenter";
 
 function formatCloudDate(iso: string): string {
   return new Intl.DateTimeFormat("he-IL", {
@@ -365,14 +364,6 @@ export default function MasterPageContent() {
             </button>
             <button
               type="button"
-              onClick={() => void handleReset()}
-              disabled={!cloudReady || loading}
-              className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
-            >
-              איפוס כל הבניינים
-            </button>
-            <button
-              type="button"
               onClick={() => {
                 setMasterAuthenticated(false);
                 setAuthed(false);
@@ -382,35 +373,9 @@ export default function MasterPageContent() {
               יציאה
             </button>
           </div>
-
-          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-100 md:flex-nowrap">
-            <p className="text-xs font-semibold text-gray-text w-full md:w-auto md:shrink-0">
-              איפוס לפי בניין (Supabase בלבד)
-            </p>
-            <select
-              value={resetBuildingId}
-              onChange={(e) => setResetBuildingId(e.target.value)}
-              className="form-input flex-1 min-w-[12rem] md:min-w-0"
-              disabled={!cloudReady || loading}
-            >
-              {buildingOptions.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.label}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={() => void handleResetByBuilding()}
-              disabled={!cloudReady || loading || !resetBuildingId}
-              className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
-            >
-              איפוס לבניין הנבחר
-            </button>
-          </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-5">
           <button
             type="button"
             onClick={() => setTab("faults")}
@@ -454,17 +419,6 @@ export default function MasterPageContent() {
             }`}
           >
             גישות לקוח
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab("inspectorReports")}
-            className={`rounded-xl py-2.5 text-sm font-semibold transition-colors ${
-              tab === "inspectorReports"
-                ? "bg-navy text-white"
-                : "bg-white border border-gray-200 text-navy"
-            }`}
-          >
-            תסקירי בודק
           </button>
           <button
             type="button"
@@ -586,9 +540,17 @@ export default function MasterPageContent() {
           />
         )}
 
-        {tab === "clientAccess" && <MasterClientAccessSection />}
-
-        {tab === "inspectorReports" && <MasterInspectorReportsSection />}
+        {tab === "clientAccess" && (
+          <MasterClientAccessSection
+            pilotCloudReady={cloudReady}
+            pilotLoading={loading}
+            resetBuildingId={resetBuildingId}
+            onResetBuildingIdChange={setResetBuildingId}
+            resetBuildingOptions={buildingOptions}
+            onResetAllPilotData={handleReset}
+            onResetPilotDataByBuilding={handleResetByBuilding}
+          />
+        )}
 
         {tab === "documentCenter" && <MasterDocumentCenterSection />}
       </main>

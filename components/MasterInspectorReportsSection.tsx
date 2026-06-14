@@ -41,7 +41,15 @@ function resolveBuildingAddress(buildingId: string): string | undefined {
   }
 }
 
-export default function MasterInspectorReportsSection() {
+interface MasterInspectorReportsSectionProps {
+  fixedBuildingId?: string;
+  embedded?: boolean;
+}
+
+export default function MasterInspectorReportsSection({
+  fixedBuildingId,
+  embedded = false,
+}: MasterInspectorReportsSectionProps) {
   const cloudReady = isInspectorReportTrackingConfigured();
   const [reports, setReports] = useState<InspectorReportRecord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -102,6 +110,25 @@ export default function MasterInspectorReportsSection() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (fixedBuildingId) {
+      setBuildingId(fixedBuildingId);
+      setElevatorId("");
+    }
+  }, [fixedBuildingId]);
+
+  const visibleReports = useMemo(
+    () =>
+      fixedBuildingId
+        ? reports.filter((report) => report.building_id === fixedBuildingId)
+        : reports,
+    [reports, fixedBuildingId]
+  );
+
+  const fixedBuildingName = fixedBuildingId
+    ? resolveBuildingName(fixedBuildingId)
+    : null;
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0] ?? null;
@@ -248,8 +275,13 @@ export default function MasterInspectorReportsSection() {
       </div>
 
       <div className="bg-white rounded-2xl border border-gold/30 p-4 space-y-2">
-        <h2 className="text-base font-bold text-navy">תסקירי בודק ומעקב</h2>
+        <h2 className="text-base font-bold text-navy">
+          {embedded ? "תסקירי בודק" : "תסקירי בודק ומעקב"}
+        </h2>
         <p className="text-sm text-gray-text">
+          {embedded && fixedBuildingName
+            ? `תסקירים ומעקב לבניין ${fixedBuildingName}. `
+            : ""}
           העלאת תסקיר, סימון הערות לתיקון תוך 45 יום, ומעקב אוטומטי:
           תזכורת (35) · התראה (40) · מכתב בהול (45+).
         </p>
@@ -273,18 +305,24 @@ export default function MasterInspectorReportsSection() {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label className="text-xs text-gray-text">בניין</label>
-            <select
-              value={buildingId}
-              onChange={(e) => setBuildingId(e.target.value)}
-              className="form-input mt-1"
-              required
-            >
-              {buildingOptions.map((building) => (
-                <option key={building.buildingId} value={building.buildingId}>
-                  {building.name} ({building.buildingId})
-                </option>
-              ))}
-            </select>
+            {fixedBuildingId ? (
+              <p className="form-input mt-1 bg-gray-light text-navy">
+                {fixedBuildingName ?? fixedBuildingId}
+              </p>
+            ) : (
+              <select
+                value={buildingId}
+                onChange={(e) => setBuildingId(e.target.value)}
+                className="form-input mt-1"
+                required
+              >
+                {buildingOptions.map((building) => (
+                  <option key={building.buildingId} value={building.buildingId}>
+                    {building.name} ({building.buildingId})
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
           <div>
             <label className="text-xs text-gray-text">מעלית (אופציונלי)</label>
@@ -424,13 +462,17 @@ export default function MasterInspectorReportsSection() {
           </button>
         </div>
 
-        {reports.length === 0 ? (
+        {visibleReports.length === 0 ? (
           <p className="text-sm text-gray-text">
-            {cloudReady ? "אין תסקירי בודק רשומים." : "Supabase לא מחובר."}
+            {cloudReady
+              ? fixedBuildingId
+                ? "אין תסקירי בודק לבניין זה."
+                : "אין תסקירי בודק רשומים."
+              : "Supabase לא מחובר."}
           </p>
         ) : (
           <div className="space-y-3">
-            {reports.map((report) => {
+            {visibleReports.map((report) => {
               const phase = computeInspectorFollowUpPhase(report);
               const days = daysSinceReportDate(report.report_date);
               const buildingName = resolveBuildingName(report.building_id);

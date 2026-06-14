@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import ClientWelcomeFields from "@/components/ClientWelcomeFields";
 import MasterClientEditModal from "@/components/MasterClientEditModal";
 import MasterClientPermissionsModal from "@/components/MasterClientPermissionsModal";
+import MasterSystemManagementSection from "@/components/MasterSystemManagementSection";
 import {
   buildClientAccessUrl,
   createClientUserAccess,
@@ -31,7 +32,22 @@ import {
 import { getAllBuildingIds, getBuildingDataset } from "@/lib/buildings";
 import { getAllPilotFaults } from "@/lib/pilot-cloud";
 
-type ClientAccessView = "access" | "activityLog";
+type ClientAccessView = "access" | "activityLog" | "system";
+
+interface BuildingOption {
+  id: string;
+  label: string;
+}
+
+interface MasterClientAccessSectionProps {
+  pilotCloudReady?: boolean;
+  pilotLoading?: boolean;
+  resetBuildingId?: string;
+  onResetBuildingIdChange?: (buildingId: string) => void;
+  resetBuildingOptions?: BuildingOption[];
+  onResetAllPilotData?: () => void | Promise<void>;
+  onResetPilotDataByBuilding?: () => void | Promise<void>;
+}
 
 function formatScopeLabel(item: ClientUserAccessListItem): string {
   if (item.access.access_level === "elevator" && item.access.elevator_id) {
@@ -40,7 +56,15 @@ function formatScopeLabel(item: ClientUserAccessListItem): string {
   return "כל הבניין";
 }
 
-export default function MasterClientAccessSection() {
+export default function MasterClientAccessSection({
+  pilotCloudReady = false,
+  pilotLoading = false,
+  resetBuildingId = "",
+  onResetBuildingIdChange,
+  resetBuildingOptions = [],
+  onResetAllPilotData,
+  onResetPilotDataByBuilding,
+}: MasterClientAccessSectionProps) {
   const cloudReady = isClientAccessCloudConfigured();
   const [view, setView] = useState<ClientAccessView>("access");
   const [records, setRecords] = useState<ClientUserAccessListItem[]>([]);
@@ -231,11 +255,11 @@ export default function MasterClientAccessSection() {
         )}
       </div>
 
-      <div className="flex gap-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
         <button
           type="button"
           onClick={() => setView("access")}
-          className={`flex-1 rounded-xl py-2.5 text-sm font-semibold transition-colors ${
+          className={`rounded-xl py-2.5 text-sm font-semibold transition-colors ${
             view === "access"
               ? "bg-navy text-white"
               : "bg-white border border-gray-200 text-navy"
@@ -246,7 +270,7 @@ export default function MasterClientAccessSection() {
         <button
           type="button"
           onClick={() => setView("activityLog")}
-          className={`flex-1 rounded-xl py-2.5 text-sm font-semibold transition-colors ${
+          className={`rounded-xl py-2.5 text-sm font-semibold transition-colors ${
             view === "activityLog"
               ? "bg-navy text-white"
               : "bg-white border border-gray-200 text-navy"
@@ -254,7 +278,30 @@ export default function MasterClientAccessSection() {
         >
           יומן פעילות
         </button>
+        <button
+          type="button"
+          onClick={() => setView("system")}
+          className={`rounded-xl py-2.5 text-sm font-semibold transition-colors ${
+            view === "system"
+              ? "bg-navy text-white"
+              : "bg-white border border-gray-200 text-navy"
+          }`}
+        >
+          ניהול מערכת
+        </button>
       </div>
+
+      {view === "system" && (
+        <MasterSystemManagementSection
+          cloudReady={pilotCloudReady}
+          loading={pilotLoading}
+          resetBuildingId={resetBuildingId}
+          onResetBuildingIdChange={onResetBuildingIdChange ?? (() => {})}
+          buildingOptions={resetBuildingOptions}
+          onResetAll={onResetAllPilotData ?? (() => {})}
+          onResetByBuilding={onResetPilotDataByBuilding ?? (() => {})}
+        />
+      )}
 
       {view === "access" && (
         <>

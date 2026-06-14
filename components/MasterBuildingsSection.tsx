@@ -59,6 +59,7 @@ import {
 } from "@/lib/master-building-create";
 import MasterBuildingDetailsForm from "@/components/MasterBuildingDetailsForm";
 import MasterBuildingDetailsPanel from "@/components/MasterBuildingDetailsPanel";
+import MasterInspectorReportsSection from "@/components/MasterInspectorReportsSection";
 import MasterProfessionalAssessmentPanel from "@/components/MasterProfessionalAssessmentPanel";
 import {
   BuildingDossierPanel,
@@ -110,6 +111,8 @@ function elevatorFormFromRow(row: CloudElevatorRow): ElevatorFormState {
   };
 }
 
+type BuildingDossierTab = "dossier" | "inspectorReports";
+
 export default function MasterBuildingsSection({
   cloudReady,
   faults,
@@ -123,6 +126,8 @@ export default function MasterBuildingsSection({
   const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>(
     null
   );
+  const [buildingDossierTab, setBuildingDossierTab] =
+    useState<BuildingDossierTab>("dossier");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -334,6 +339,7 @@ export default function MasterBuildingsSection({
 
   function selectBuilding(buildingId: string) {
     setSelectedBuildingId(buildingId);
+    setBuildingDossierTab("dossier");
     setShowBuildingForm(false);
     setShowElevatorForm(false);
     setEditingBuildingDetails(null);
@@ -907,6 +913,38 @@ export default function MasterBuildingsSection({
 
       {selectedBuildingId && selectedDossier && (
         <>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setBuildingDossierTab("dossier")}
+              className={`flex-1 rounded-xl py-2.5 text-sm font-semibold transition-colors ${
+                buildingDossierTab === "dossier"
+                  ? "bg-navy text-white"
+                  : "bg-white border border-gray-200 text-navy"
+              }`}
+            >
+              תיק בניין
+            </button>
+            <button
+              type="button"
+              onClick={() => setBuildingDossierTab("inspectorReports")}
+              className={`flex-1 rounded-xl py-2.5 text-sm font-semibold transition-colors ${
+                buildingDossierTab === "inspectorReports"
+                  ? "bg-navy text-white"
+                  : "bg-white border border-gray-200 text-navy"
+              }`}
+            >
+              תסקירי בודק
+            </button>
+          </div>
+
+          {buildingDossierTab === "inspectorReports" ? (
+            <MasterInspectorReportsSection
+              fixedBuildingId={selectedBuildingId}
+              embedded
+            />
+          ) : (
+            <>
           <div className="bg-white rounded-2xl border border-amber-200 p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -1073,6 +1111,8 @@ export default function MasterBuildingsSection({
             title="היסטוריית תקלות הבניין"
             faults={selectedDossier.faults}
           />
+            </>
+          )}
         </>
       )}
 
