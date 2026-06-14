@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import MasterCloudFaultCard from "@/components/MasterCloudFaultCard";
 import MasterAnalyticsSection from "@/components/MasterAnalyticsSection";
@@ -35,6 +36,7 @@ import {
   filterPilotFaultsByBuildingLiveStart,
 } from "@/lib/building-live";
 import { BUILDING_LIVE_STARTED_EVENT } from "@/hooks/useBuildingLiveStarted";
+import { buildMasterBuildingDossierPath } from "@/lib/master-building-routes";
 type Tab = "faults" | "feedback" | "buildings" | "clientAccess" | "documentCenter";
 
 function formatCloudDate(iso: string): string {
@@ -93,6 +95,7 @@ function MasterCodeGate({ onSuccess }: { onSuccess: () => void }) {
 }
 
 export default function MasterPageContent() {
+  const router = useRouter();
   const [authed, setAuthed] = useState(false);
   const [tab, setTab] = useState<Tab>("faults");
   const [faults, setFaults] = useState<PilotCloudFault[]>([]);
@@ -304,18 +307,30 @@ export default function MasterPageContent() {
         <div className="bg-white rounded-2xl border border-gray-200 p-4 md:p-5 space-y-3">
           <p className="text-xs font-semibold text-gold">סינון (דיווחים ומשובים)</p>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-            <select
-              value={buildingFilter}
-              onChange={(e) => setBuildingFilter(e.target.value)}
-              className="form-input"
-            >
-              <option value="all">כל הבניינים</option>
-              {buildingOptions.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.label}
-                </option>
-              ))}
-            </select>
+            <div className="flex gap-2 items-stretch">
+              <select
+                value={buildingFilter}
+                onChange={(e) => setBuildingFilter(e.target.value)}
+                className="form-input flex-1 min-w-0"
+              >
+                <option value="all">כל הבניינים</option>
+                {buildingOptions.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.label}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                disabled={buildingFilter === "all"}
+                onClick={() =>
+                  router.push(buildMasterBuildingDossierPath(buildingFilter))
+                }
+                className="text-sm font-semibold bg-navy text-white px-4 py-2 rounded-xl whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                פתח תיק בניין
+              </button>
+            </div>
 
             {tab === "faults" ? (
               <select
