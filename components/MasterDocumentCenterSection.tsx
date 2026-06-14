@@ -34,14 +34,51 @@ import {
   InspectorDocumentCard,
 } from "@/components/MasterDocumentInspectorPanel";
 import type { DocumentInspectorMetaRecord } from "@/lib/document-inspector-meta";
+import MasterExistingBuildingSearch from "@/components/MasterExistingBuildingSearch";
+import {
+  getAllCloudBuildingsWithMeta,
+  getAllCloudElevators,
+  type CloudBuildingRow,
+  type CloudElevatorRow,
+} from "@/lib/buildings-cloud";
 import { buildMasterBuildingList } from "@/lib/master-buildings-list";
-import { getAllBuildingIds, getBuildingDataset } from "@/lib/buildings";
+import type { MasterBuildingSearchHit } from "@/lib/master-building-search";
+import {
+  getAllBuildingIds,
+  getBuildingDataset,
+  getStaticDemoBuildingMeta,
+} from "@/lib/buildings";
+import { isPilotCloudConfigured } from "@/lib/pilot-cloud";
 
 function resolveBuildingName(buildingId: string): string {
   try {
     return getBuildingDataset(buildingId).building.name;
   } catch {
     return buildingId;
+  }
+}
+
+function resolveElevatorOptions(
+  buildingId: string,
+  elevatorsByBuilding: Record<string, CloudElevatorRow[]>
+): { id: string; name: string }[] {
+  const cloudElevators = elevatorsByBuilding[buildingId] ?? [];
+  if (cloudElevators.length > 0) {
+    return cloudElevators
+      .filter((elevator) => elevator.is_active)
+      .map((elevator) => ({
+        id: elevator.elevator_id,
+        name: elevator.elevator_name,
+      }));
+  }
+
+  try {
+    return getBuildingDataset(buildingId).elevators.map((elevator) => ({
+      id: elevator.id,
+      name: elevator.name,
+    }));
+  } catch {
+    return [];
   }
 }
 
@@ -54,7 +91,12 @@ export default function MasterDocumentCenterSection() {
   const [message, setMessage] = useState<string | null>(null);
   const [listError, setListError] = useState<string | null>(null);
 
-  const [buildingId, setBuildingId] = useState(() => getAllBuildingIds()[0] ?? "");
+  const [cloudBuildings, setCloudBuildings] = useState<CloudBuildingRow[]>([]);
+  const [elevatorsByBuilding, setElevatorsByBuilding] = useState<
+    Record<string, CloudElevatorRow[]>
+  >({});
+  const [selectedBuildingHit, setSelectedBuildingHit] =
+    useState<MasterBuildingSearchHit | null>(null);
   const [elevatorId, setElevatorId] = useState("");
   const [documentType, setDocumentType] = useState<DocumentTypeId>("other");
   const [title, setTitle] = useState("");
@@ -80,29 +122,76 @@ export default function MasterDocumentCenterSection() {
   );
   const [filterTag, setFilterTag] = useState("");
 
+  const buildingId = selectedBuildingHit?.profile.buildingId ?? "";
+
+  const cloudReadyForBuildings = isPilotCloudConfigured();
+
   const buildingOptions = useMemo(
     () =>
       buildMasterBuildingList({
-        cloudBuildings: [],
+        cloudBuildings,
         demoBuildingIds: getAllBuildingIds(),
-        resolveDemoName: (id) => getBuildingDataset(id).building.name,
-        resolveDemoCity: (id) => getBuildingDataset(id).building.city,
+        resolveDemoName: (id) => {
+          try {
+            return getBuildingDataset(id).building.name;
+          } catch {
+            return getStaticDemoBuildingMeta(id).name;
+          }
+        },
+        resolveDemoCity: (id) => {
+          try {
+            return getBuildingDataset(id).building.city;
+          } catch {
+            return getStaticDemoBuildingMeta(id).city;
+          }
+        },
         faultBuildings: [],
       }),
-    []
+    [cloudBuildings]
+  );
+
+  const resolveElevatorCount = useCallback(
+    (id: string) => {
+      const cloudCount = elevatorsByBuilding[id]?.length ?? 0;
+      if (cloudCount > 0) return cloudCount;
+      try {
+        return getBuildingDataset(id).elevators.length;
+      } catch {
+        return 0;
+      }
+    },
+    [elevatorsByBuilding]
   );
 
   const elevatorOptions = useMemo(() => {
     if (!buildingId) return [];
-    try {
-      return getBuildingDataset(buildingId).elevators.map((elevator) => ({
-        id: elevator.id,
-        name: elevator.name,
-      }));
-    } catch {
-      return [];
+    return resolveElevatorOptions(buildingId, elevatorsByBuilding);
+  }, [buildingId, elevatorsByBuilding]);
+
+  const refreshBuildings = useCallback(async () => {
+    if (!cloudReadyForBuildings) {
+      setCloudBuildings([]);
+      setElevatorsByBuilding({});
+      return;
     }
-  }, [buildingId]);
+
+    const [cloudResult, allElevators] = await Promise.all([
+      getAllCloudBuildingsWithMeta(),
+      getAllCloudElevators(),
+    ]);
+    setCloudBuildings(cloudResult.rows);
+
+    const grouped: Record<string, CloudElevatorRow[]> = {};
+    for (const elevator of allElevators) {
+      if (!grouped[elevator.building_id]) grouped[elevator.building_id] = [];
+      grouped[elevator.building_id].push(elevator);
+    }
+    setElevatorsByBuilding(grouped);
+  }, [cloudReadyForBuildings]);
+
+  useEffect(() => {
+    void refreshBuildings();
+  }, [refreshBuildings]);
 
   const refresh = useCallback(async () => {
     if (!cloudReady) {
@@ -183,6 +272,11 @@ export default function MasterDocumentCenterSection() {
     setMessage(null);
     setUploadProgress(null);
 
+    if (!selectedBuildingHit || !buildingId) {
+      setMessage("יש לבחור בניין מהמערכת לפני שמירת המסמך.");
+      return;
+    }
+
     if (!selectedFile) {
       setMessage("יש לבחור קובץ להעלאה.");
       return;
@@ -217,6 +311,7 @@ export default function MasterDocumentCenterSection() {
       setDescription("");
       setSelectedTags([]);
       setElevatorId("");
+      setSelectedBuildingHit(null);
       setInspectorName("");
       setHasRemarks(false);
       setSelectedFile(null);
@@ -296,6 +391,7 @@ export default function MasterDocumentCenterSection() {
     setDescription("");
     setSelectedTags([]);
     setElevatorId("");
+    setSelectedBuildingHit(null);
     setSelectedFile(null);
     setDocumentType("other");
     setMessage("המסמך נשמר במאגר.");
@@ -345,40 +441,42 @@ export default function MasterDocumentCenterSection() {
         className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3"
       >
         <h3 className="text-sm font-bold text-navy">הוספת מסמך</h3>
+
+        <MasterExistingBuildingSearch
+          entries={buildingOptions}
+          resolveElevatorCount={resolveElevatorCount}
+          selectedHit={selectedBuildingHit}
+          onSelectHit={(hit) => {
+            setSelectedBuildingHit(hit);
+            setElevatorId("");
+          }}
+          mode="select"
+        />
+
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          <div>
-            <label className="text-xs text-gray-text">בניין</label>
-            <select
-              value={buildingId}
-              onChange={(e) => {
-                setBuildingId(e.target.value);
-                setElevatorId("");
-              }}
-              className="form-input mt-1"
-              required
-            >
-              {buildingOptions.map((building) => (
-                <option key={building.buildingId} value={building.buildingId}>
-                  {building.name} ({building.buildingId})
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-gray-text">מעלית (אופציונלי)</label>
-            <select
-              value={elevatorId}
-              onChange={(e) => setElevatorId(e.target.value)}
-              className="form-input mt-1"
-            >
-              <option value="">כל הבניין</option>
-              {elevatorOptions.map((elevator) => (
-                <option key={elevator.id} value={elevator.id}>
-                  {elevator.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          {selectedBuildingHit && (
+            <div className="sm:col-span-2 lg:col-span-3 xl:col-span-4">
+              <label className="text-xs text-gray-text">מעלית (אופציונלי)</label>
+              {elevatorOptions.length > 0 ? (
+                <select
+                  value={elevatorId}
+                  onChange={(e) => setElevatorId(e.target.value)}
+                  className="form-input mt-1"
+                >
+                  <option value="">כל הבניין</option>
+                  {elevatorOptions.map((elevator) => (
+                    <option key={elevator.id} value={elevator.id}>
+                      {elevator.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <p className="text-sm text-gray-text mt-1 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
+                  אין מעליות רשומות לבניין זה — המסמך יישמר עבור כל הבניין.
+                </p>
+              )}
+            </div>
+          )}
           <div>
             <label className="text-xs text-gray-text">סוג מסמך</label>
             <select
@@ -489,7 +587,7 @@ export default function MasterDocumentCenterSection() {
 
         <button
           type="submit"
-          disabled={!cloudReady || creating}
+          disabled={!cloudReady || creating || !selectedBuildingHit}
           className="btn-primary w-full sm:w-auto disabled:opacity-50"
         >
           {creating

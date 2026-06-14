@@ -2396,7 +2396,9 @@ const masterExistingBuildingSearchUi = fs.readFileSync(
 assert(
   masterExistingBuildingSearchUi.includes("חיפוש בניין קיים") &&
     masterExistingBuildingSearchUi.includes("מעבר לתיק הבניין") &&
-    masterExistingBuildingSearchUi.includes("buildMasterBuildingDossierPath"),
+    masterExistingBuildingSearchUi.includes("buildMasterBuildingDossierPath") &&
+    masterExistingBuildingSearchUi.includes('mode = "prevent-duplicate"') &&
+    masterExistingBuildingSearchUi.includes("בניין נבחר למסמך"),
   "הוספת בניין: חיפוש בניין קיים ומניעת כפילויות"
 );
 
@@ -4082,7 +4084,11 @@ assert(
     documentCenterSectionSource.includes("חיפוש") &&
     documentCenterSectionSource.includes("DOCUMENT_PREDEFINED_TAGS") &&
     documentCenterSectionSource.includes("getDocumentLegacyFilterTags") &&
-    documentCenterSectionSource.includes("פתח מסמך"),
+    documentCenterSectionSource.includes("פתח מסמך") &&
+    documentCenterSectionSource.includes("MasterExistingBuildingSearch") &&
+    documentCenterSectionSource.includes('mode="select"') &&
+    documentCenterSectionSource.includes("selectedBuildingHit") &&
+    documentCenterSectionSource.includes("resolveElevatorOptions"),
   "Document Center: Master UI — העלאה, חיפוש ופתיחה"
 );
 

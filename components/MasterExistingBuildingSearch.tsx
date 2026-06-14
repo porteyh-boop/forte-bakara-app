@@ -14,7 +14,7 @@ function formatValue(value: string | null | undefined): string {
   return value?.trim() ? value.trim() : "—";
 }
 
-function ExistingBuildingCard({
+export function MasterBuildingProfileCard({
   profile,
   compact = false,
 }: {
@@ -62,12 +62,15 @@ function ExistingBuildingCard({
   );
 }
 
+export type MasterExistingBuildingSearchMode = "prevent-duplicate" | "select";
+
 interface MasterExistingBuildingSearchProps {
   entries: MasterBuildingEntry[];
   resolveElevatorCount: (buildingId: string) => number;
   selectedHit: MasterBuildingSearchHit | null;
   onSelectHit: (hit: MasterBuildingSearchHit | null) => void;
   onShowInList?: (buildingId: string) => void;
+  mode?: MasterExistingBuildingSearchMode;
 }
 
 export default function MasterExistingBuildingSearch({
@@ -76,7 +79,9 @@ export default function MasterExistingBuildingSearch({
   selectedHit,
   onSelectHit,
   onShowInList,
+  mode = "prevent-duplicate",
 }: MasterExistingBuildingSearchProps) {
+  const isSelectMode = mode === "select";
   const [query, setQuery] = useState("");
 
   const results = useMemo(
@@ -104,9 +109,13 @@ export default function MasterExistingBuildingSearch({
   return (
     <div className="rounded-xl border border-navy/15 bg-gray-light/60 p-3 space-y-3">
       <div>
-        <h4 className="text-sm font-bold text-navy">חיפוש בניין קיים</h4>
+        <h4 className="text-sm font-bold text-navy">
+          {isSelectMode ? "בחירת בניין" : "חיפוש בניין קיים"}
+        </h4>
         <p className="text-xs text-gray-text mt-0.5">
-          חפשו לפי שם בניין, כתובת, עיר או מזהה בניין לפני יצירת רשומה חדשה.
+          {isSelectMode
+            ? "חפשו לפי שם בניין, כתובת, עיר או מזהה בניין לשיוך המסמך."
+            : "חפשו לפי שם בניין, כתובת, עיר או מזהה בניין לפני יצירת רשומה חדשה."}
         </p>
       </div>
 
@@ -123,32 +132,42 @@ export default function MasterExistingBuildingSearch({
 
       {selectedHit ? (
         <div className="space-y-3">
-          <p className="text-sm font-semibold text-amber-900 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-            הבניין כבר קיים במערכת
+          <p
+            className={`text-sm font-semibold rounded-xl px-3 py-2 ${
+              isSelectMode
+                ? "text-emerald-900 bg-emerald-50 border border-emerald-200"
+                : "text-amber-900 bg-amber-50 border border-amber-200"
+            }`}
+          >
+            {isSelectMode ? "בניין נבחר למסמך" : "הבניין כבר קיים במערכת"}
           </p>
-          <ExistingBuildingCard profile={selectedHit.profile} />
+          <MasterBuildingProfileCard profile={selectedHit.profile} />
           <div className="flex flex-wrap gap-2">
-            <Link
-              href={buildMasterBuildingDossierPath(selectedHit.profile.buildingId)}
-              className="text-sm font-semibold bg-navy text-white px-4 py-2 rounded-xl"
-            >
-              מעבר לתיק הבניין
-            </Link>
-            {onShowInList && (
-              <button
-                type="button"
-                onClick={() => onShowInList(selectedHit.profile.buildingId)}
-                className="text-sm font-semibold rounded-xl border border-gray-200 px-4 py-2"
-              >
-                הצג בניהול בניינים
-              </button>
+            {!isSelectMode && (
+              <>
+                <Link
+                  href={buildMasterBuildingDossierPath(selectedHit.profile.buildingId)}
+                  className="text-sm font-semibold bg-navy text-white px-4 py-2 rounded-xl"
+                >
+                  מעבר לתיק הבניין
+                </Link>
+                {onShowInList && (
+                  <button
+                    type="button"
+                    onClick={() => onShowInList(selectedHit.profile.buildingId)}
+                    className="text-sm font-semibold rounded-xl border border-gray-200 px-4 py-2"
+                  >
+                    הצג בניהול בניינים
+                  </button>
+                )}
+              </>
             )}
             <button
               type="button"
               onClick={handleClearSelection}
               className="text-sm font-semibold rounded-xl border border-gray-200 px-4 py-2"
             >
-              חיפוש מחדש
+              {isSelectMode ? "בחר בניין אחר" : "חיפוש מחדש"}
             </button>
           </div>
         </div>
@@ -156,7 +175,9 @@ export default function MasterExistingBuildingSearch({
         <>
           {query.trim() && results.length === 0 && (
             <p className="text-sm text-gray-text bg-white border border-gray-200 rounded-xl px-3 py-2">
-              לא נמצא בניין תואם. ניתן להמשיך ליצירת בניין חדש למטה.
+              {isSelectMode
+                ? "לא נמצא בניין תואם. נסו חיפוש אחר."
+                : "לא נמצא בניין תואם. ניתן להמשיך ליצירת בניין חדש למטה."}
             </p>
           )}
 
@@ -169,7 +190,7 @@ export default function MasterExistingBuildingSearch({
                     onClick={() => handleSelect(hit)}
                     className="w-full text-right rounded-xl border border-gray-200 bg-white px-3 py-2 hover:border-navy/40 hover:bg-gray-50 transition-colors"
                   >
-                    <ExistingBuildingCard profile={hit.profile} compact />
+                    <MasterBuildingProfileCard profile={hit.profile} compact />
                   </button>
                 </li>
               ))}
