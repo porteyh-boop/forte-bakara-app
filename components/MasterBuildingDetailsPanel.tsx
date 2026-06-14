@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { DossierKpi } from "@/components/MasterBuildingDossierShared";
 import MasterBuildingDetailsForm from "@/components/MasterBuildingDetailsForm";
 import type { MasterBuildingFormState } from "@/lib/master-building-form";
@@ -39,14 +40,31 @@ export default function MasterBuildingDetailsPanel({
   onSubmit,
   saving = false,
 }: MasterBuildingDetailsPanelProps) {
+  const [editBlockedMessage, setEditBlockedMessage] = useState(false);
+
+  useEffect(() => {
+    if (editing) {
+      setEditBlockedMessage(false);
+    }
+  }, [editing]);
+
+  function handleEditClick() {
+    if (canEdit && onStartEdit) {
+      setEditBlockedMessage(false);
+      onStartEdit();
+      return;
+    }
+    setEditBlockedMessage(true);
+  }
+
   return (
     <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-bold text-navy">פרטי בניין</h3>
-        {canEdit && !editing && onStartEdit && (
+        {!editing && (
           <button
             type="button"
-            onClick={onStartEdit}
+            onClick={handleEditClick}
             className="text-xs font-semibold bg-navy text-white px-3 py-1.5 rounded-lg"
           >
             ערוך פרטי בניין
@@ -101,9 +119,9 @@ export default function MasterBuildingDetailsPanel({
         </div>
       )}
 
-      {!canEdit && (
-        <p className="text-xs text-gray-text">
-          עריכת פרטי בניין זמינה לבניינים הרשומים בענן בלבד.
+      {editBlockedMessage && !editing && (
+        <p className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+          עריכה זמינה לבניינים בענן בלבד
         </p>
       )}
     </div>
