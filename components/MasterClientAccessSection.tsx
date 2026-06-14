@@ -10,6 +10,7 @@ import {
   createClientUserAccess,
   deactivateClientAccess,
   formatClientAccessExpiry,
+  formatClientTypeDisplay,
   getAllClientUserAccessRecords,
   isClientAccessCloudConfigured,
   reactivateClientAccess,
@@ -449,11 +450,9 @@ export default function MasterClientAccessSection({
                           <p className="text-xs text-gray-text">
                             {item.user.phone || "—"} · {item.user.email || "—"}
                           </p>
-                          {item.user.client_type && (
-                            <p className="text-xs text-gray-text">
-                              סוג לקוח: {item.user.client_type}
-                            </p>
-                          )}
+                          <p className="text-xs text-gray-text">
+                            סוג לקוח: {formatClientTypeDisplay(item.user.client_type)}
+                          </p>
                         </div>
                         <span
                           className={`text-xs font-semibold rounded-full px-2.5 py-1 ${

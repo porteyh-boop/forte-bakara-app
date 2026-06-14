@@ -3234,8 +3234,10 @@ assert(
 );
 
 assert(
-  CLIENT_TYPE_OPTIONS.length === 5 &&
+  CLIENT_TYPE_OPTIONS.length === 10 &&
     CLIENT_TYPE_OPTIONS.includes("ועד בית") &&
+    CLIENT_TYPE_OPTIONS.includes("עורך דין") &&
+    CLIENT_TYPE_OPTIONS.includes("משקיע / רוכש נכס") &&
     CLIENT_TYPE_OPTIONS.includes("אחר"),
   "פרופיל לקוח: סוגי לקוח מוגדרים"
 );

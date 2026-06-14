@@ -6,17 +6,17 @@ import {
   getDefaultWelcomeMessageForClientType,
   hydrateWelcomeMessageForEdit,
   normalizeWelcomeMessageForSave,
-  type ClientType,
+  type StoredClientType,
 } from "./client-profile";
 
 export function useClientWelcomeFields() {
-  const [clientType, setClientTypeState] = useState<ClientType | "">("");
+  const [clientType, setClientTypeState] = useState<StoredClientType | "">("");
   const [welcomeMessage, setWelcomeMessageState] = useState(
     DEFAULT_CLIENT_WELCOME_MESSAGE
   );
   const welcomeTouchedRef = useRef(false);
 
-  const setClientType = useCallback((nextType: ClientType | "") => {
+  const setClientType = useCallback((nextType: StoredClientType | "") => {
     setClientTypeState(nextType);
     if (!welcomeTouchedRef.current && nextType) {
       setWelcomeMessageState(getDefaultWelcomeMessageForClientType(nextType));
@@ -37,7 +37,7 @@ export function useClientWelcomeFields() {
 
   const hydrateFromUser = useCallback(
     (user: {
-      client_type: ClientType | null;
+      client_type: StoredClientType | null;
       welcome_message: string | null;
     }) => {
       const type = user.client_type ?? "";

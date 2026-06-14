@@ -1,18 +1,21 @@
 import {
   DEFAULT_CLIENT_WELCOME_MESSAGE,
   getDefaultWelcomeMessageForClientType,
-  isClientType,
+  isStoredClientType,
   normalizeWelcomeMessageForSave,
   type ClientType,
+  type StoredClientType,
 } from "./client-profile";
 import { getPilotSupabaseClient, isPilotCloudConfigured } from "./pilot-cloud";
 import type { Elevator, Fault } from "./types";
 import type { PilotCloudFault } from "./pilot-cloud";
 
-export type { ClientType } from "./client-profile";
+export type { ClientType, StoredClientType } from "./client-profile";
 export {
   CLIENT_TYPE_OPTIONS,
+  CLIENT_TYPE_NOT_SET_LABEL,
   CLIENT_TYPE_WELCOME_MESSAGES,
+  formatClientTypeDisplay,
   DEFAULT_CLIENT_WELCOME_MESSAGE,
   getDefaultWelcomeMessageForClientType,
   hydrateWelcomeMessageForEdit,
@@ -36,7 +39,7 @@ export interface ClientUserRecord {
   name: string;
   phone: string | null;
   email: string | null;
-  client_type: ClientType | null;
+  client_type: StoredClientType | null;
   welcome_message: string | null;
   access_token: string;
   is_active: boolean;
@@ -67,7 +70,7 @@ export interface CreateClientUserAccessInput {
   name: string;
   phone?: string;
   email?: string;
-  clientType?: ClientType | null;
+  clientType?: ClientType | StoredClientType | null;
   welcomeMessage?: string | null;
   buildingId: string;
   elevatorId?: string | null;
@@ -80,7 +83,7 @@ export interface UpdateClientUserProfileInput {
   name: string;
   phone?: string | null;
   email?: string | null;
-  clientType?: ClientType | null;
+  clientType?: ClientType | StoredClientType | null;
   welcomeMessage?: string | null;
 }
 
@@ -217,7 +220,7 @@ function mapClientUserRow(row: Record<string, unknown>): ClientUserRecord {
     name: String(row.name),
     phone: row.phone ? String(row.phone) : null,
     email: row.email ? String(row.email) : null,
-    client_type: isClientType(rawClientType) ? rawClientType : null,
+    client_type: isStoredClientType(rawClientType) ? rawClientType : null,
     welcome_message: rawWelcomeMessage?.trim() ? rawWelcomeMessage : null,
     access_token: String(row.access_token),
     is_active: Boolean(row.is_active),
@@ -266,13 +269,19 @@ export async function createClientUserAccess(
   const welcomeMessage =
     normalizeWelcomeMessageForSave(
       input.welcomeMessage ?? "",
-      input.clientType && isClientType(input.clientType) ? input.clientType : null
+      input.clientType && isStoredClientType(input.clientType)
+        ? input.clientType
+        : null
     ) ??
     getDefaultWelcomeMessageForClientType(
-      input.clientType && isClientType(input.clientType) ? input.clientType : null
+      input.clientType && isStoredClientType(input.clientType)
+        ? input.clientType
+        : null
     );
   const clientType =
-    input.clientType && isClientType(input.clientType) ? input.clientType : null;
+    input.clientType && isStoredClientType(input.clientType)
+      ? input.clientType
+      : null;
 
   const userInsertPayload = {
     name: input.name.trim(),
@@ -490,7 +499,9 @@ export async function updateClientUserProfile(
   if (!client || !userId || !name) return null;
 
   const clientType =
-    input.clientType && isClientType(input.clientType) ? input.clientType : null;
+    input.clientType && isStoredClientType(input.clientType)
+      ? input.clientType
+      : null;
 
   const { data, error } = await client
     .from(CLIENT_USERS_TABLE)

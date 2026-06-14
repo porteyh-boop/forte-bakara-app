@@ -1,15 +1,17 @@
 "use client";
 
 import {
-  CLIENT_TYPE_OPTIONS,
+  CLIENT_TYPE_NOT_SET_LABEL,
+  getClientTypeFormOptions,
   getDefaultWelcomeMessageForClientType,
   type ClientType,
+  type StoredClientType,
 } from "@/lib/client-profile";
 
 interface ClientWelcomeFieldsProps {
-  clientType: ClientType | "";
+  clientType: ClientType | StoredClientType | "";
   welcomeMessage: string;
-  onClientTypeChange: (clientType: ClientType | "") => void;
+  onClientTypeChange: (clientType: ClientType | StoredClientType | "") => void;
   onWelcomeMessageChange: (message: string) => void;
   onResetWelcomeToDefault: () => void;
   showResetButton?: boolean;
@@ -33,13 +35,14 @@ export default function ClientWelcomeFields({
         <label className="text-xs text-gray-text">{clientTypeLabel}</label>
         <select
           value={clientType}
-          onChange={(e) => onClientTypeChange(e.target.value as ClientType | "")}
+          onChange={(e) =>
+            onClientTypeChange(e.target.value as ClientType | StoredClientType | "")
+          }
           className="form-input mt-1"
         >
-          <option value="">בחרו סוג לקוח</option>
-          {CLIENT_TYPE_OPTIONS.map((option) => (
-            <option key={option} value={option}>
-              {option}
+          {getClientTypeFormOptions(clientType).map((option) => (
+            <option key={option.value || CLIENT_TYPE_NOT_SET_LABEL} value={option.value}>
+              {option.label}
             </option>
           ))}
         </select>
