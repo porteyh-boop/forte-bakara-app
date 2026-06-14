@@ -40,7 +40,7 @@ import {
   computeClientPortalStats,
   logClientPortalActivity,
 } from "@/lib/client-portal";
-import { getAllDocuments, formatDocumentDate } from "@/lib/document-center";
+import { getAllDocuments, formatDocumentDate, filterClientVisibleDocuments } from "@/lib/document-center";
 import { isClosedFault, isOpenFault } from "@/lib/fault-lifecycle";
 import { getAllElevatorFaultCounts } from "@/lib/elevator-stats";
 import { getEffectiveElevators } from "@/lib/elevator-status";
@@ -244,7 +244,7 @@ export default function ClientAccessPageContent({
 
     if (loadedPermissions.can_view_documents) {
       const { documents: allDocuments } = await getAllDocuments();
-      const scopedDocuments = allDocuments
+      const scopedDocuments = filterClientVisibleDocuments(allDocuments)
         .filter(
           (doc) => normalizeBuildingId(doc.building_id) === normalizedBuildingId
         )

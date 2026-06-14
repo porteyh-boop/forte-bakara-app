@@ -14,6 +14,7 @@ import {
   getAllDocuments,
   getDocumentLegacyFilterTags,
   getDocumentTypeLabel,
+  getDocumentVisibilityLabel,
   isDocumentCenterConfigured,
   normalizePredefinedDocumentTags,
   uploadDocumentCenterFile,
@@ -21,6 +22,8 @@ import {
   validateCreateDocumentInput,
   type DocumentRecord,
   type DocumentTypeId,
+  type DocumentVisibility,
+  DEFAULT_DOCUMENT_VISIBILITY,
 } from "@/lib/document-center";
 import { listAllDocumentInspectorMeta } from "@/lib/document-inspector-meta";
 import {
@@ -99,6 +102,8 @@ export default function MasterDocumentCenterSection() {
     useState<MasterBuildingSearchHit | null>(null);
   const [elevatorId, setElevatorId] = useState("");
   const [documentType, setDocumentType] = useState<DocumentTypeId>("other");
+  const [documentVisibility, setDocumentVisibility] =
+    useState<DocumentVisibility>(DEFAULT_DOCUMENT_VISIBILITY);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -316,6 +321,7 @@ export default function MasterDocumentCenterSection() {
       setHasRemarks(false);
       setSelectedFile(null);
       setDocumentType("other");
+      setDocumentVisibility(DEFAULT_DOCUMENT_VISIBILITY);
       setMessage(
         created.has_remarks
           ? "תסקיר בודק נשמר במאגר ודוח מעקב נפתח."
@@ -362,6 +368,7 @@ export default function MasterDocumentCenterSection() {
       mimeType: uploaded.contentType,
       fileSizeBytes: selectedFile.size,
       tags: normalizePredefinedDocumentTags(selectedTags),
+      visibility: documentVisibility,
     };
 
     const validationError = validateCreateDocumentInput(input);
@@ -394,6 +401,7 @@ export default function MasterDocumentCenterSection() {
     setSelectedBuildingHit(null);
     setSelectedFile(null);
     setDocumentType("other");
+    setDocumentVisibility(DEFAULT_DOCUMENT_VISIBILITY);
     setMessage("המסמך נשמר במאגר.");
     const refreshed = await refresh();
     if (refreshed.error) {
@@ -500,7 +508,38 @@ export default function MasterDocumentCenterSection() {
               onInspectorNameChange={setInspectorName}
               onHasRemarksChange={setHasRemarks}
             />
-          ) : null}
+          ) : (
+            <div className="sm:col-span-2 lg:col-span-3 xl:col-span-4 rounded-xl border border-gray-100 bg-gray-50 p-3 space-y-2">
+              <p className="text-xs font-semibold text-navy">
+                האם לאפשר צפייה ללקוח?
+              </p>
+              <div className="flex flex-wrap gap-4 text-sm text-navy">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="documentVisibility"
+                    value="internal"
+                    checked={documentVisibility === "internal"}
+                    onChange={() => setDocumentVisibility("internal")}
+                  />
+                  <span>פנימי בלבד</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="documentVisibility"
+                    value="client"
+                    checked={documentVisibility === "client"}
+                    onChange={() => setDocumentVisibility("client")}
+                  />
+                  <span>גלוי ללקוח</span>
+                </label>
+              </div>
+              <p className="text-[11px] text-gray-text">
+                ברירת מחדל: פנימי בלבד. ההחלטה לכל מסמך בנפרד.
+              </p>
+            </div>
+          )}
           <div>
             <label className="text-xs text-gray-text">כותרת</label>
             <input
@@ -694,6 +733,8 @@ export default function MasterDocumentCenterSection() {
                       {document.elevator_id ? ` · ${document.elevator_id}` : ""}
                       {" · "}
                       {getDocumentTypeLabel(document.document_type)}
+                      {" · "}
+                      {getDocumentVisibilityLabel(document.visibility)}
                     </p>
                   </div>
                   <span className="text-xs font-semibold rounded-full px-2.5 py-1 border bg-gray-50 text-gray-text border-gray-200">

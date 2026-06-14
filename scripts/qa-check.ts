@@ -182,13 +182,18 @@ import {
   DOCUMENT_UNSUPPORTED_CONTENT_TYPE_ERROR,
   DOCUMENT_TYPES,
   extractDocumentStoragePath,
+  filterClientVisibleDocuments,
   filterDocuments,
   formatDocumentTags,
   getDocumentFilterTagOptions,
   getDocumentLegacyFilterTags,
   getDocumentTagFilterMatches,
   getDocumentTypeLabel,
+  getDocumentVisibilityLabel,
   documentHasTagFilter,
+  isDocumentVisibleToClient,
+  normalizeDocumentVisibility,
+  resolveDocumentVisibility,
   isDocumentReadyForAi,
   isDocumentReadyForOcr,
   isPredefinedDocumentTag,
@@ -3797,6 +3802,23 @@ assert(
   "Document Center: טבלה, bucket, תגיות והכנה ל-OCR/AI"
 );
 
+const documentVisibilityMigration = path.join(
+  process.cwd(),
+  "supabase/migrations/016_document_visibility.sql"
+);
+assert(fs.existsSync(documentVisibilityMigration), "Document Center: migration 016 קיים");
+const documentVisibilityMigrationSql = fs.readFileSync(
+  documentVisibilityMigration,
+  "utf8"
+);
+assert(
+  documentVisibilityMigrationSql.includes("add column if not exists visibility") &&
+    documentVisibilityMigrationSql.includes("'internal', 'client'") &&
+    documentVisibilityMigrationSql.includes("idx_documents_visibility") &&
+    documentVisibilityMigrationSql.includes("ai_metadata->>'visibility'"),
+  "Document Center: migration 016 — עמודת visibility ו-backfill"
+);
+
 const documentCenterSectionPath = path.join(
   process.cwd(),
   "components/MasterDocumentCenterSection.tsx"
@@ -3847,9 +3869,53 @@ const sampleDocument: DocumentRecord = {
   ocr_text: null,
   ai_summary: null,
   ai_metadata: null,
+  visibility: "internal",
   created_at: "2026-01-01T10:00:00.000Z",
   updated_at: "2026-01-01T10:00:00.000Z",
 };
+
+assert(
+  normalizeDocumentVisibility("client") === "client" &&
+    normalizeDocumentVisibility(undefined) === "internal" &&
+    resolveDocumentVisibility({ ai_metadata: { visibility: "client" } }) ===
+      "client" &&
+    resolveDocumentVisibility({}) === "internal" &&
+    getDocumentVisibilityLabel("client") === "גלוי ללקוח" &&
+    getDocumentVisibilityLabel("internal") === "פנימי בלבד",
+  "Document Center: מודל הרשאות internal/client"
+);
+assert(
+  !isDocumentVisibleToClient(sampleDocument) &&
+    isDocumentVisibleToClient({ ...sampleDocument, visibility: "client" }) &&
+    filterClientVisibleDocuments([
+      sampleDocument,
+      { ...sampleDocument, id: "doc-2", visibility: "client" },
+    ]).length === 1,
+  "Document Center: סינון מסמכים ללקוח"
+);
+assert(
+  buildDocumentInsertRow({
+    buildingId: "md25",
+    documentType: "other",
+    title: "בדיקה",
+    fileName: "a.pdf",
+    fileUrl: "https://example.com/a.pdf",
+    storagePath: "md25/a.pdf",
+    visibility: "client",
+  }).visibility === "client" &&
+    buildDocumentInsertRow({
+      buildingId: "md25",
+      documentType: "other",
+      title: "בדיקה",
+      fileName: "a.pdf",
+      fileUrl: "https://example.com/a.pdf",
+      storagePath: "md25/a.pdf",
+    }).visibility === "internal" &&
+    resolveDocumentVisibility({ visibility: "client" }) === "client" &&
+    resolveDocumentVisibility({ ai_metadata: { visibility: "client" } }) ===
+      "client",
+  "Document Center: שמירת הרשאה בעמודת visibility"
+);
 
 assert(
   normalizeDocumentTags([" בודק ", "שנתי", "בודק"]).join(",") === "בודק,שנתי" &&
@@ -4088,7 +4154,9 @@ assert(
     documentCenterSectionSource.includes("MasterExistingBuildingSearch") &&
     documentCenterSectionSource.includes('mode="select"') &&
     documentCenterSectionSource.includes("selectedBuildingHit") &&
-    documentCenterSectionSource.includes("resolveElevatorOptions"),
+    documentCenterSectionSource.includes("resolveElevatorOptions") &&
+    documentCenterSectionSource.includes("האם לאפשר צפייה ללקוח") &&
+    documentCenterSectionSource.includes("getDocumentVisibilityLabel"),
   "Document Center: Master UI — העלאה, חיפוש ופתיחה"
 );
 
@@ -4126,6 +4194,13 @@ for (const file of clientPagesForInspector) {
 assert(
   documentCenterLeakToClient === 0,
   "Document Center: אין חשיפה למסכי לקוח"
+);
+
+const clientAccessPortalContent = fs.readFileSync(clientAccessPortalPage, "utf8");
+assert(
+  clientAccessPortalContent.includes("filterClientVisibleDocuments") &&
+    clientAccessPortalContent.includes("can_view_documents"),
+  "Document Center: פורטל לקוח מציג מסמכים client בלבד"
 );
 
 const documentInspectorMetaMigration = path.join(

@@ -71,6 +71,10 @@ export const DOCUMENT_TAG_INSPECTOR_REPORT: DocumentPredefinedTag =
 
 export type DocumentOcrStatus = "none" | "pending" | "ready" | "failed";
 
+export const DOCUMENT_VISIBILITY_OPTIONS = ["internal", "client"] as const;
+export type DocumentVisibility = (typeof DOCUMENT_VISIBILITY_OPTIONS)[number];
+export const DEFAULT_DOCUMENT_VISIBILITY: DocumentVisibility = "internal";
+
 export interface DocumentRecord {
   id: string;
   building_id: string;
@@ -88,6 +92,7 @@ export interface DocumentRecord {
   ocr_text: string | null;
   ai_summary: string | null;
   ai_metadata: Record<string, unknown> | null;
+  visibility: DocumentVisibility;
   created_at: string;
   updated_at: string;
 }
@@ -104,6 +109,7 @@ export interface CreateDocumentInput {
   mimeType?: string;
   fileSizeBytes?: number;
   tags?: string[];
+  visibility?: DocumentVisibility;
 }
 
 export interface DocumentSearchFilters {
@@ -222,6 +228,7 @@ export function formatStorageUploadFailureDetails(params: {
 
 export function buildDocumentInsertRow(input: CreateDocumentInput) {
   const now = new Date().toISOString();
+  const visibility = normalizeDocumentVisibility(input.visibility);
   return {
     building_id: input.buildingId.trim().toLowerCase(),
     elevator_id: input.elevatorId?.trim() || null,
@@ -238,8 +245,47 @@ export function buildDocumentInsertRow(input: CreateDocumentInput) {
     ocr_text: null,
     ai_summary: null,
     ai_metadata: null,
+    visibility,
     updated_at: now,
   };
+}
+
+export function normalizeDocumentVisibility(
+  value: unknown
+): DocumentVisibility {
+  return value === "client" ? "client" : DEFAULT_DOCUMENT_VISIBILITY;
+}
+
+export function resolveDocumentVisibility(
+  row: Record<string, unknown>
+): DocumentVisibility {
+  if (row.visibility !== undefined && row.visibility !== null) {
+    const columnValue = String(row.visibility).trim();
+    if (columnValue === "client" || columnValue === "internal") {
+      return columnValue;
+    }
+  }
+  const metadata =
+    row.ai_metadata && typeof row.ai_metadata === "object"
+      ? (row.ai_metadata as Record<string, unknown>)
+      : null;
+  return normalizeDocumentVisibility(metadata?.visibility);
+}
+
+export function isDocumentVisibleToClient(document: DocumentRecord): boolean {
+  return document.visibility === "client";
+}
+
+export function filterClientVisibleDocuments(
+  documents: DocumentRecord[]
+): DocumentRecord[] {
+  return documents.filter(isDocumentVisibleToClient);
+}
+
+export function getDocumentVisibilityLabel(
+  visibility: DocumentVisibility
+): string {
+  return visibility === "client" ? "גלוי ללקוח" : "פנימי בלבד";
 }
 
 function mapDocumentRow(row: Record<string, unknown>): DocumentRecord {
@@ -284,6 +330,7 @@ function mapDocumentRow(row: Record<string, unknown>): DocumentRecord {
       row.ai_metadata && typeof row.ai_metadata === "object"
         ? (row.ai_metadata as Record<string, unknown>)
         : null,
+    visibility: resolveDocumentVisibility(row),
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
   };
