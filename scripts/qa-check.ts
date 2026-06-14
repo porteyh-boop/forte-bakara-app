@@ -1808,7 +1808,11 @@ assert(
 assert(
   masterSubpageBackSource.includes("חזרה למאסטר") &&
     masterSubpageBackSource.includes('href="/master"') &&
-    masterSubpageBackSource.includes('pathname === "/master"'),
+    masterSubpageBackSource.includes('pathname === "/master"') &&
+    masterSubpageBackSource.includes("חזרה לניהול בניינים") &&
+    masterSubpageBackSource.includes('href="/master?tab=buildings"') &&
+    masterSubpageBackSource.includes("/master/building/") &&
+    masterSubpageBackSource.includes("/master/elevator/"),
   "מאסטר: כפתור חזרה למאסטר בדפי משנה בלבד"
 );
 assert(
@@ -2400,10 +2404,12 @@ const masterExistingBuildingSearchUi = fs.readFileSync(
 );
 assert(
   masterExistingBuildingSearchUi.includes("חיפוש בניין קיים") &&
-    masterExistingBuildingSearchUi.includes("מעבר לתיק הבניין") &&
+    masterExistingBuildingSearchUi.includes("פתח תיק בניין") &&
     masterExistingBuildingSearchUi.includes("buildMasterBuildingDossierPath") &&
+    masterExistingBuildingSearchUi.includes("handleSearchKeyDown") &&
     masterExistingBuildingSearchUi.includes('mode = "prevent-duplicate"') &&
-    masterExistingBuildingSearchUi.includes("בניין נבחר למסמך"),
+    masterExistingBuildingSearchUi.includes("בניין נבחר למסמך") &&
+    masterExistingBuildingSearchUi.includes("!isSelectMode"),
   "הוספת בניין: חיפוש בניין קיים ומניעת כפילויות"
 );
 

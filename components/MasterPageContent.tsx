@@ -39,6 +39,18 @@ import { BUILDING_LIVE_STARTED_EVENT } from "@/hooks/useBuildingLiveStarted";
 import { buildMasterBuildingDossierPath } from "@/lib/master-building-routes";
 type Tab = "faults" | "feedback" | "buildings" | "clientAccess" | "documentCenter";
 
+const MASTER_TABS: readonly Tab[] = [
+  "faults",
+  "feedback",
+  "buildings",
+  "clientAccess",
+  "documentCenter",
+];
+
+function isMasterTab(value: string | null): value is Tab {
+  return Boolean(value && MASTER_TABS.includes(value as Tab));
+}
+
 function formatCloudDate(iso: string): string {
   return new Intl.DateTimeFormat("he-IL", {
     day: "numeric",
@@ -119,6 +131,14 @@ export default function MasterPageContent() {
     setAuthed(isMasterAuthenticated());
     logPilotCloudConfigDebug();
     setCloudReady(isPilotCloudConfigured());
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const requestedTab = new URLSearchParams(window.location.search).get("tab");
+    if (isMasterTab(requestedTab)) {
+      setTab(requestedTab);
+    }
   }, []);
 
   const refresh = useCallback(async () => {

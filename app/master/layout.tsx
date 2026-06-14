@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import MasterSubpageBackBar from "@/components/MasterSubpageBackBar";
 
 export const metadata: Metadata = {
   title: "ניהול פיילוט",
@@ -10,5 +11,10 @@ export default function MasterLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return children;
+  return (
+    <>
+      <MasterSubpageBackBar />
+      {children}
+    </>
+  );
 }
