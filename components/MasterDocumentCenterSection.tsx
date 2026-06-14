@@ -15,6 +15,7 @@ import {
   getDocumentLegacyFilterTags,
   getDocumentTypeLabel,
   getDocumentVisibilityLabel,
+  updateDocumentVisibility,
   isDocumentCenterConfigured,
   normalizePredefinedDocumentTags,
   uploadDocumentCenterFile,
@@ -52,6 +53,12 @@ import {
   getStaticDemoBuildingMeta,
 } from "@/lib/buildings";
 import { isPilotCloudConfigured } from "@/lib/pilot-cloud";
+
+function visibilityBadgeClass(visibility: DocumentVisibility): string {
+  return visibility === "client"
+    ? "text-xs font-semibold rounded-full px-2.5 py-1 border bg-emerald-50 text-emerald-800 border-emerald-200"
+    : "text-xs font-semibold rounded-full px-2.5 py-1 border bg-slate-50 text-slate-700 border-slate-200";
+}
 
 function resolveBuildingName(buildingId: string): string {
   try {
@@ -409,6 +416,41 @@ export default function MasterDocumentCenterSection() {
     }
   }
 
+  async function handleVisibilityChange(
+    document: DocumentRecord,
+    nextVisibility: DocumentVisibility
+  ) {
+    if (document.visibility === nextVisibility) return;
+
+    if (nextVisibility === "client") {
+      const confirmed = window.confirm("האם לאפשר ללקוח לצפות במסמך זה?");
+      if (!confirmed) return;
+    }
+
+    setActionId(document.id);
+    setMessage(null);
+
+    const { document: updated, error } = await updateDocumentVisibility(
+      document.id,
+      nextVisibility
+    );
+    setActionId(null);
+
+    if (!updated || error) {
+      setMessage(error ?? "עדכון ההרשאה נכשל.");
+      return;
+    }
+
+    setDocuments((current) =>
+      current.map((row) => (row.id === updated.id ? updated : row))
+    );
+    setMessage(
+      nextVisibility === "client"
+        ? `המסמך "${updated.title}" גלוי כעת ללקוח.`
+        : `המסמך "${updated.title}" הוגדר כפנימי בלבד.`
+    );
+  }
+
   async function handleDelete(documentId: string) {
     if (!window.confirm("למחוק את המסמך מהמאגר?")) return;
 
@@ -733,13 +775,16 @@ export default function MasterDocumentCenterSection() {
                       {document.elevator_id ? ` · ${document.elevator_id}` : ""}
                       {" · "}
                       {getDocumentTypeLabel(document.document_type)}
-                      {" · "}
-                      {getDocumentVisibilityLabel(document.visibility)}
                     </p>
                   </div>
-                  <span className="text-xs font-semibold rounded-full px-2.5 py-1 border bg-gray-50 text-gray-text border-gray-200">
-                    {formatDocumentDate(document.created_at)}
-                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={visibilityBadgeClass(document.visibility)}>
+                      {getDocumentVisibilityLabel(document.visibility)}
+                    </span>
+                    <span className="text-xs font-semibold rounded-full px-2.5 py-1 border bg-gray-50 text-gray-text border-gray-200">
+                      {formatDocumentDate(document.created_at)}
+                    </span>
+                  </div>
                 </div>
 
                 {document.description && (
@@ -777,6 +822,21 @@ export default function MasterDocumentCenterSection() {
                   >
                     פתח מסמך
                   </a>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void handleVisibilityChange(
+                        document,
+                        document.visibility === "client" ? "internal" : "client"
+                      )
+                    }
+                    disabled={actionId === document.id}
+                    className="text-xs font-semibold text-navy border border-gold/40 rounded-lg px-3 py-1.5 hover:bg-gold/10 disabled:opacity-50"
+                  >
+                    {document.visibility === "client"
+                      ? "הפוך לפנימי"
+                      : "שנה הרשאה — גלוי ללקוח"}
+                  </button>
                   <button
                     type="button"
                     onClick={() => void handleDelete(document.id)}

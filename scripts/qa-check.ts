@@ -3827,6 +3827,15 @@ assert(
   fs.existsSync(documentCenterSectionPath),
   "Document Center: UI Master קיים"
 );
+const documentCenterSection = fs.readFileSync(documentCenterSectionPath, "utf8");
+assert(
+  documentCenterSection.includes("getDocumentVisibilityLabel") &&
+    documentCenterSection.includes("updateDocumentVisibility") &&
+    documentCenterSection.includes("handleVisibilityChange") &&
+    documentCenterSection.includes("האם לאפשר ללקוח לצפות במסמך זה?") &&
+    documentCenterSection.includes("שנה הרשאה"),
+  "Document Center: שינוי הרשאה למסמך קיים במאסטר"
+);
 
 const documentCenterLib = fs.readFileSync(
   path.join(process.cwd(), "lib/document-center.ts"),
@@ -3836,6 +3845,7 @@ assert(
   documentCenterLib.includes("createDocument") &&
     documentCenterLib.includes("getAllDocuments") &&
     documentCenterLib.includes("deleteDocument") &&
+    documentCenterLib.includes("updateDocumentVisibility") &&
     documentCenterLib.includes("uploadDocumentCenterFile") &&
     documentCenterLib.includes("filterDocuments") &&
     documentCenterLib.includes("DOCUMENT_PREDEFINED_TAGS") &&

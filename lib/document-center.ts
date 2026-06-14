@@ -136,6 +136,11 @@ export interface CreateDocumentResult {
   error: string | null;
 }
 
+export interface UpdateDocumentVisibilityResult {
+  document: DocumentRecord | null;
+  error: string | null;
+}
+
 export const DOCUMENT_UNSUPPORTED_CONTENT_TYPE_ERROR =
   "סוג הקובץ אינו נתמך. יש להעלות PDF או תמונה בפורמט נתמך.";
 
@@ -891,6 +896,52 @@ export async function getDocumentById(
   }
 
   return mapDocumentRow(data);
+}
+
+export async function updateDocumentVisibility(
+  documentId: string,
+  visibility: DocumentVisibility
+): Promise<UpdateDocumentVisibilityResult> {
+  const client = getPilotSupabaseClient();
+  if (!client || !documentId.trim()) {
+    return {
+      document: null,
+      error: "Supabase לא מוגדר",
+    };
+  }
+
+  const normalizedVisibility = normalizeDocumentVisibility(visibility);
+  const now = new Date().toISOString();
+
+  const { data, error } = await client
+    .from(DOCUMENTS_TABLE)
+    .update({
+      visibility: normalizedVisibility,
+      updated_at: now,
+    })
+    .eq("id", documentId.trim())
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    const formatted = error ? formatSupabaseError(error) : "no row returned";
+    console.error("[document-center] visibility update failed:", {
+      error,
+      documentId,
+      visibility: normalizedVisibility,
+    });
+    return {
+      document: null,
+      error: formatted,
+    };
+  }
+
+  const document = mapDocumentRow(data);
+  console.info("[document-center] visibility update success:", {
+    id: document.id,
+    visibility: document.visibility,
+  });
+  return { document, error: null };
 }
 
 export async function deleteDocument(documentId: string): Promise<boolean> {
