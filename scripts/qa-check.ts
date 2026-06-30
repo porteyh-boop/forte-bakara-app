@@ -174,10 +174,13 @@ import {
 } from "../lib/fault-images";
 import {
   buildDocumentInsertRow,
+  buildDocumentInsertRowWithoutVisibilityColumn,
   buildDocumentPublicUrl,
   buildDocumentStoragePath,
   collectDocumentTags,
   DOCUMENT_CENTER_BUCKET,
+  DOCUMENT_CENTER_MAX_FILE_BYTES,
+  DOCUMENT_CENTER_MAX_FILE_MB,
   DOCUMENT_PREDEFINED_TAGS,
   DOCUMENT_UNSUPPORTED_CONTENT_TYPE_ERROR,
   DOCUMENT_TYPES,
@@ -185,6 +188,8 @@ import {
   filterClientVisibleDocuments,
   filterDocuments,
   formatDocumentTags,
+  formatStorageUploadUserError,
+  generateDocumentFileId,
   getDocumentFilterTagOptions,
   getDocumentLegacyFilterTags,
   getDocumentTagFilterMatches,
@@ -192,6 +197,7 @@ import {
   getDocumentVisibilityLabel,
   documentHasTagFilter,
   isDocumentVisibleToClient,
+  isMissingVisibilityColumnError,
   normalizeDocumentVisibility,
   resolveDocumentVisibility,
   isDocumentReadyForAi,
@@ -204,6 +210,7 @@ import {
   resolveStorageExtension,
   validateCreateDocumentInput,
   validateDocumentCenterFile,
+  getDocumentCenterMaxFileSizeError,
   type DocumentRecord,
 } from "../lib/document-center";
 import {
@@ -4006,7 +4013,19 @@ assert(
       name: "bad.exe",
       type: "application/octet-stream",
       size: 1024,
-    }) !== null,
+    }) !== null &&
+    DOCUMENT_CENTER_MAX_FILE_MB === 50 &&
+    DOCUMENT_CENTER_MAX_FILE_BYTES === 50 * 1024 * 1024 &&
+    validateDocumentCenterFile({
+      name: "large.pdf",
+      type: "application/pdf",
+      size: DOCUMENT_CENTER_MAX_FILE_BYTES + 1,
+    }) === getDocumentCenterMaxFileSizeError() &&
+    validateDocumentCenterFile({
+      name: "ok-large.pdf",
+      type: "application/pdf",
+      size: 45 * 1024 * 1024,
+    }) === null,
   "Document Center: ולידציית קובץ"
 );
 assert(
@@ -4091,13 +4110,43 @@ assert(
 
 assert(
   resolveStorageExtension("תסקיר בודק.pdf", "application/pdf") === ".pdf" &&
-    documentCenterLib.includes("crypto.randomUUID()") &&
+    documentCenterLib.includes("generateDocumentFileId") &&
     documentCenterLib.includes("formatStorageUploadFailureDetails") &&
+    documentCenterLib.includes("formatStorageUploadUserError") &&
     documentCenterLib.includes('pathVersion: "uuid-date-v2"') &&
-    documentCenterLib.includes("fileId: string = crypto.randomUUID()") &&
+    documentCenterLib.includes("uploadDocumentViaSupabaseClient") &&
     documentCenterLib.includes("file.name") &&
     documentCenterLib.includes("contentType"),
   "Document Center: extension ב-path + חסימת octet-stream + upload path v2"
+);
+
+assert(
+  isMissingVisibilityColumnError({
+    message: "Could not find the 'visibility' column of 'documents' in the schema cache",
+    code: "PGRST204",
+  }) &&
+    buildDocumentInsertRowWithoutVisibilityColumn({
+      buildingId: "md25",
+      documentType: "other",
+      title: "בדיקה",
+      fileName: "a.pdf",
+      fileUrl: "https://example.com/a.pdf",
+      storagePath: "md25/a.pdf",
+      visibility: "client",
+    }).ai_metadata?.visibility === "client" &&
+    !("visibility" in buildDocumentInsertRowWithoutVisibilityColumn({
+      buildingId: "md25",
+      documentType: "other",
+      title: "בדיקה",
+      fileName: "a.pdf",
+      fileUrl: "https://example.com/a.pdf",
+      storagePath: "md25/a.pdf",
+    })) &&
+    formatStorageUploadUserError('{"error":"Bucket not found"}').includes(
+      "010"
+    ) &&
+    generateDocumentFileId(new Date("2026-06-12T10:00:00.000Z")).length > 8,
+  "Document Center: fallback visibility + הודעות storage"
 );
 
 const insertRow = buildDocumentInsertRow({
@@ -4154,7 +4203,27 @@ assert(
   "Document Center: שם bucket זהה בקוד, 009 ו-010"
 );
 
-const documentCenterSectionSource = fs.readFileSync(documentCenterSectionPath, "utf8");
+const documentCenter50MbMigration = path.join(
+  process.cwd(),
+  "supabase/migrations/017_document_center_50mb_limit.sql"
+);
+const documentCenter50MbMigrationSql = fs.readFileSync(
+  documentCenter50MbMigration,
+  "utf8"
+);
+assert(
+  fs.existsSync(documentCenter50MbMigration) &&
+    documentCenter50MbMigrationSql.includes("52428800") &&
+    documentCenter50MbMigrationSql.includes("'document-center'") &&
+    documentCenter50MbMigrationSql.includes("file_size_limit"),
+  "Document Center: migration 017 — מגבלת 50MB ל-bucket"
+);
+assert(
+  documentCenterSection.includes("DOCUMENT_CENTER_MAX_FILE_MB") &&
+    !documentCenterSection.includes("עד 20MB"),
+  "Document Center: UI מציג מגבלת 50MB"
+);
+
 const masterPageForDocuments = fs.readFileSync(
   path.join(process.cwd(), "components/MasterPageContent.tsx"),
   "utf8"
@@ -4162,26 +4231,26 @@ const masterPageForDocuments = fs.readFileSync(
 assert(
   masterPageForDocuments.includes("MasterDocumentCenterSection") &&
     masterPageForDocuments.includes("מאגר מסמכים") &&
-    documentCenterSectionSource.includes("בחר קובץ") &&
-    documentCenterSectionSource.includes("חיפוש") &&
-    documentCenterSectionSource.includes("DOCUMENT_PREDEFINED_TAGS") &&
-    documentCenterSectionSource.includes("getDocumentLegacyFilterTags") &&
-    documentCenterSectionSource.includes("פתח מסמך") &&
-    documentCenterSectionSource.includes("MasterExistingBuildingSearch") &&
-    documentCenterSectionSource.includes('mode="select"') &&
-    documentCenterSectionSource.includes("selectedBuildingHit") &&
-    documentCenterSectionSource.includes("resolveElevatorOptions") &&
-    documentCenterSectionSource.includes("האם לאפשר צפייה ללקוח") &&
-    documentCenterSectionSource.includes("getDocumentVisibilityLabel"),
+    documentCenterSection.includes("בחר קובץ") &&
+    documentCenterSection.includes("חיפוש") &&
+    documentCenterSection.includes("DOCUMENT_PREDEFINED_TAGS") &&
+    documentCenterSection.includes("getDocumentLegacyFilterTags") &&
+    documentCenterSection.includes("פתח מסמך") &&
+    documentCenterSection.includes("MasterExistingBuildingSearch") &&
+    documentCenterSection.includes('mode="select"') &&
+    documentCenterSection.includes("selectedBuildingHit") &&
+    documentCenterSection.includes("resolveElevatorOptions") &&
+    documentCenterSection.includes("האם לאפשר צפייה ללקוח") &&
+    documentCenterSection.includes("getDocumentVisibilityLabel"),
   "Document Center: Master UI — העלאה, חיפוש ופתיחה"
 );
 
 assert(
-  documentCenterSectionSource.includes("העלאת הקובץ נכשלה") &&
-    documentCenterSectionSource.includes("שמירת המסמך נכשלה") &&
-    documentCenterSectionSource.includes("await refresh()") &&
-    documentCenterSectionSource.includes("טעינת המאגר נכשלה") &&
-    documentCenterSectionSource.includes("deleteDocumentCenterStorageFile"),
+  documentCenterSection.includes("העלאת הקובץ נכשלה") &&
+    documentCenterSection.includes("שמירת המסמך נכשלה") &&
+    documentCenterSection.includes("await refresh()") &&
+    documentCenterSection.includes("טעינת המאגר נכשלה") &&
+    documentCenterSection.includes("deleteDocumentCenterStorageFile"),
   "Document Center: הודעות שגיאה ורענון אחרי שמירה"
 );
 
@@ -4295,11 +4364,11 @@ assert(
   "תסקיר בודק: פאנל יצירה/מעקב/התראות במאגר מסמכים"
 );
 assert(
-  documentCenterSectionSource.includes("MasterDocumentInspectorPanel") &&
-    documentCenterSectionSource.includes("createInspectorReportWithFile") &&
-    documentCenterSectionSource.includes("listAllDocumentInspectorMeta") &&
-    documentCenterSectionSource.includes("listAllDocumentInspectorNotifications") &&
-    documentCenterSectionSource.includes("inspector_report"),
+  documentCenterSection.includes("MasterDocumentInspectorPanel") &&
+    documentCenterSection.includes("createInspectorReportWithFile") &&
+    documentCenterSection.includes("listAllDocumentInspectorMeta") &&
+    documentCenterSection.includes("listAllDocumentInspectorNotifications") &&
+    documentCenterSection.includes("inspector_report"),
   "Document Center: אינטגרציית תסקיר בודק + התראות"
 );
 

@@ -6,6 +6,7 @@ import {
   createDocument,
   deleteDocument,
   deleteDocumentCenterStorageFile,
+  DOCUMENT_CENTER_MAX_FILE_MB,
   DOCUMENT_PREDEFINED_TAGS,
   DOCUMENT_TYPES,
   filterDocuments,
@@ -18,6 +19,7 @@ import {
   updateDocumentVisibility,
   isDocumentCenterConfigured,
   normalizePredefinedDocumentTags,
+  traceDocumentCenter,
   uploadDocumentCenterFile,
   validateDocumentCenterFile,
   validateCreateDocumentInput,
@@ -346,6 +348,18 @@ export default function MasterDocumentCenterSection() {
       return;
     }
 
+    traceDocumentCenter("submit.start", {
+      buildingId,
+      buildingName: selectedBuildingHit.profile.name,
+      fileName: selectedFile.name,
+      fileType: selectedFile.type,
+      fileSizeBytes: selectedFile.size,
+      documentType,
+      title: title.trim() || selectedFile.name,
+      elevatorId: elevatorId || null,
+      visibility: documentVisibility,
+    });
+
     setCreating(true);
     const uploaded = await uploadDocumentCenterFile(
       selectedFile,
@@ -354,6 +368,11 @@ export default function MasterDocumentCenterSection() {
     );
 
     if (!uploaded.ok) {
+      traceDocumentCenter("submit.upload.failed", {
+        stage: uploaded.stage,
+        error: uploaded.error,
+        details: uploaded.details ?? null,
+      });
       setCreating(false);
       setUploadProgress(null);
       setMessage(
@@ -367,7 +386,7 @@ export default function MasterDocumentCenterSection() {
       buildingId,
       elevatorId: elevatorId || null,
       documentType,
-      title: title || selectedFile.name,
+      title: title.trim() || selectedFile.name,
       description,
       fileName: selectedFile.name,
       fileUrl: uploaded.fileUrl,
@@ -380,6 +399,11 @@ export default function MasterDocumentCenterSection() {
 
     const validationError = validateCreateDocumentInput(input);
     if (validationError) {
+      traceDocumentCenter("submit.pre_insert_validation.failed", {
+        error: validationError,
+        input,
+        note: "upload already succeeded — orphaned file in storage",
+      });
       setCreating(false);
       setUploadProgress(null);
       setMessage(validationError);
@@ -391,6 +415,10 @@ export default function MasterDocumentCenterSection() {
     setUploadProgress(null);
 
     if (!created) {
+      traceDocumentCenter("submit.insert.failed", {
+        insertError,
+        storagePath: uploaded.storagePath,
+      });
       await deleteDocumentCenterStorageFile(uploaded.storagePath);
       setMessage(
         insertError
@@ -401,6 +429,10 @@ export default function MasterDocumentCenterSection() {
       return;
     }
 
+    traceDocumentCenter("submit.success", {
+      documentId: created.id,
+      title: created.title,
+    });
     setTitle("");
     setDescription("");
     setSelectedTags([]);
@@ -588,8 +620,7 @@ export default function MasterDocumentCenterSection() {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               className="form-input mt-1"
-              placeholder="שם המסמך"
-              required
+              placeholder="שם המסמך (או ימולא אוטומטית משם הקובץ)"
             />
           </div>
           <div className="sm:col-span-2">
@@ -648,7 +679,7 @@ export default function MasterDocumentCenterSection() {
               )}
             </div>
             <p className="text-[11px] text-gray-text mt-1">
-              PDF · JPG · PNG · DOCX · XLSX · עד 20MB
+              PDF · JPG · PNG · DOCX · XLSX · עד {DOCUMENT_CENTER_MAX_FILE_MB}MB
             </p>
             {uploadProgress !== null && (
               <div className="mt-2">
@@ -677,6 +708,11 @@ export default function MasterDocumentCenterSection() {
               : "שומר..."
             : "שמור במאגר"}
         </button>
+        {!selectedBuildingHit && cloudReady && (
+          <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            יש לבחור בניין מהרשימה למעלה לפני שמירה (לחיצה על התוצאה או Enter).
+          </p>
+        )}
       </form>
 
       <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">

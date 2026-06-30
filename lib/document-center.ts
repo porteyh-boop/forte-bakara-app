@@ -5,9 +5,23 @@ import {
   isPilotCloudConfigured,
 } from "./pilot-cloud";
 
+/** לוגים מובנים לדיבוג שרשרת העלאה — חפשו ב-Console: [document-center][trace] */
+export function traceDocumentCenter(
+  step: string,
+  data?: Record<string, unknown>
+): void {
+  console.info("[document-center][trace]", step, data ?? {});
+}
+
 export const DOCUMENTS_TABLE = "documents";
 export const DOCUMENT_CENTER_BUCKET = "document-center";
-export const DOCUMENT_CENTER_MAX_FILE_BYTES = 20 * 1024 * 1024;
+export const DOCUMENT_CENTER_MAX_FILE_MB = 50;
+export const DOCUMENT_CENTER_MAX_FILE_BYTES =
+  DOCUMENT_CENTER_MAX_FILE_MB * 1024 * 1024;
+
+export function getDocumentCenterMaxFileSizeError(): string {
+  return `הקובץ גדול מדי (מקסימום ${DOCUMENT_CENTER_MAX_FILE_MB}MB).`;
+}
 
 export const DOCUMENT_CENTER_ALLOWED_EXTENSIONS = [
   ".pdf",
@@ -178,10 +192,65 @@ function formatSupabaseError(error: {
     Boolean
   );
   const message = parts.join(" · ");
+  if (isMissingVisibilityColumnError(error)) {
+    return `${message} · ודאו ש-migration 016 הורץ ב-Supabase SQL Editor`;
+  }
+  if (
+    message.toLowerCase().includes("bucket not found") ||
+    message.includes("document-center")
+  ) {
+    return `${message} · ודאו ש-migrations 008/010 הורצו ב-Supabase`;
+  }
   if (error.code === "42P01" || message.includes("documents")) {
     return `${message} · ודאו ש-migration 008 הורץ ב-Supabase`;
   }
   return message || "שגיאה לא ידועה";
+}
+
+export function isMissingVisibilityColumnError(error: {
+  message?: string;
+  code?: string;
+  details?: string;
+  hint?: string;
+}): boolean {
+  const message = [error.message, error.details, error.hint, error.code]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return (
+    message.includes("visibility") &&
+    (message.includes("column") ||
+      message.includes("schema cache") ||
+      error.code === "PGRST204")
+  );
+}
+
+export function formatStorageUploadUserError(responseText: string): string {
+  const lower = responseText.toLowerCase();
+  if (lower.includes("bucket not found")) {
+    return "Bucket document-center לא נמצא. הריצו migration 010 ב-Supabase SQL Editor.";
+  }
+  if (
+    lower.includes("mime") ||
+    lower.includes("content type") ||
+    lower.includes("invalidrequest")
+  ) {
+    return "סוג הקובץ נדחה על ידי האחסון. ודאו PDF/JPG/PNG/DOCX/XLSX בלבד.";
+  }
+  if (lower.includes("row-level security") || lower.includes("policy")) {
+    return "אין הרשאת העלאה ל-Storage. הריצו migration 009 ב-Supabase SQL Editor.";
+  }
+  if (lower.includes("payload too large") || lower.includes("file_size_limit")) {
+    return getDocumentCenterMaxFileSizeError();
+  }
+  return responseText.trim() || "שגיאת העלאה לא ידועה";
+}
+
+export function generateDocumentFileId(now: Date = new Date()): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${now.getTime()}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
 export function resolveDocumentContentType(
@@ -252,6 +321,18 @@ export function buildDocumentInsertRow(input: CreateDocumentInput) {
     ai_metadata: null,
     visibility,
     updated_at: now,
+  };
+}
+
+/** גיבוי כשעמודת visibility עדיין לא קיימת (לפני migration 016) */
+export function buildDocumentInsertRowWithoutVisibilityColumn(
+  input: CreateDocumentInput
+) {
+  const row = buildDocumentInsertRow(input);
+  const { visibility, ...withoutVisibility } = row;
+  return {
+    ...withoutVisibility,
+    ai_metadata: { visibility },
   };
 }
 
@@ -456,7 +537,7 @@ export function validateDocumentCenterFile(
   }
   if (file.size <= 0) return "הקובץ ריק.";
   if (file.size > DOCUMENT_CENTER_MAX_FILE_BYTES) {
-    return "הקובץ גדול מדי (מקסימום 20MB).";
+    return getDocumentCenterMaxFileSizeError();
   }
   return null;
 }
@@ -486,7 +567,7 @@ export function buildDocumentStoragePath(
   fileName: string,
   contentType: string,
   now: Date = new Date(),
-  fileId: string = crypto.randomUUID()
+  fileId: string = generateDocumentFileId(now)
 ): string {
   const normalizedBuilding = buildingId.trim().toLowerCase();
   const datePart = now.toISOString().split("T")[0];
@@ -539,6 +620,12 @@ function uploadDocumentWithProgress(
       onProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)));
     };
     xhr.onload = () => {
+      traceDocumentCenter("storage.xhr.response", {
+        status: xhr.status,
+        statusText: xhr.statusText,
+        responseText: xhr.responseText?.slice(0, 500) ?? "",
+        uploadUrl,
+      });
       if (xhr.status >= 200 && xhr.status < 300) {
         onProgress?.(100);
         resolve();
@@ -551,7 +638,10 @@ function uploadDocumentWithProgress(
         )
       );
     };
-    xhr.onerror = () => reject(new Error("Upload failed · network error"));
+    xhr.onerror = () => {
+      traceDocumentCenter("storage.xhr.network_error", { uploadUrl });
+      reject(new Error("Upload failed · network error"));
+    };
     xhr.send(file);
   });
 }
@@ -560,13 +650,22 @@ async function uploadDocumentViaSupabaseClient(
   file: File,
   storagePath: string,
   contentType: string
-): Promise<void> {
+): Promise<{ path: string | null }> {
   const client = getPilotSupabaseClient();
   if (!client) {
     throw new Error("Supabase client unavailable");
   }
 
-  const { error } = await client.storage
+  traceDocumentCenter("storage.client.request", {
+    bucket: DOCUMENT_CENTER_BUCKET,
+    storagePath,
+    contentType,
+    fileName: file.name,
+    fileType: file.type,
+    fileSizeBytes: file.size,
+  });
+
+  const { data, error } = await client.storage
     .from(DOCUMENT_CENTER_BUCKET)
     .upload(storagePath, file, {
       contentType,
@@ -574,8 +673,22 @@ async function uploadDocumentViaSupabaseClient(
     });
 
   if (error) {
+    traceDocumentCenter("storage.client.error", {
+      message: error.message,
+      name: error.name,
+      storagePath,
+      contentType,
+    });
     throw new Error(formatSupabaseError(error));
   }
+
+  traceDocumentCenter("storage.client.success", {
+    path: data?.path ?? storagePath,
+    id: data?.id ?? null,
+    fullPath: data?.fullPath ?? null,
+  });
+
+  return { path: data?.path ?? storagePath };
 }
 
 export async function uploadDocumentCenterFile(
@@ -594,6 +707,12 @@ export async function uploadDocumentCenterFile(
 
   const validationError = validateDocumentCenterFile(file);
   if (validationError) {
+    traceDocumentCenter("validation.file.failed", {
+      fileName: file.name,
+      fileType: file.type,
+      fileSizeBytes: file.size,
+      error: validationError,
+    });
     console.error("[document-center] file validation:", validationError);
     return {
       ok: false,
@@ -602,9 +721,20 @@ export async function uploadDocumentCenterFile(
     };
   }
 
+  traceDocumentCenter("validation.file.ok", {
+    fileName: file.name,
+    fileType: file.type,
+    fileSizeBytes: file.size,
+    buildingId,
+  });
+
   const baseUrl = getSupabaseUrl()?.replace(/\/$/, "");
   const anonKey = getSupabaseAnonKey();
   if (!baseUrl || !anonKey) {
+    traceDocumentCenter("env.missing", {
+      hasUrl: Boolean(baseUrl),
+      hasAnonKey: Boolean(anonKey),
+    });
     return {
       ok: false,
       stage: "upload",
@@ -615,6 +745,11 @@ export async function uploadDocumentCenterFile(
 
   const resolvedContentType = resolveDocumentContentType(file.name, file.type);
   if (!resolvedContentType.ok) {
+    traceDocumentCenter("validation.mime.failed", {
+      fileName: file.name,
+      fileType: file.type,
+      error: resolvedContentType.error,
+    });
     return {
       ok: false,
       stage: "validation",
@@ -623,7 +758,17 @@ export async function uploadDocumentCenterFile(
   }
 
   const contentType = resolvedContentType.contentType;
+  traceDocumentCenter("validation.mime.resolved", {
+    fileName: file.name,
+    fileType: file.type,
+    resolvedContentType: contentType,
+  });
+
   if (contentType === "application/octet-stream") {
+    traceDocumentCenter("validation.mime.blocked_octet_stream", {
+      fileName: file.name,
+      fileType: file.type,
+    });
     return {
       ok: false,
       stage: "validation",
@@ -642,9 +787,18 @@ export async function uploadDocumentCenterFile(
     .join("/");
   const uploadUrl = `${baseUrl}/storage/v1/object/${DOCUMENT_CENTER_BUCKET}/${encodedPath}`;
 
+  traceDocumentCenter("storage.path", {
+    storagePath,
+    encodedPath,
+    uploadUrl,
+    contentType,
+    buildingId,
+  });
+
   onProgress?.(0);
 
   const failUpload = (responseText: string): UploadDocumentResult => {
+    const userHint = formatStorageUploadUserError(responseText);
     const details = formatStorageUploadFailureDetails({
       contentType,
       storagePath,
@@ -654,48 +808,62 @@ export async function uploadDocumentCenterFile(
       ok: false,
       stage: "upload",
       error: "העלאת הקובץ נכשלה",
-      details,
+      details: userHint ? `${userHint}\n${details}` : details,
     };
   };
 
+  onProgress?.(5);
+
   try {
-    await uploadDocumentWithProgress(
-      uploadUrl,
+    const clientResult = await uploadDocumentViaSupabaseClient(
       file,
-      {
-        Authorization: `Bearer ${anonKey}`,
-        apikey: anonKey,
-        "Content-Type": contentType,
-        "x-upsert": "false",
-      },
-      onProgress
+      storagePath,
+      contentType
     );
-  } catch (xhrError) {
-    const xhrResponseText =
-      xhrError instanceof Error ? xhrError.message : String(xhrError);
-    console.error("[document-center] xhr upload failed:", {
+    traceDocumentCenter("storage.upload.success", {
+      method: "supabase-client",
+      path: clientResult.path,
+    });
+    onProgress?.(100);
+  } catch (clientError) {
+    const clientResponseText =
+      clientError instanceof Error ? clientError.message : String(clientError);
+    console.error("[document-center] client upload failed:", {
       bucket: DOCUMENT_CENTER_BUCKET,
       contentType,
       storagePath,
-      responseText: xhrResponseText,
-      error: xhrError,
+      responseText: clientResponseText,
+      error: clientError,
     });
 
     try {
-      onProgress?.(50);
-      await uploadDocumentViaSupabaseClient(file, storagePath, contentType);
-      onProgress?.(100);
-    } catch (clientError) {
-      const clientResponseText =
-        clientError instanceof Error ? clientError.message : String(clientError);
-      console.error("[document-center] client upload failed:", {
+      onProgress?.(20);
+      await uploadDocumentWithProgress(
+        uploadUrl,
+        file,
+        {
+          Authorization: `Bearer ${anonKey}`,
+          apikey: anonKey,
+          "Content-Type": contentType,
+          "x-upsert": "false",
+        },
+        onProgress
+      );
+      traceDocumentCenter("storage.upload.success", {
+        method: "xhr-fallback",
+        storagePath,
+      });
+    } catch (xhrError) {
+      const xhrResponseText =
+        xhrError instanceof Error ? xhrError.message : String(xhrError);
+      console.error("[document-center] xhr upload failed:", {
         bucket: DOCUMENT_CENTER_BUCKET,
         contentType,
         storagePath,
-        responseText: clientResponseText,
-        error: clientError,
+        responseText: xhrResponseText,
+        error: xhrError,
       });
-      return failUpload(clientResponseText);
+      return failUpload(xhrResponseText || clientResponseText);
     }
   }
 
@@ -795,12 +963,17 @@ export async function createDocument(
 ): Promise<CreateDocumentResult> {
   const validationError = validateCreateDocumentInput(input);
   if (validationError) {
+    traceDocumentCenter("db.insert.validation.failed", {
+      error: validationError,
+      input,
+    });
     console.error("[document-center] insert validation:", validationError, input);
     return { document: null, error: validationError };
   }
 
   const client = getPilotSupabaseClient();
   if (!client) {
+    traceDocumentCenter("db.insert.client_unavailable", {});
     return {
       document: null,
       error: "Supabase לא מוגדר",
@@ -808,6 +981,7 @@ export async function createDocument(
   }
 
   const row = buildDocumentInsertRow(input);
+  traceDocumentCenter("db.insert.payload", { table: DOCUMENTS_TABLE, row });
   console.info("[document-center] insert payload:", {
     building_id: row.building_id,
     elevator_id: row.elevator_id,
@@ -819,14 +993,69 @@ export async function createDocument(
     tags: row.tags,
   });
 
-  const { data, error } = await client
+  let data: Record<string, unknown> | null = null;
+  let error: {
+    message?: string;
+    code?: string;
+    details?: string;
+    hint?: string;
+  } | null = null;
+
+  const firstAttempt = await client
     .from(DOCUMENTS_TABLE)
     .insert(row)
     .select("*")
     .single();
+  data = firstAttempt.data;
+  error = firstAttempt.error;
+
+  traceDocumentCenter("db.insert.response", {
+    attempt: "with_visibility_column",
+    success: !error && Boolean(data),
+    data: data ? { id: data.id, title: data.title } : null,
+    error: error
+      ? {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint,
+        }
+      : null,
+  });
+
+  if (error && isMissingVisibilityColumnError(error)) {
+    const legacyRow = buildDocumentInsertRowWithoutVisibilityColumn(input);
+    console.warn(
+      "[document-center] visibility column missing — retrying insert without column"
+    );
+    const retryAttempt = await client
+      .from(DOCUMENTS_TABLE)
+      .insert(legacyRow)
+      .select("*")
+      .single();
+    data = retryAttempt.data;
+    error = retryAttempt.error;
+    traceDocumentCenter("db.insert.response", {
+      attempt: "legacy_without_visibility_column",
+      success: !error && Boolean(data),
+      data: data ? { id: data.id, title: data.title } : null,
+      error: error
+        ? {
+            message: error.message,
+            code: error.code,
+            details: error.details,
+            hint: error.hint,
+          }
+        : null,
+    });
+  }
 
   if (error || !data) {
     const formatted = error ? formatSupabaseError(error) : "no row returned";
+    traceDocumentCenter("db.insert.failed", {
+      formatted,
+      table: DOCUMENTS_TABLE,
+    });
     console.error("[document-center] insert failed:", {
       error,
       table: DOCUMENTS_TABLE,
@@ -839,6 +1068,12 @@ export async function createDocument(
   }
 
   const document = mapDocumentRow(data);
+  traceDocumentCenter("db.insert.success", {
+    id: document.id,
+    title: document.title,
+    building_id: document.building_id,
+    storage_path: document.storage_path,
+  });
   console.info("[document-center] insert success:", {
     id: document.id,
     title: document.title,
