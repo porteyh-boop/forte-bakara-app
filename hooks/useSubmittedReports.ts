@@ -8,12 +8,12 @@ import { getSubmittedReports } from "@/lib/report-storage";
 import type { Fault } from "@/lib/types";
 
 export function useSubmittedReports(liveStartedAt: string | null = null) {
-  const { buildingId, ready: buildingReady } = useBuilding();
+  const { buildingId, isReady } = useBuilding();
   const [submitted, setSubmitted] = useState<Fault[]>([]);
   const [ready, setReady] = useState(false);
 
   const refresh = useCallback(async () => {
-    if (!buildingReady) return;
+    if (!isReady) return;
     try {
       const reports = await syncSubmittedReportsWithCloud(
         buildingId,
@@ -26,10 +26,10 @@ export function useSubmittedReports(liveStartedAt: string | null = null) {
     } finally {
       setReady(true);
     }
-  }, [buildingId, buildingReady, liveStartedAt]);
+  }, [buildingId, isReady, liveStartedAt]);
 
   useEffect(() => {
-    if (!buildingReady) {
+    if (!isReady) {
       setSubmitted([]);
       setReady(false);
       return;
@@ -45,19 +45,11 @@ export function useSubmittedReports(liveStartedAt: string | null = null) {
       }
     }
 
-    function onBuildingChanged() {
-      setReady(false);
-      setSubmitted([]);
-      void refresh();
-    }
-
     window.addEventListener("forte-reports-updated", onReportsUpdated);
-    window.addEventListener("forte-building-changed", onBuildingChanged);
     return () => {
       window.removeEventListener("forte-reports-updated", onReportsUpdated);
-      window.removeEventListener("forte-building-changed", onBuildingChanged);
     };
-  }, [buildingId, buildingReady, liveStartedAt, refresh]);
+  }, [buildingId, isReady, liveStartedAt, refresh]);
 
-  return { submitted, ready: buildingReady && ready, refresh };
+  return { submitted, ready: isReady && ready, refresh };
 }

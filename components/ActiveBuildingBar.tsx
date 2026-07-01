@@ -7,10 +7,10 @@ import { useBuilding } from "./BuildingProvider";
 
 export default function ActiveBuildingBar() {
   const pathname = usePathname();
-  const { ctx, ready } = useBuilding();
+  const { ctx, isReady } = useBuilding();
 
   if (
-    !ready ||
+    !isReady ||
     pathname === "/buildings" ||
     isClientAccessPath(pathname) ||
     pathname.startsWith("/master")

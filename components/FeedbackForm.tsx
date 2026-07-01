@@ -67,7 +67,7 @@ function RadioGroup<T extends string | number>({
 }
 
 export default function FeedbackForm({ onSubmitted }: FeedbackFormProps) {
-  const { buildingId, ctx, ready } = useBuilding();
+  const { buildingId, ctx, isReady } = useBuilding();
   const [senderName, setSenderName] = useState("");
   const [senderRole, setSenderRole] = useState<FeedbackSenderRole | "">("");
   const [rating, setRating] = useState<FeedbackRating | "">("");
@@ -113,7 +113,7 @@ export default function FeedbackForm({ onSubmitted }: FeedbackFormProps) {
     onSubmitted();
   }
 
-  if (!ready) {
+  if (!isReady) {
     return (
       <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center animate-pulse">
         <p className="text-sm text-gray-text">טוען...</p>
@@ -123,6 +123,11 @@ export default function FeedbackForm({ onSubmitted }: FeedbackFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+      <p className="text-xs text-gray-text bg-white rounded-xl border border-gray-200 px-4 py-3">
+        משוב עבור:{" "}
+        <span className="font-semibold text-navy">{ctx.building.name}</span>
+        <span className="text-navy/50"> ({ctx.building.buildingCode})</span>
+      </p>
       <div className="form-section animate-fade-up">
         <p className="text-xs font-semibold text-gold mb-3">פרטי השולח</p>
         <div className="flex flex-col gap-4">

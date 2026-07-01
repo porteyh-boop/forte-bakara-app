@@ -28,7 +28,7 @@ function loadAllSubmittedReportsLocal(
 }
 
 export function useAllBuildingsLiveList() {
-  const { ready: buildingReady, catalogReady } = useBuilding();
+  const { isReady } = useBuilding();
   const [reportsByBuilding, setReportsByBuilding] = useState<
     Record<string, Fault[]>
   >({});
@@ -38,7 +38,7 @@ export function useAllBuildingsLiveList() {
   const [ready, setReady] = useState(false);
 
   const refresh = useCallback(async () => {
-    if (!buildingReady || !catalogReady) return;
+    if (!isReady) return;
     try {
       const ids = getAllBuildingIds();
       const liveMap = resolveAllLiveStartedAt(ids);
@@ -53,10 +53,10 @@ export function useAllBuildingsLiveList() {
     } finally {
       setReady(true);
     }
-  }, [buildingReady, catalogReady]);
+  }, [isReady]);
 
   useEffect(() => {
-    if (!buildingReady || !catalogReady) {
+    if (!isReady) {
       setReportsByBuilding({});
       setLiveStartedAtByBuilding({});
       setReady(false);
@@ -70,45 +70,32 @@ export function useAllBuildingsLiveList() {
       void refresh();
     }
 
-    function onBuildingChanged() {
-      setReady(false);
-      void refresh();
-    }
-
     function onLiveStarted() {
       void refresh();
     }
 
     window.addEventListener("forte-reports-updated", onReportsUpdated);
-    window.addEventListener("forte-building-changed", onBuildingChanged);
     window.addEventListener(BUILDING_LIVE_STARTED_EVENT, onLiveStarted);
     return () => {
       window.removeEventListener("forte-reports-updated", onReportsUpdated);
-      window.removeEventListener("forte-building-changed", onBuildingChanged);
       window.removeEventListener(BUILDING_LIVE_STARTED_EVENT, onLiveStarted);
     };
-  }, [buildingReady, catalogReady, refresh]);
+  }, [isReady, refresh]);
 
   const buildings = useMemo(
     () =>
       getLiveBuildingListItems(
         reportsByBuilding,
-        buildingReady && catalogReady && ready,
+        isReady && ready,
         undefined,
         liveStartedAtByBuilding
       ),
-    [
-      reportsByBuilding,
-      liveStartedAtByBuilding,
-      buildingReady,
-      catalogReady,
-      ready,
-    ]
+    [reportsByBuilding, liveStartedAtByBuilding, isReady, ready]
   );
 
   return {
     buildings,
-    ready: buildingReady && catalogReady && ready,
+    ready: isReady && ready,
     refresh,
   };
 }

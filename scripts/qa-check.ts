@@ -66,6 +66,10 @@ import {
 } from "../lib/pilot-reset";
 import { SELECTED_BUILDING_KEY } from "../lib/building-storage";
 import {
+  isKnownBuildingId,
+  resolveActiveBuildingId,
+} from "../lib/active-building";
+import {
   buildFeedbackFromInput,
   clearAllFeedbackFromStorage,
   clearFeedbackByBuilding,
@@ -543,6 +547,65 @@ assert(
   "איפוס פיילוט: נתוני בסיס ב-buildings.ts לא נפגעים"
 );
 
+// בניין פעיל — sync אחרי קטלוג
+const activeCloudRow: CloudBuildingRow = {
+  id: "uuid-active",
+  building_id: "newb01",
+  name: "בניין חדש",
+  city: "תל אביב",
+  address: null,
+  management_company: null,
+  elevator_company: null,
+  contact_name: null,
+  contact_phone: null,
+  floors_count: null,
+  is_active: true,
+  created_at: "2026-01-01T00:00:00Z",
+};
+const activeCloudCatalog = buildMergedClientCatalogSnapshot(
+  [activeCloudRow],
+  [],
+  getDemoDatasets()
+);
+setCatalogSnapshot(null);
+assert(
+  resolveActiveBuildingId("newb01", null, getAllDemoBuildingIds()) === DEFAULT_BUILDING_ID,
+  "בניין פעיל: ללא קטלוג — בניין ענן בלבד נופל לברירת מחדל"
+);
+setCatalogSnapshot(activeCloudCatalog);
+assert(
+  resolveActiveBuildingId("newb01", activeCloudCatalog, getAllDemoBuildingIds()) ===
+    "newb01",
+  "בניין פעיל: אחרי קטלוג — persisted cloud id נשמר"
+);
+assert(
+  resolveActiveBuildingId("unknown99", activeCloudCatalog, getAllDemoBuildingIds()) !==
+    "unknown99",
+  "בניין פעיל: id לא מוכר — fallback"
+);
+assert(
+  isKnownBuildingId("newb01", activeCloudCatalog, getAllDemoBuildingIds()) &&
+    isKnownBuildingId("md25", activeCloudCatalog, getAllDemoBuildingIds()),
+  "בניין פעיל: isKnownBuildingId — demo + cloud"
+);
+assert(
+  resolveActiveBuildingId("newb01", activeCloudCatalog, getAllDemoBuildingIds()) ===
+    "newb01",
+  "בניין פעיל: refresh simulation — cloud id לא חוזר ל-md25"
+);
+setCatalogSnapshot(null);
+
+const buildingProviderSource = fs.readFileSync(
+  path.join(process.cwd(), "components/BuildingProvider.tsx"),
+  "utf8"
+);
+assert(
+  buildingProviderSource.includes("resolveActiveBuildingId") &&
+    buildingProviderSource.includes("readPersistedBuildingId") &&
+    buildingProviderSource.includes("isReady"),
+  "בניין פעיל: BuildingProvider — sync יחיד + isReady"
+);
+
 // משוב פיילוט
 const feedbackPagePath = path.join(process.cwd(), "app/feedback/page.tsx");
 assert(fs.existsSync(feedbackPagePath), "משוב: מסך /feedback נטען (קובץ קיים)");
@@ -608,6 +671,19 @@ assert(
     readFeedbackFromStorage(feedbackStorage, "md23").length === 1,
   "משוב: משוב של בניין אחד לא מופיע בבניין אחר"
 );
+setCatalogSnapshot(activeCloudCatalog);
+const cloudOnlyFeedback = buildFeedbackFromInput(
+  sampleFeedbackInput,
+  "newb01",
+  "בניין חדש"
+);
+saveFeedback(cloudOnlyFeedback, feedbackStorage);
+assert(
+  readFeedbackFromStorage(feedbackStorage, "newb01").length === 1 &&
+    cloudOnlyFeedback.buildingId === "newb01",
+  "משוב: שמירה לבניין ענן בלבד + buildingId מנורמל"
+);
+setCatalogSnapshot(null);
 
 const expertPageSource = fs.readFileSync(
   path.join(process.cwd(), "components/ExpertPageContent.tsx"),
@@ -695,9 +771,9 @@ const feedbackFormSource = fs.readFileSync(
   "utf8"
 );
 assert(
-  feedbackFormSource.includes("if (!ready)") &&
+  feedbackFormSource.includes("if (!isReady)") &&
     feedbackFormSource.includes("טוען"),
-  "משוב: אין Hydration errors — טופס ממתין ל-ready"
+  "משוב: אין Hydration errors — טופס ממתין ל-isReady"
 );
 
 const bottomNavSource = fs.readFileSync(
@@ -1652,8 +1728,9 @@ const feedbackStorageSource = fs.readFileSync(
 );
 assert(
   feedbackStorageSource.includes("saveFeedback") &&
-    feedbackStorageSource.includes("savePilotFeedback"),
-  "ענן פיילוט: משוב נשמר מקומית + נשלח לענן"
+    feedbackStorageSource.includes("savePilotFeedback") &&
+    !feedbackStorageSource.includes("isValidBuildingId"),
+  "ענן פיילוט: משוב נשמר מקומית + נשלח לענן (ללא isValidBuildingId gate)"
 );
 
 const pilotCloudSource = fs.readFileSync(

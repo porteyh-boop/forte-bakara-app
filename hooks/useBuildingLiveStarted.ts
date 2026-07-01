@@ -13,12 +13,12 @@ import { resolveLiveStartedAtForBuilding } from "@/lib/report-cloud-sync";
 export const BUILDING_LIVE_STARTED_EVENT = "forte-building-live-started";
 
 export function useBuildingLiveStarted() {
-  const { buildingId, ready: buildingReady, catalogReady } = useBuilding();
+  const { buildingId, isReady } = useBuilding();
   const [liveStartedAt, setLiveStartedAt] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
 
   const refresh = useCallback(async () => {
-    if (!buildingReady) return;
+    if (!isReady) return;
 
     const fromCatalog = resolveLiveStartedAt(buildingId);
     if (fromCatalog) {
@@ -35,10 +35,10 @@ export function useBuildingLiveStarted() {
     const fromCloud = await resolveLiveStartedAtForBuilding(buildingId);
     setLiveStartedAt(fromCloud);
     setReady(true);
-  }, [buildingId, buildingReady]);
+  }, [buildingId, isReady]);
 
   useEffect(() => {
-    if (!buildingReady) {
+    if (!isReady) {
       setLiveStartedAt(null);
       setReady(false);
       return;
@@ -73,7 +73,7 @@ export function useBuildingLiveStarted() {
         onCatalogUpdated
       );
     };
-  }, [buildingId, buildingReady, catalogReady, refresh]);
+  }, [buildingId, isReady, refresh]);
 
-  return { liveStartedAt, ready: buildingReady && ready, refresh };
+  return { liveStartedAt, ready: isReady && ready, refresh };
 }

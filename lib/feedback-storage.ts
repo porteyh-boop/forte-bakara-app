@@ -1,4 +1,5 @@
-import { getAllBuildingIds, isValidBuildingId } from "./buildings";
+import { getAllBuildingIds } from "./buildings";
+import { normalizeBuildingId } from "./buildings-cloud";
 import { savePilotFeedback } from "./pilot-cloud";
 import type { FeedbackSubmissionInput, PilotFeedback } from "./types";
 
@@ -22,8 +23,12 @@ function isBrowser(): boolean {
   return typeof window !== "undefined" && typeof localStorage !== "undefined";
 }
 
+function normalizeFeedbackBuildingId(buildingId: string): string {
+  return normalizeBuildingId(buildingId);
+}
+
 export function getFeedbackStorageKey(buildingId: string): string {
-  return `${FEEDBACK_STORAGE_PREFIX}-${buildingId}`;
+  return `${FEEDBACK_STORAGE_PREFIX}-${normalizeFeedbackBuildingId(buildingId)}`;
 }
 
 export function generateFeedbackId(): string {
@@ -37,7 +42,7 @@ export function buildFeedbackFromInput(
 ): PilotFeedback {
   return {
     id: generateFeedbackId(),
-    buildingId,
+    buildingId: normalizeFeedbackBuildingId(buildingId),
     buildingName,
     senderName: input.senderName.trim(),
     senderRole: input.senderRole,
@@ -64,7 +69,7 @@ export function readFeedbackFromStorage(
   storage: FeedbackStorageLike,
   buildingId: string
 ): PilotFeedback[] {
-  if (!isValidBuildingId(buildingId)) return [];
+  if (!buildingId.trim()) return [];
   return parseFeedbackList(storage.getItem(getFeedbackStorageKey(buildingId)));
 }
 
@@ -73,7 +78,7 @@ export function writeFeedbackToStorage(
   buildingId: string,
   items: PilotFeedback[]
 ): void {
-  if (!isValidBuildingId(buildingId)) return;
+  if (!buildingId.trim()) return;
   storage.setItem(getFeedbackStorageKey(buildingId), JSON.stringify(items));
 }
 
@@ -86,7 +91,7 @@ export function saveFeedback(
   feedback: PilotFeedback,
   storage: FeedbackStorageLike = isBrowser() ? localStorage : (null as never)
 ): void {
-  if (!storage || !isValidBuildingId(feedback.buildingId)) return;
+  if (!storage || !feedback.buildingId.trim()) return;
   const existing = readFeedbackFromStorage(storage, feedback.buildingId);
   writeFeedbackToStorage(storage, feedback.buildingId, [...existing, feedback]);
 }
@@ -130,7 +135,7 @@ export function clearFeedbackByBuilding(
   buildingId: string,
   storage: FeedbackStorageLike = isBrowser() ? localStorage : (null as never)
 ): boolean {
-  if (!storage || !isValidBuildingId(buildingId)) return false;
+  if (!storage || !buildingId.trim()) return false;
   storage.removeItem(getFeedbackStorageKey(buildingId));
   return true;
 }
@@ -163,11 +168,11 @@ export function saveFeedbackAndNotify(
   buildingId: string,
   buildingName: string
 ): PilotFeedback | null {
-  if (!isBrowser() || !isValidBuildingId(buildingId)) return null;
+  if (!isBrowser() || !buildingId.trim()) return null;
   const feedback = buildFeedbackFromInput(input, buildingId, buildingName);
   saveFeedback(feedback, localStorage);
-  notifyFeedbackUpdated(buildingId);
-  void savePilotFeedback(input, buildingId, buildingName);
+  notifyFeedbackUpdated(feedback.buildingId);
+  void savePilotFeedback(input, feedback.buildingId, buildingName);
   return feedback;
 }
 

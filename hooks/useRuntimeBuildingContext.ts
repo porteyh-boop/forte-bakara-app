@@ -7,12 +7,12 @@ import { useBuildingLiveStarted } from "./useBuildingLiveStarted";
 import { useSubmittedReports } from "./useSubmittedReports";
 
 export function useRuntimeBuildingContext() {
-  const { buildingId, ctx, ready: buildingReady } = useBuilding();
+  const { buildingId, ctx, isReady } = useBuilding();
   const { liveStartedAt, ready: liveReady } = useBuildingLiveStarted();
   const { submitted, ready: reportsReady, refresh } = useSubmittedReports(
     liveStartedAt
   );
-  const storageReady = buildingReady && liveReady && reportsReady;
+  const storageReady = isReady && liveReady && reportsReady;
 
   const runtimeCtx = useMemo(
     () =>

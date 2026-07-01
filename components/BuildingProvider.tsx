@@ -9,71 +9,115 @@ import {
   useState,
 } from "react";
 import {
+  isKnownBuildingId,
+  resolveActiveBuildingId,
+} from "@/lib/active-building";
+import {
+  readPersistedBuildingId,
+  writePersistedBuildingId,
+} from "@/lib/building-persistence";
+import {
   BUILDINGS_CATALOG_UPDATED_EVENT,
+  getCatalogSnapshot,
 } from "@/lib/buildings-catalog";
+import { normalizeBuildingId } from "@/lib/buildings-cloud";
 import {
   DEFAULT_BUILDING_ID,
   ensureBuildingCatalogLoaded,
+  getAllDemoBuildingIds,
   getBuildingDataset,
   getDemoDatasets,
 } from "@/lib/buildings";
-import {
-  getStoredBuildingId,
-  setStoredBuildingId,
-} from "@/lib/building-storage";
 import type { BuildingDataContext } from "@/lib/types";
 
 interface BuildingContextValue {
   buildingId: string;
   ctx: BuildingDataContext;
   selectBuilding: (id: string) => void;
-  ready: boolean;
+  /** True after catalog load + single active-building sync */
+  isReady: boolean;
+  /** @deprecated Use isReady */
   catalogReady: boolean;
+  /** @deprecated Use isReady */
+  ready: boolean;
 }
 
 const BuildingContext = createContext<BuildingContextValue | null>(null);
 
+function syncActiveBuildingFromPersistence(): string {
+  const catalog = getCatalogSnapshot();
+  const demoIds = getAllDemoBuildingIds();
+  const resolved = resolveActiveBuildingId(
+    readPersistedBuildingId(),
+    catalog,
+    demoIds
+  );
+  writePersistedBuildingId(resolved);
+  return resolved;
+}
+
 export function BuildingProvider({ children }: { children: React.ReactNode }) {
   const [buildingId, setBuildingId] = useState(DEFAULT_BUILDING_ID);
-  const [ready, setReady] = useState(false);
-  const [catalogReady, setCatalogReady] = useState(false);
+  const [isReady, setIsReady] = useState(false);
   const [catalogVersion, setCatalogVersion] = useState(0);
 
-  const loadCatalog = useCallback(async () => {
-    await ensureBuildingCatalogLoaded(getDemoDatasets());
-    setCatalogReady(true);
+  const applySyncedBuilding = useCallback((resolvedId: string) => {
+    setBuildingId(resolvedId);
     setCatalogVersion((v) => v + 1);
   }, []);
 
   useEffect(() => {
-    setBuildingId(getStoredBuildingId());
-    setReady(true);
-    void loadCatalog();
+    let cancelled = false;
 
-    function onBuildingChanged(e: Event) {
-      const detail = (e as CustomEvent<{ buildingId: string }>).detail;
-      if (detail?.buildingId) setBuildingId(detail.buildingId);
-    }
+    void (async () => {
+      await ensureBuildingCatalogLoaded(getDemoDatasets());
+      if (cancelled) return;
+      const resolved = syncActiveBuildingFromPersistence();
+      applySyncedBuilding(resolved);
+      setIsReady(true);
+    })();
 
     function onCatalogUpdated() {
-      void loadCatalog();
+      void (async () => {
+        await ensureBuildingCatalogLoaded(getDemoDatasets());
+        if (cancelled) return;
+        const resolved = syncActiveBuildingFromPersistence();
+        applySyncedBuilding(resolved);
+        setIsReady(true);
+      })();
     }
 
-    window.addEventListener("forte-building-changed", onBuildingChanged);
+    function onBuildingChanged() {
+      if (cancelled) return;
+      const resolved = syncActiveBuildingFromPersistence();
+      applySyncedBuilding(resolved);
+    }
+
     window.addEventListener(BUILDINGS_CATALOG_UPDATED_EVENT, onCatalogUpdated);
+    window.addEventListener("forte-building-changed", onBuildingChanged);
     return () => {
-      window.removeEventListener("forte-building-changed", onBuildingChanged);
+      cancelled = true;
       window.removeEventListener(
         BUILDINGS_CATALOG_UPDATED_EVENT,
         onCatalogUpdated
       );
+      window.removeEventListener("forte-building-changed", onBuildingChanged);
     };
-  }, [loadCatalog]);
+  }, [applySyncedBuilding]);
 
-  const selectBuilding = useCallback((id: string) => {
-    setStoredBuildingId(id);
-    setBuildingId(id);
-  }, []);
+  const selectBuilding = useCallback(
+    (id: string) => {
+      const normalized = normalizeBuildingId(id);
+      const catalog = getCatalogSnapshot();
+      if (!isKnownBuildingId(normalized, catalog, getAllDemoBuildingIds())) {
+        return;
+      }
+      writePersistedBuildingId(normalized);
+      setBuildingId(normalized);
+      setCatalogVersion((v) => v + 1);
+    },
+    []
+  );
 
   const ctx = useMemo(
     () => getBuildingDataset(buildingId),
@@ -81,8 +125,15 @@ export function BuildingProvider({ children }: { children: React.ReactNode }) {
   );
 
   const value = useMemo(
-    () => ({ buildingId, ctx, selectBuilding, ready, catalogReady }),
-    [buildingId, ctx, selectBuilding, ready, catalogReady]
+    () => ({
+      buildingId,
+      ctx,
+      selectBuilding,
+      isReady,
+      catalogReady: isReady,
+      ready: isReady,
+    }),
+    [buildingId, ctx, selectBuilding, isReady]
   );
 
   return (
