@@ -20,6 +20,10 @@ import type {
 
 interface FeedbackFormProps {
   onSubmitted: () => void;
+  /** When set (portal), save to this building instead of active building context. */
+  buildingId?: string;
+  buildingName?: string;
+  buildingCode?: string;
 }
 
 function RadioGroup<T extends string | number>({
@@ -66,8 +70,27 @@ function RadioGroup<T extends string | number>({
   );
 }
 
-export default function FeedbackForm({ onSubmitted }: FeedbackFormProps) {
-  const { buildingId, ctx, isReady } = useBuilding();
+export default function FeedbackForm({
+  onSubmitted,
+  buildingId: buildingIdProp,
+  buildingName: buildingNameProp,
+  buildingCode: buildingCodeProp,
+}: FeedbackFormProps) {
+  const buildingFromContext = useBuilding();
+  const usePortalBuilding = Boolean(
+    buildingIdProp?.trim() && buildingNameProp?.trim()
+  );
+
+  const buildingId = usePortalBuilding
+    ? buildingIdProp!.trim()
+    : buildingFromContext.buildingId;
+  const buildingName = usePortalBuilding
+    ? buildingNameProp!.trim()
+    : buildingFromContext.ctx.building.name;
+  const buildingCode = usePortalBuilding
+    ? buildingCodeProp?.trim() || ""
+    : buildingFromContext.ctx.building.buildingCode;
+  const isReady = usePortalBuilding ? true : buildingFromContext.isReady;
   const [senderName, setSenderName] = useState("");
   const [senderRole, setSenderRole] = useState<FeedbackSenderRole | "">("");
   const [rating, setRating] = useState<FeedbackRating | "">("");
@@ -102,7 +125,7 @@ export default function FeedbackForm({ onSubmitted }: FeedbackFormProps) {
     }
 
     setSubmitting(true);
-    const saved = saveFeedbackAndNotify(input, buildingId, ctx.building.name);
+    const saved = saveFeedbackAndNotify(input, buildingId, buildingName);
     setSubmitting(false);
 
     if (!saved) {
@@ -125,8 +148,10 @@ export default function FeedbackForm({ onSubmitted }: FeedbackFormProps) {
     <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
       <p className="text-xs text-gray-text bg-white rounded-xl border border-gray-200 px-4 py-3">
         משוב עבור:{" "}
-        <span className="font-semibold text-navy">{ctx.building.name}</span>
-        <span className="text-navy/50"> ({ctx.building.buildingCode})</span>
+        <span className="font-semibold text-navy">{buildingName}</span>
+        {buildingCode ? (
+          <span className="text-navy/50"> ({buildingCode})</span>
+        ) : null}
       </p>
       <div className="form-section animate-fade-up">
         <p className="text-xs font-semibold text-gold mb-3">פרטי השולח</p>

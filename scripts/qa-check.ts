@@ -3295,14 +3295,15 @@ assert(
 );
 
 assert(
-  CLIENT_PERMISSION_KEYS.length === 8 &&
+  CLIENT_PERMISSION_KEYS.length === 9 &&
     CLIENT_PERMISSION_KEYS.every((key) => DEFAULT_CLIENT_PERMISSIONS[key] === false),
   "הרשאות לקוח: ברירת מחדל false לכל ההרשאות"
 );
 assert(
   CLIENT_PERMISSION_LABELS.can_view_building_dashboard === "גישה לפורטל לקוח" &&
     CLIENT_PERMISSION_LABELS.can_report_faults === "דיווח תקלות" &&
-    CLIENT_PERMISSION_LABELS.can_receive_notifications === "קבלת התראות",
+    CLIENT_PERMISSION_LABELS.can_receive_notifications === "קבלת התראות" &&
+    CLIENT_PERMISSION_LABELS.can_submit_feedback === "שליחת משוב",
   "הרשאות לקוח: תוויות עברית"
 );
 assert(
@@ -3327,6 +3328,7 @@ const samplePermissionFlags = extractClientPermissionFlags({
   can_view_documents: false,
   can_upload_images: false,
   can_receive_notifications: true,
+  can_submit_feedback: false,
   created_at: "2026-06-01T10:00:00.000Z",
   updated_at: "2026-06-01T10:00:00.000Z",
 });
@@ -3335,6 +3337,48 @@ assert(
     !samplePermissionFlags.can_view_documents &&
     samplePermissionFlags.can_view_availability,
   "הרשאות לקוח: extractClientPermissionFlags"
+);
+
+const clientFeedbackPermissionMigration = path.join(
+  process.cwd(),
+  "supabase/migrations/018_client_feedback_permission.sql"
+);
+assert(
+  fs.existsSync(clientFeedbackPermissionMigration),
+  "משוב פורטל: migration 018 קיים"
+);
+const clientFeedbackPermissionSql = fs.readFileSync(
+  clientFeedbackPermissionMigration,
+  "utf8"
+);
+assert(
+  clientFeedbackPermissionSql.includes("can_submit_feedback") &&
+    clientFeedbackPermissionSql.includes("client_permissions"),
+  "משוב פורטל: migration מוסיף can_submit_feedback"
+);
+assert(
+  CLIENT_PERMISSION_KEYS.includes("can_submit_feedback"),
+  "משוב פורטל: הרשאה can_submit_feedback מוגדרת"
+);
+
+const clientAccessPageForFeedback = fs.readFileSync(clientAccessPage, "utf8");
+assert(
+  clientAccessPageForFeedback.includes("can_submit_feedback") &&
+    clientAccessPageForFeedback.includes("FeedbackForm") &&
+    clientAccessPageForFeedback.includes("buildingResolve.loadedBuildingId") &&
+    !clientAccessPageForFeedback.includes('href="/feedback"'),
+  "משוב פורטל: UI מציג משוב רק עם הרשאה ולא מקשר ל-/feedback"
+);
+
+const feedbackFormSourceForPortal = fs.readFileSync(
+  path.join(process.cwd(), "components/FeedbackForm.tsx"),
+  "utf8"
+);
+assert(
+  feedbackFormSourceForPortal.includes("buildingIdProp") &&
+    feedbackFormSourceForPortal.includes("usePortalBuilding") &&
+    feedbackFormSourceForPortal.includes("saveFeedbackAndNotify(input, buildingId, buildingName)"),
+  "משוב פורטל: FeedbackForm תומך ב-building מה-token ולא תלוי ב-active building"
 );
 
 const masterClientAccessUiSource = fs.readFileSync(masterClientAccessUi, "utf8");

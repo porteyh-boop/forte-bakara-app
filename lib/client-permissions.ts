@@ -11,7 +11,8 @@ export type ClientPermissionKey =
   | "can_view_availability"
   | "can_view_documents"
   | "can_upload_images"
-  | "can_receive_notifications";
+  | "can_receive_notifications"
+  | "can_submit_feedback";
 
 export type ClientPermissionFlags = Record<ClientPermissionKey, boolean>;
 
@@ -43,6 +44,7 @@ export const CLIENT_PERMISSION_KEYS: ClientPermissionKey[] = [
   "can_view_documents",
   "can_upload_images",
   "can_receive_notifications",
+  "can_submit_feedback",
 ];
 
 export const CLIENT_PERMISSION_LABELS: Record<ClientPermissionKey, string> = {
@@ -54,6 +56,7 @@ export const CLIENT_PERMISSION_LABELS: Record<ClientPermissionKey, string> = {
   can_view_documents: "צפייה במסמכים",
   can_upload_images: "העלאת תמונות",
   can_receive_notifications: "קבלת התראות",
+  can_submit_feedback: "שליחת משוב",
 };
 
 export const DEFAULT_CLIENT_PERMISSIONS: ClientPermissionFlags = {
@@ -65,6 +68,7 @@ export const DEFAULT_CLIENT_PERMISSIONS: ClientPermissionFlags = {
   can_view_documents: false,
   can_upload_images: false,
   can_receive_notifications: false,
+  can_submit_feedback: false,
 };
 
 export const CLIENT_ACTIVITY_ACTION_LABELS: Record<string, string> = {
@@ -75,6 +79,7 @@ export const CLIENT_ACTIVITY_ACTION_LABELS: Record<string, string> = {
   VIEW_FAULTS: "צפייה בתקלות",
   VIEW_DOCUMENTS: "צפייה במסמכים",
   VIEW_AVAILABILITY: "צפייה בזמינות",
+  SUBMIT_FEEDBACK: "שליחת משוב",
   LOGOUT: "יציאה מהפורטל",
 };
 
@@ -90,6 +95,7 @@ function mapPermissionRow(row: Record<string, unknown>): ClientPermissionRecord 
     can_view_documents: Boolean(row.can_view_documents),
     can_upload_images: Boolean(row.can_upload_images),
     can_receive_notifications: Boolean(row.can_receive_notifications),
+    can_submit_feedback: Boolean(row.can_submit_feedback),
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
   };
@@ -117,6 +123,7 @@ export function extractClientPermissionFlags(
     can_view_documents: record.can_view_documents,
     can_upload_images: record.can_upload_images,
     can_receive_notifications: record.can_receive_notifications,
+    can_submit_feedback: record.can_submit_feedback,
   };
 }
 

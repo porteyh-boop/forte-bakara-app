@@ -5,6 +5,7 @@ import ClientAccessReportForm from "@/components/ClientAccessReportForm";
 import ClientPortalInstallPrompt from "@/components/ClientPortalInstallPrompt";
 import ElevatorStatusRow from "@/components/ElevatorStatusRow";
 import FaultCard from "@/components/FaultCard";
+import FeedbackForm from "@/components/FeedbackForm";
 import HistoryList from "@/components/HistoryList";
 import InfoCard from "@/components/InfoCard";
 import PageHeader from "@/components/PageHeader";
@@ -131,6 +132,8 @@ export default function ClientAccessPageContent({
   const [scopeLabel, setScopeLabel] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const [showReportForm, setShowReportForm] = useState(false);
+  const [showFeedbackForm, setShowFeedbackForm] = useState(false);
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
   const [documents, setDocuments] = useState<
     Array<{
       id: string;
@@ -396,6 +399,8 @@ export default function ClientAccessPageContent({
     setGateMessage(LOGOUT_MESSAGE);
     setSession(null);
     setShowReportForm(false);
+    setShowFeedbackForm(false);
+    setFeedbackSubmitted(false);
   }
 
   function handleOpenReportForm() {
@@ -417,6 +422,24 @@ export default function ClientAccessPageContent({
     );
     setShowReportForm(false);
     setRefreshKey((value) => value + 1);
+  }
+
+  function handleOpenFeedbackForm() {
+    setFeedbackSubmitted(false);
+    setShowFeedbackForm(true);
+  }
+
+  function handleFeedbackSubmitted() {
+    if (!session) return;
+    void logClientPortalActivity(
+      session.user.id,
+      CLIENT_PORTAL_ACTIVITY.SUBMIT_FEEDBACK,
+      JSON.stringify({
+        building_id: buildingResolve?.loadedBuildingId ?? null,
+      })
+    );
+    setShowFeedbackForm(false);
+    setFeedbackSubmitted(true);
   }
 
   if (loading) {
@@ -533,6 +556,53 @@ export default function ClientAccessPageContent({
                   ביטול
                 </button>
               </section>
+            )}
+
+            {permissions.can_submit_feedback &&
+              !showFeedbackForm &&
+              !feedbackSubmitted && (
+                <button
+                  type="button"
+                  onClick={handleOpenFeedbackForm}
+                  className="order-1 md:order-2 w-full rounded-2xl border-2 border-gold/40 bg-gold/5 text-navy font-bold py-4 min-h-[3.75rem] text-lg shadow-sm md:text-base md:font-semibold md:py-3 md:min-h-0 md:max-w-xs"
+                >
+                  שלח משוב
+                </button>
+              )}
+
+            {permissions.can_submit_feedback && showFeedbackForm && (
+              <section className="order-1 md:order-2 space-y-3 md:max-w-2xl">
+                <SectionTitle title="שליחת משוב" />
+                <FeedbackForm
+                  buildingId={buildingResolve.loadedBuildingId}
+                  buildingName={buildingResolve.buildingName}
+                  buildingCode={buildingResolve.ctx.building.buildingCode}
+                  onSubmitted={handleFeedbackSubmitted}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowFeedbackForm(false)}
+                  className="w-full rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-navy"
+                >
+                  ביטול
+                </button>
+              </section>
+            )}
+
+            {permissions.can_submit_feedback && feedbackSubmitted && (
+              <div className="order-1 md:order-2 bg-white rounded-2xl border border-gray-200 p-5 space-y-3 text-center md:max-w-2xl">
+                <h3 className="text-lg font-bold text-navy">תודה על המשוב</h3>
+                <p className="text-sm text-gray-text">
+                  המשוב שלך נקלט במערכת ויסייע לנו לשפר את השירות.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleOpenFeedbackForm}
+                  className="btn-primary w-full"
+                >
+                  שליחת משוב נוסף
+                </button>
+              </div>
             )}
 
             <div
