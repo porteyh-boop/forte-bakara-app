@@ -7,6 +7,7 @@ import MasterAnalyticsSection from "@/components/MasterAnalyticsSection";
 import MasterBuildingsSection from "@/components/MasterBuildingsSection";
 import MasterClientAccessSection from "@/components/MasterClientAccessSection";
 import MasterDocumentCenterSection from "@/components/MasterDocumentCenterSection";
+import MasterLettersSection from "@/components/MasterLettersSection";
 import PageHeader from "@/components/PageHeader";
 import {
   closePilotFault,
@@ -37,7 +38,7 @@ import {
 } from "@/lib/building-live";
 import { BUILDING_LIVE_STARTED_EVENT } from "@/hooks/useBuildingLiveStarted";
 import { buildMasterBuildingDossierPath } from "@/lib/master-building-routes";
-type Tab = "faults" | "feedback" | "buildings" | "clientAccess" | "documentCenter";
+type Tab = "faults" | "feedback" | "buildings" | "clientAccess" | "documentCenter" | "letters";
 
 const MASTER_TABS: readonly Tab[] = [
   "faults",
@@ -45,6 +46,7 @@ const MASTER_TABS: readonly Tab[] = [
   "buildings",
   "clientAccess",
   "documentCenter",
+  "letters",
 ];
 
 function isMasterTab(value: string | null): value is Tab {
@@ -140,6 +142,13 @@ export default function MasterPageContent() {
       setTab(requestedTab);
     }
   }, []);
+
+  useEffect(() => {
+    if (!authed) return;
+    document
+      .getElementById(`master-tab-${tab}`)
+      ?.scrollIntoView({ behavior: "smooth", inline: "nearest", block: "nearest" });
+  }, [authed, tab]);
 
   const refresh = useCallback(async () => {
     if (!cloudReady) return;
@@ -410,11 +419,13 @@ export default function MasterPageContent() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-5">
+        <div className="-mx-5 px-5 md:mx-0 md:px-0">
+          <div className="flex gap-2 overflow-x-auto pb-1">
           <button
+            id="master-tab-faults"
             type="button"
             onClick={() => setTab("faults")}
-            className={`rounded-xl py-2.5 text-sm font-semibold transition-colors ${
+            className={`shrink-0 whitespace-nowrap rounded-xl py-2.5 px-3 text-sm font-semibold transition-colors ${
               tab === "faults"
                 ? "bg-navy text-white"
                 : "bg-white border border-gray-200 text-navy"
@@ -423,9 +434,10 @@ export default function MasterPageContent() {
             דיווחים ({filteredFaults.length})
           </button>
           <button
+            id="master-tab-feedback"
             type="button"
             onClick={() => setTab("feedback")}
-            className={`rounded-xl py-2.5 text-sm font-semibold transition-colors ${
+            className={`shrink-0 whitespace-nowrap rounded-xl py-2.5 px-3 text-sm font-semibold transition-colors ${
               tab === "feedback"
                 ? "bg-navy text-white"
                 : "bg-white border border-gray-200 text-navy"
@@ -434,9 +446,10 @@ export default function MasterPageContent() {
             {feedbackTabLabel}
           </button>
           <button
+            id="master-tab-buildings"
             type="button"
             onClick={() => setTab("buildings")}
-            className={`rounded-xl py-2.5 text-sm font-semibold transition-colors ${
+            className={`shrink-0 whitespace-nowrap rounded-xl py-2.5 px-3 text-sm font-semibold transition-colors ${
               tab === "buildings"
                 ? "bg-navy text-white"
                 : "bg-white border border-gray-200 text-navy"
@@ -445,9 +458,10 @@ export default function MasterPageContent() {
             ניהול בניינים
           </button>
           <button
+            id="master-tab-clientAccess"
             type="button"
             onClick={() => setTab("clientAccess")}
-            className={`rounded-xl py-2.5 text-sm font-semibold transition-colors ${
+            className={`shrink-0 whitespace-nowrap rounded-xl py-2.5 px-3 text-sm font-semibold transition-colors ${
               tab === "clientAccess"
                 ? "bg-navy text-white"
                 : "bg-white border border-gray-200 text-navy"
@@ -456,9 +470,10 @@ export default function MasterPageContent() {
             גישות לקוח
           </button>
           <button
+            id="master-tab-documentCenter"
             type="button"
             onClick={() => setTab("documentCenter")}
-            className={`rounded-xl py-2.5 text-sm font-semibold transition-colors ${
+            className={`shrink-0 whitespace-nowrap rounded-xl py-2.5 px-3 text-sm font-semibold transition-colors ${
               tab === "documentCenter"
                 ? "bg-navy text-white"
                 : "bg-white border border-gray-200 text-navy"
@@ -466,6 +481,19 @@ export default function MasterPageContent() {
           >
             מאגר מסמכים
           </button>
+          <button
+            id="master-tab-letters"
+            type="button"
+            onClick={() => setTab("letters")}
+            className={`shrink-0 whitespace-nowrap rounded-xl py-2.5 px-3 text-sm font-semibold transition-colors ${
+              tab === "letters"
+                ? "bg-navy text-white"
+                : "bg-white border border-gray-200 text-navy"
+            }`}
+          >
+            מכתבים
+          </button>
+          </div>
         </div>
 
         {tab === "faults" && (
@@ -588,6 +616,8 @@ export default function MasterPageContent() {
         )}
 
         {tab === "documentCenter" && <MasterDocumentCenterSection />}
+
+        {tab === "letters" && <MasterLettersSection />}
       </main>
     </div>
   );

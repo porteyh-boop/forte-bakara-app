@@ -28,6 +28,7 @@ export const DOCUMENT_CENTER_ALLOWED_EXTENSIONS = [
   ".jpg",
   ".jpeg",
   ".png",
+  ".doc",
   ".docx",
   ".xlsx",
 ] as const;
@@ -36,6 +37,7 @@ export const DOCUMENT_CENTER_ALLOWED_MIME_TYPES = [
   "application/pdf",
   "image/jpeg",
   "image/png",
+  "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 ] as const;
@@ -75,6 +77,7 @@ export const DOCUMENT_PREDEFINED_TAGS = [
   "תמונות",
   "חוות דעת",
   "פיקוח עליון",
+  "מכתב",
   "אחר",
 ] as const;
 
@@ -163,6 +166,7 @@ const DOCUMENT_EXTENSION_MIME_MAP: Record<string, string> = {
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
   ".png": "image/png",
+  ".doc": "application/msword",
   ".docx":
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   ".xlsx":
@@ -173,6 +177,7 @@ const DOCUMENT_MIME_TO_EXTENSION: Record<string, string> = {
   "application/pdf": ".pdf",
   "image/jpeg": ".jpg",
   "image/png": ".png",
+  "application/msword": ".doc",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
     ".docx",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
@@ -533,7 +538,7 @@ export function validateDocumentCenterFile(
   );
 
   if (!mimeAllowed && !extensionAllowed) {
-    return "סוג קובץ לא נתמך. ניתן להעלות PDF, JPG, PNG, DOCX או XLSX.";
+    return "סוג קובץ לא נתמך. ניתן להעלות PDF, JPG, PNG, DOC, DOCX או XLSX.";
   }
   if (file.size <= 0) return "הקובץ ריק.";
   if (file.size > DOCUMENT_CENTER_MAX_FILE_BYTES) {

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import PageHeader from "@/components/PageHeader";
 import {
@@ -246,13 +245,6 @@ export default function MasterElevatorDossierPageContent({
       <PageHeader title="תיק מעלית" subtitle={buildingName} master />
 
       <main className="mx-auto w-full max-w-lg px-5 pb-8 md:max-w-7xl md:px-8 -mt-2 space-y-4 md:space-y-6">
-        <Link
-          href="/master"
-          className="inline-flex items-center gap-1.5 text-sm font-semibold text-navy hover:underline cursor-pointer"
-        >
-          ← חזרה ל-Master
-        </Link>
-
         {loading ? (
           <p className="text-sm text-gray-text">טוען תיק מעלית...</p>
         ) : (

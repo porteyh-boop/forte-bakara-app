@@ -218,6 +218,22 @@ import {
   type DocumentRecord,
 } from "../lib/document-center";
 import {
+  buildMasterLetterBody,
+  buildMasterLetterPreview,
+  MASTER_LETTER_TAG,
+  MASTER_LETTER_TEMPLATE_BUILDING_FOLLOW_UP,
+  MASTER_LETTER_TEMPLATE_INSPECTOR_FINDINGS,
+  MASTER_LETTER_TEMPLATE_ELEVATOR_COMPANY_RESPONSE,
+  MASTER_LETTER_TEMPLATE_VISIT_SUMMARY,
+  MASTER_LETTER_TEMPLATE_PRICE_PROPOSAL_REVIEW,
+  MASTER_LETTER_TEMPLATE_RECURRING_FAULTS,
+  MASTER_LETTER_TEMPLATES,
+} from "../lib/master-letters";
+import {
+  buildMasterLetterFileName,
+  createMasterLetterDocFile,
+} from "../lib/master-letter-export";
+import {
   buildDocumentInspectorMetaInsertRow,
   DOCUMENT_INSPECTOR_META_TABLE,
 } from "../lib/document-inspector-meta";
@@ -4067,10 +4083,11 @@ assert(
   "Document Center: נרמול ופרסור תגיות"
 );
 assert(
-  DOCUMENT_PREDEFINED_TAGS.length === 22 &&
+  DOCUMENT_PREDEFINED_TAGS.length === 23 &&
     DOCUMENT_PREDEFINED_TAGS[0] === "תסקיר בודק" &&
     DOCUMENT_PREDEFINED_TAGS.includes("שדרוג / מודרניזציה") &&
     DOCUMENT_PREDEFINED_TAGS.includes("התכתבויות") &&
+    DOCUMENT_PREDEFINED_TAGS.includes("מכתב") &&
     isPredefinedDocumentTag("חשבונית") &&
     !isPredefinedDocumentTag("בודק"),
   "Document Center: תגיות קבועות"
@@ -4364,6 +4381,176 @@ assert(
     documentCenterSection.includes("האם לאפשר צפייה ללקוח") &&
     documentCenterSection.includes("getDocumentVisibilityLabel"),
   "Document Center: Master UI — העלאה, חיפוש ופתיחה"
+);
+
+const masterLettersSectionPath = path.join(
+  process.cwd(),
+  "components/MasterLettersSection.tsx"
+);
+const masterLetterFormPath = path.join(
+  process.cwd(),
+  "components/MasterLetterForm.tsx"
+);
+const masterLettersLibPath = path.join(process.cwd(), "lib/master-letters.ts");
+const masterLetterExportPath = path.join(
+  process.cwd(),
+  "lib/master-letter-export.ts"
+);
+assert(
+  fs.existsSync(masterLettersSectionPath) &&
+    fs.existsSync(masterLetterFormPath) &&
+    fs.existsSync(masterLettersLibPath) &&
+    fs.existsSync(masterLetterExportPath) &&
+    fs.existsSync(path.join(process.cwd(), "lib/master-letter-templates.ts")),
+  "Master Letters: קבצי מודול קיימים"
+);
+const masterLettersSection = fs.readFileSync(masterLettersSectionPath, "utf8");
+const masterLetterForm = fs.readFileSync(masterLetterFormPath, "utf8");
+const masterLettersLib = fs.readFileSync(masterLettersLibPath, "utf8");
+assert(
+  masterPageForDocuments.includes("MasterLettersSection") &&
+    masterPageForDocuments.includes('"letters"') &&
+    masterPageForDocuments.includes("מכתבים") &&
+    masterPageForDocuments.includes('tab === "letters"') &&
+    !masterPageForDocuments.includes("letters/page"),
+  "Master Letters: טאב מכתבים ב-Master ללא route חדש"
+);
+assert(
+  masterLettersSection.includes("saveMasterLetterToDocumentCenter") &&
+    masterLettersSection.includes("listMasterLetters") &&
+    masterLetterForm.includes("MasterExistingBuildingSearch") &&
+    masterLetterForm.includes('mode="select"') &&
+    masterLetterForm.includes("buildMasterLetterPreview") &&
+    masterLetterForm.includes("letter-template") &&
+    masterLettersSection.includes("MASTER_LETTER_TEMPLATES.map") &&
+    masterLettersLib.includes("uploadDocumentCenterFile") &&
+    masterLettersLib.includes("createDocument") &&
+    masterLettersLib.includes('documentType: "correspondence"') &&
+    masterLettersLib.includes("tags: [MASTER_LETTER_TAG]") &&
+    masterLettersLib.includes('visibility: "internal"'),
+  "Master Letters: שמירה דרך Document Center + building_id + תגית מכתב"
+);
+assert(
+  MASTER_LETTER_TAG === "מכתב" &&
+    MASTER_LETTER_TEMPLATES.length === 6 &&
+    MASTER_LETTER_TEMPLATES.some(
+      (template) => template.id === MASTER_LETTER_TEMPLATE_INSPECTOR_FINDINGS
+    ) &&
+    MASTER_LETTER_TEMPLATES.some(
+      (template) => template.id === MASTER_LETTER_TEMPLATE_ELEVATOR_COMPANY_RESPONSE
+    ) &&
+    MASTER_LETTER_TEMPLATES.some(
+      (template) => template.id === MASTER_LETTER_TEMPLATE_VISIT_SUMMARY
+    ) &&
+    MASTER_LETTER_TEMPLATES.some(
+      (template) => template.id === MASTER_LETTER_TEMPLATE_PRICE_PROPOSAL_REVIEW
+    ) &&
+    MASTER_LETTER_TEMPLATES.some(
+      (template) => template.id === MASTER_LETTER_TEMPLATE_RECURRING_FAULTS
+    ) &&
+    MASTER_LETTER_TEMPLATES.some(
+      (template) => template.id === MASTER_LETTER_TEMPLATE_BUILDING_FOLLOW_UP
+    ),
+  "Master Letters: כל תבניות המכתבים זמינות ב-Master"
+);
+const inspectorPreview = buildMasterLetterPreview({
+  templateId: MASTER_LETTER_TEMPLATE_INSPECTOR_FINDINGS,
+  subject: "",
+  building: {
+    buildingId: "md25",
+    buildingName: "ישורון 34",
+    address: "ישורון 34",
+    city: "תל אביב",
+  },
+  templateFields: {
+    defect_count: 2,
+    elevator_company: "שינדלר",
+    recipient_type: "ועד בית",
+    inspection_date: "2026-05-01",
+    has_45_day_items: true,
+    report_attached: true,
+  },
+});
+assert(
+  inspectorPreview.subject.includes("סקירת דוח") &&
+    buildMasterLetterBody({
+      templateId: MASTER_LETTER_TEMPLATE_INSPECTOR_FINDINGS,
+      subject: inspectorPreview.subject,
+      building: {
+        buildingId: "md25",
+        buildingName: "ישורון 34",
+        address: "ישורון 34",
+      },
+      templateFields: {
+        defect_count: 2,
+        elevator_company: "שינדלר",
+        recipient_type: "ועד בית",
+        inspection_date: "2026-05-01",
+        has_45_day_items: true,
+        report_attached: true,
+      },
+    }).includes("2 ליקויים") &&
+    buildMasterLetterFileName({
+      buildingId: "md25",
+      title: "מכתב מעקב",
+      date: new Date("2026-06-05T10:00:00.000Z"),
+    }).endsWith(".doc"),
+  "Master Letters: תצוגה מקדימה ושם קובץ .doc"
+);
+const sampleLetterPreview = buildMasterLetterPreview({
+  templateId: MASTER_LETTER_TEMPLATE_BUILDING_FOLLOW_UP,
+  subject: "מכתב מעקב — בקרת שירות מעליות",
+  building: {
+    buildingId: "md25",
+    buildingName: "ישורון 34",
+    address: "ישורון 34",
+    city: "תל אביב",
+    managementCompany: "ועד הבית",
+  },
+  elevatorId: "right",
+  elevatorName: "מעלית ימין",
+  customNote: "נא לתאם ביקור.",
+});
+assert(
+  sampleLetterPreview.subject.includes("מכתב מעקב") &&
+    buildMasterLetterBody({
+      templateId: MASTER_LETTER_TEMPLATE_BUILDING_FOLLOW_UP,
+      subject: sampleLetterPreview.subject,
+      building: {
+        buildingId: "md25",
+        buildingName: "ישורון 34",
+      },
+      elevatorName: "מעלית ימין",
+    }).includes("מעלית ימין"),
+  "Master Letters: תבנית building_follow_up"
+);
+const sampleLetterFile = createMasterLetterDocFile({
+  subject: sampleLetterPreview.subject,
+  bodyText: sampleLetterPreview.bodyText,
+  buildingId: "md25",
+  title: "מכתב מעקב — ישורון 34",
+});
+assert(
+  sampleLetterFile.name.endsWith(".doc") &&
+    sampleLetterFile.type === "application/msword" &&
+    sampleLetterFile.size > 0 &&
+    validateDocumentCenterFile({
+      name: sampleLetterFile.name,
+      type: sampleLetterFile.type,
+      size: sampleLetterFile.size,
+    }) === null &&
+    filterDocuments(
+      [
+        {
+          ...sampleDocument,
+          id: "letter-1",
+          document_type: "correspondence",
+          tags: [MASTER_LETTER_TAG],
+        },
+      ],
+      { tags: [MASTER_LETTER_TAG] }
+    ).length === 1,
+  "Master Letters: קובץ .doc תקין + סינון תגית מכתב במאגר"
 );
 
 assert(

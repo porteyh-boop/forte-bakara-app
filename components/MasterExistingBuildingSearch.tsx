@@ -107,7 +107,15 @@ export default function MasterExistingBuildingSearch({
   }
 
   function handleSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key !== "Enter" || isSelectMode) return;
+    if (e.key !== "Enter") return;
+
+    if (isSelectMode) {
+      const targetHit = resolveEnterTargetHit();
+      if (!targetHit) return;
+      e.preventDefault();
+      handleSelect(targetHit);
+      return;
+    }
 
     const targetHit = resolveEnterTargetHit();
     if (!targetHit) return;
@@ -141,7 +149,7 @@ export default function MasterExistingBuildingSearch({
         </h4>
         <p className="text-xs text-gray-text mt-0.5">
           {isSelectMode
-            ? "חפשו לפי שם בניין, כתובת, עיר או מזהה בניין לשיוך המסמך."
+            ? "חפשו לפי שם בניין, כתובת, עיר או מזהה בניין — ולחצו על התוצאה (או Enter) לשיוך המסמך."
             : "חפשו לפי שם בניין, כתובת, עיר או מזהה בניין לפני יצירת רשומה חדשה."}
         </p>
       </div>

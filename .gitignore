@@ -24,6 +24,13 @@
 .DS_Store
 *.pem
 
+# local debug / QA output
+qa-*.txt
+qa-summary.txt
+build-out.txt
+esbuild-rebuild.txt
+scripts/.visibility-browser-test.json
+
 # debug
 npm-debug.log*
 yarn-debug.log*
