@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { getOrCreatePilotDeviceId } from "./pilot-device";
+import { sendTelegramNotification } from "./telegram";
 import type { Fault } from "./types";
 import type { FeedbackSubmissionInput } from "./types";
 
@@ -196,6 +197,14 @@ export async function savePilotFault(
     console.warn("[pilot-cloud] savePilotFault failed:", error.message);
     return null;
   }
+
+  void sendTelegramNotification({
+    ticketNumber: data.ticket_number ?? data.id,
+    buildingName: data.building_name,
+    elevatorName: data.elevator_name,
+    description: data.description,
+    createdAt: data.created_at,
+  });
 
   return data as PilotCloudFault;
 }
