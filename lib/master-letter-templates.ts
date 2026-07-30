@@ -27,14 +27,6 @@ export interface MasterLetterTemplateField {
   showIf?: { fieldId: string; value: string };
 }
 
-export interface MasterLetterTemplateDefinition {
-  id: string;
-  label: string;
-  description: string;
-  defaultSubject: string;
-  fields: MasterLetterTemplateField[];
-}
-
 export const MASTER_LETTER_TEMPLATE_BUILDING_FOLLOW_UP = "building_follow_up" as const;
 export const MASTER_LETTER_TEMPLATE_INSPECTOR_FINDINGS = "inspector_findings" as const;
 export const MASTER_LETTER_TEMPLATE_ELEVATOR_COMPANY_RESPONSE =
@@ -50,6 +42,14 @@ export type MasterLetterTemplateId =
   | typeof MASTER_LETTER_TEMPLATE_VISIT_SUMMARY
   | typeof MASTER_LETTER_TEMPLATE_PRICE_PROPOSAL_REVIEW
   | typeof MASTER_LETTER_TEMPLATE_RECURRING_FAULTS;
+
+export interface MasterLetterTemplateDefinition {
+  id: MasterLetterTemplateId;
+  label: string;
+  description: string;
+  defaultSubject: string;
+  fields: MasterLetterTemplateField[];
+}
 
 export const MASTER_LETTER_TEMPLATES: MasterLetterTemplateDefinition[] = [
   {

@@ -67,73 +67,12 @@ async function postTelegramMessage(
   const body = JSON.stringify({ chat_id: chatId, text });
   const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
 
-  if (typeof window !== "undefined") {
-    return fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body,
-      signal,
-    });
-  }
-
-  try {
-    const [{ Agent, request }, tls] = await Promise.all([
-      import("node:https"),
-      import("node:tls"),
-    ]);
-    const systemCas = tls.getCACertificates("system");
-    const agent =
-      systemCas.length > 0 ? new Agent({ ca: systemCas }) : undefined;
-
-    return await new Promise<Response>((resolve, reject) => {
-      const parsed = new URL(url);
-      const req = request(
-        {
-          hostname: parsed.hostname,
-          path: parsed.pathname,
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Content-Length": Buffer.byteLength(body),
-          },
-          agent,
-        },
-        (res) => {
-          const chunks: Buffer[] = [];
-          res.on("data", (chunk: Buffer) => chunks.push(chunk));
-          res.on("end", () => {
-            resolve(
-              new Response(Buffer.concat(chunks), {
-                status: res.statusCode ?? 500,
-              })
-            );
-          });
-        }
-      );
-
-      const onAbort = () => {
-        req.destroy(new DOMException("The operation was aborted.", "AbortError"));
-      };
-
-      if (signal.aborted) {
-        onAbort();
-        return;
-      }
-
-      signal.addEventListener("abort", onAbort, { once: true });
-      req.on("close", () => signal.removeEventListener("abort", onAbort));
-      req.on("error", reject);
-      req.write(body);
-      req.end();
-    });
-  } catch {
-    return fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body,
-      signal,
-    });
-  }
+  return fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body,
+    signal,
+  });
 }
 
 export type TelegramDeliveryResult =
