@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   sendTelegramFaultNotification,
   sendTelegramPilotFaultNotification,
+  type TelegramDeliveryResult,
 } from "@/lib/telegram";
 
 const RATE_LIMIT_WINDOW_MS = 60_000;
@@ -77,42 +78,59 @@ function isPilotFaultPayload(body: unknown): body is {
   );
 }
 
-/**
- * Best-effort fault notification. Always responds 200 — this endpoint
- * must never affect fault saving or the reporting user, regardless of
- * whether Telegram delivery succeeds or the request is rejected.
- */
-export async function POST(request: NextRequest) {
-  try {
-    if (!isAllowedOrigin(request) || isRateLimited(getClientIp(request))) {
-      return NextResponse.json({ ok: true });
-    }
-
-    const body = await request.json();
-
-    if (isPilotFaultPayload(body)) {
-      await sendTelegramPilotFaultNotification({
-        ticketNumber: String(body.ticketNumber),
-        buildingName: String(body.buildingName),
-        elevatorName: String(body.elevatorName),
-        description: String(body.description),
-        createdAt: String(body.createdAt),
-      });
-    } else {
-      await sendTelegramFaultNotification({
-        buildingName: String(body?.buildingName ?? ""),
-        elevatorName: String(body?.elevatorName ?? ""),
-        faultType: String(body?.faultType ?? ""),
-        description: String(body?.description ?? ""),
-        isDisabled: Boolean(body?.isDisabled),
-        ticketNumber: body?.ticketNumber ? String(body.ticketNumber) : undefined,
-        reportedBy: body?.reportedBy ? String(body.reportedBy) : undefined,
-        reportedPhone: body?.reportedPhone ? String(body.reportedPhone) : undefined,
-      });
-    }
-  } catch {
-    // Never throw — this route must have zero effect on the caller.
+function deliveryErrorResponse(result: TelegramDeliveryResult): NextResponse {
+  if (result.ok) {
+    return NextResponse.json({ ok: true });
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: false, error: result.error }, { status: 502 });
+}
+
+export async function POST(request: NextRequest) {
+  if (!isAllowedOrigin(request)) {
+    return NextResponse.json(
+      { ok: false, error: "origin_not_allowed" },
+      { status: 403 }
+    );
+  }
+
+  if (isRateLimited(getClientIp(request))) {
+    return NextResponse.json(
+      { ok: false, error: "rate_limited" },
+      { status: 429 }
+    );
+  }
+
+  try {
+    const body = await request.json();
+    console.log("[telegram-trace] /api/telegram-notify: received", {
+      ticketNumber: body?.ticketNumber ?? null,
+      origin: request.headers.get("origin"),
+    });
+
+    const result = isPilotFaultPayload(body)
+      ? await sendTelegramPilotFaultNotification({
+          ticketNumber: String(body.ticketNumber),
+          buildingName: String(body.buildingName),
+          elevatorName: String(body.elevatorName),
+          description: String(body.description),
+          createdAt: String(body.createdAt),
+        })
+      : await sendTelegramFaultNotification({
+          buildingName: String(body?.buildingName ?? ""),
+          elevatorName: String(body?.elevatorName ?? ""),
+          faultType: String(body?.faultType ?? ""),
+          description: String(body?.description ?? ""),
+          isDisabled: Boolean(body?.isDisabled),
+          ticketNumber: body?.ticketNumber ? String(body.ticketNumber) : undefined,
+          reportedBy: body?.reportedBy ? String(body.reportedBy) : undefined,
+          reportedPhone: body?.reportedPhone ? String(body.reportedPhone) : undefined,
+        });
+
+    return deliveryErrorResponse(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "unknown error";
+    console.error("[telegram-notify] request failed:", message);
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+  }
 }

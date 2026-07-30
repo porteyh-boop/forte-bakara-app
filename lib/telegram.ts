@@ -58,33 +58,130 @@ function buildPilotFaultMessage(input: TelegramPilotFaultNotificationInput): str
   ].join("\n");
 }
 
-async function deliverTelegramMessage(text: string): Promise<void> {
-  const botToken = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
-  if (!botToken || !chatId) return;
+async function postTelegramMessage(
+  botToken: string,
+  chatId: string,
+  text: string,
+  signal: AbortSignal
+): Promise<Response> {
+  const body = JSON.stringify({ chat_id: chatId, text });
+  const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+
+  if (typeof window !== "undefined") {
+    return fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+      signal,
+    });
+  }
+
+  try {
+    const [{ Agent, request }, tls] = await Promise.all([
+      import("node:https"),
+      import("node:tls"),
+    ]);
+    const systemCas = tls.getCACertificates("system");
+    const agent =
+      systemCas.length > 0 ? new Agent({ ca: systemCas }) : undefined;
+
+    return await new Promise<Response>((resolve, reject) => {
+      const parsed = new URL(url);
+      const req = request(
+        {
+          hostname: parsed.hostname,
+          path: parsed.pathname,
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Content-Length": Buffer.byteLength(body),
+          },
+          agent,
+        },
+        (res) => {
+          const chunks: Buffer[] = [];
+          res.on("data", (chunk: Buffer) => chunks.push(chunk));
+          res.on("end", () => {
+            resolve(
+              new Response(Buffer.concat(chunks), {
+                status: res.statusCode ?? 500,
+              })
+            );
+          });
+        }
+      );
+
+      const onAbort = () => {
+        req.destroy(new DOMException("The operation was aborted.", "AbortError"));
+      };
+
+      if (signal.aborted) {
+        onAbort();
+        return;
+      }
+
+      signal.addEventListener("abort", onAbort, { once: true });
+      req.on("close", () => signal.removeEventListener("abort", onAbort));
+      req.on("error", reject);
+      req.write(body);
+      req.end();
+    });
+  } catch {
+    return fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+      signal,
+    });
+  }
+}
+
+export type TelegramDeliveryResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+async function deliverTelegramMessage(text: string): Promise<TelegramDeliveryResult> {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN?.trim();
+  const chatId = process.env.TELEGRAM_CHAT_ID?.trim();
+  if (!botToken || !chatId) {
+    const error = "TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not configured";
+    console.error("[telegram] notification delivery failed:", error);
+    return { ok: false, error };
+  }
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), TELEGRAM_API_TIMEOUT_MS);
 
   try {
-    const response = await fetch(
-      `https://api.telegram.org/bot${botToken}/sendMessage`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text,
-        }),
-        signal: controller.signal,
-      }
+    const response = await postTelegramMessage(
+      botToken,
+      chatId,
+      text,
+      controller.signal
     );
 
     if (!response.ok) {
-      throw new Error("Telegram delivery failed");
+      throw new Error(`Telegram HTTP ${response.status}`);
     }
-  } catch {
-    console.error("[telegram] notification delivery failed");
+
+    const payload = (await response.json()) as {
+      ok?: boolean;
+      description?: string;
+      result?: { message_id?: number };
+    };
+    if (!payload.ok) {
+      throw new Error(payload.description ?? "Telegram API returned ok=false");
+    }
+
+    console.log("[telegram-trace] deliverTelegramMessage: Telegram API ok", {
+      messageId: payload.result?.message_id ?? null,
+    });
+
+    return { ok: true };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "unknown error";
+    console.error("[telegram] notification delivery failed:", detail);
+    return { ok: false, error: detail };
   } finally {
     clearTimeout(timeoutId);
   }
@@ -97,14 +194,14 @@ async function deliverTelegramMessage(text: string): Promise<void> {
  */
 export async function sendTelegramFaultNotification(
   input: TelegramFaultNotificationInput
-): Promise<void> {
-  await deliverTelegramMessage(buildFaultMessage(input));
+): Promise<TelegramDeliveryResult> {
+  return deliverTelegramMessage(buildFaultMessage(input));
 }
 
 export async function sendTelegramPilotFaultNotification(
   input: TelegramPilotFaultNotificationInput
-): Promise<void> {
-  await deliverTelegramMessage(buildPilotFaultMessage(input));
+): Promise<TelegramDeliveryResult> {
+  return deliverTelegramMessage(buildPilotFaultMessage(input));
 }
 
 /**
@@ -112,11 +209,22 @@ export async function sendTelegramPilotFaultNotification(
  * Never throws and must not affect fault saving.
  */
 export function sendTelegramNotification(payload: TelegramNotificationPayload): void {
+  if (typeof window === "undefined") return;
+
+  console.log("[TRACE] sendTelegramNotification entered");
+
+  console.log("[TRACE] before fetch");
+
   void fetch("/api/telegram-notify", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
-  }).catch(() => {
-    console.error("[telegram] notification request failed");
-  });
+    keepalive: true,
+  })
+    .then((response) => {
+      console.log("[TRACE] after fetch", response.status);
+    })
+    .catch((error) => {
+      console.log("[TRACE] after fetch", error instanceof Error ? error.message : String(error));
+    });
 }

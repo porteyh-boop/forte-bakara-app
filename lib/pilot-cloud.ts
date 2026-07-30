@@ -187,23 +187,33 @@ export async function savePilotFault(
     fault_source: input.faultSource ?? null,
   };
 
+  console.log("[TRACE] before insert");
+
   const { data, error } = await client
     .from(PILOT_FAULTS_TABLE)
     .insert(row)
     .select()
     .single();
 
+  console.log("[TRACE] insert result", {
+    error: error?.message ?? null,
+    "data.id": data?.id ?? null,
+    ticket_number: data?.ticket_number ?? null,
+  });
+
   if (error) {
     console.warn("[pilot-cloud] savePilotFault failed:", error.message);
     return null;
   }
 
+  console.log("[TRACE] before sendTelegramNotification");
+
   void sendTelegramNotification({
-    ticketNumber: data.ticket_number ?? data.id,
-    buildingName: data.building_name,
-    elevatorName: data.elevator_name,
-    description: data.description,
-    createdAt: data.created_at,
+    ticketNumber: String(data.ticket_number ?? data.id),
+    buildingName: String(data.building_name ?? input.buildingName),
+    elevatorName: String(data.elevator_name ?? input.elevatorName),
+    description: String(data.description ?? input.description),
+    createdAt: String(data.created_at ?? new Date().toISOString()),
   });
 
   return data as PilotCloudFault;
