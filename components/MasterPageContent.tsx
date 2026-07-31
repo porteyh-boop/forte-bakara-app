@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useBuilding } from "@/components/BuildingProvider";
 import MasterCloudFaultCard from "@/components/MasterCloudFaultCard";
 import MasterAnalyticsSection from "@/components/MasterAnalyticsSection";
 import MasterBuildingsSection from "@/components/MasterBuildingsSection";
@@ -112,6 +113,7 @@ function MasterCodeGate({ onSuccess }: { onSuccess: () => void }) {
 
 export default function MasterPageContent() {
   const router = useRouter();
+  const { selectBuilding } = useBuilding();
   const [authed, setAuthed] = useState(false);
   const [tab, setTab] = useState<Tab>("faults");
   const [faults, setFaults] = useState<PilotCloudFault[]>([]);
@@ -341,7 +343,13 @@ export default function MasterPageContent() {
             <div className="flex gap-2 items-stretch">
               <select
                 value={buildingFilter}
-                onChange={(e) => setBuildingFilter(e.target.value)}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setBuildingFilter(next);
+                  if (next !== "all") {
+                    selectBuilding(next);
+                  }
+                }}
                 className="form-input flex-1 min-w-0"
               >
                 <option value="all">כל הבניינים</option>
@@ -633,7 +641,9 @@ export default function MasterPageContent() {
 
         {tab === "letters" && <MasterLettersSection />}
 
-        {tab === "statistics" && <MasterStatisticsSection />}
+        {tab === "statistics" && (
+          <MasterStatisticsSection masterBuildingFilter={buildingFilter} />
+        )}
       </main>
     </div>
   );

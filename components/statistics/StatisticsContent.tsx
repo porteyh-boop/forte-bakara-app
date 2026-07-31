@@ -41,10 +41,18 @@ export default function StatisticsContent({
     let cancelled = false;
 
     async function loadRows() {
+      const trimmedBuildingId = buildingId.trim();
+      if (!trimmedBuildingId) {
+        setRows(null);
+        setError("לא נבחר בניין פעיל.");
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       setError(null);
 
-      const result = await fetchStatisticsFaultRows(buildingId);
+      const result = await fetchStatisticsFaultRows(trimmedBuildingId);
       if (cancelled) return;
 
       if (!result.ok) {
