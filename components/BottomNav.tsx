@@ -32,6 +32,15 @@ const baseNavItems = [
     ),
   },
   {
+    href: "/statistics",
+    label: "סטטיסטיקות",
+    icon: (active: boolean) => (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? "2.2" : "1.8"} className={NAV_ICON_CLASS}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4 19h16M6 16l4-5 4 3 4-7" />
+      </svg>
+    ),
+  },
+  {
     href: "/feedback",
     label: "משוב",
     isFeedback: true,
