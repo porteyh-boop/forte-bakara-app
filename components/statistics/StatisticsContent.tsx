@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import PageHeader from "@/components/PageHeader";
 import ElevatorChart from "@/components/statistics/ElevatorChart";
 import FaultTypeChart from "@/components/statistics/FaultTypeChart";
 import MonthlyChart from "@/components/statistics/MonthlyChart";
@@ -23,7 +22,7 @@ function SummaryCard({ totalFaults }: { totalFaults: number }) {
   );
 }
 
-export default function StatisticsDashboard() {
+export default function StatisticsContent() {
   const { buildingId, ctx } = useBuilding();
   const [period, setPeriod] = useState<StatisticsPeriod>("30d");
   const [rows, setRows] = useState<StatisticsFaultRow[] | null>(null);
@@ -71,52 +70,34 @@ export default function StatisticsDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-light">
-        <PageHeader
-          title="סטטיסטיקות"
-          subtitle="טוען נתונים..."
-          badge={ctx.building.name}
-        />
-        <main className="page-content -mt-2">
-          <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center">
-            <p className="text-sm text-gray-text">טוען סטטיסטיקות...</p>
-          </div>
-        </main>
+      <div className="space-y-4">
+        <p className="text-xs text-gray-text">בניין: {ctx.building.name}</p>
+        <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center">
+          <p className="text-sm text-gray-text">טוען סטטיסטיקות...</p>
+        </div>
       </div>
     );
   }
 
   if (error || !snapshot) {
     return (
-      <div className="min-h-screen bg-gray-light">
-        <PageHeader
-          title="סטטיסטיקות"
-          subtitle="מגמות ונתונים לבניין הנבחר"
-          badge={ctx.building.name}
-        />
-        <main className="page-content -mt-2">
-          <div className="bg-white rounded-2xl border border-red-200 p-6 text-center">
-            <p className="text-sm text-red-600">{error ?? "לא ניתן להציג סטטיסטיקות."}</p>
-          </div>
-        </main>
+      <div className="space-y-4">
+        <p className="text-xs text-gray-text">בניין: {ctx.building.name}</p>
+        <div className="bg-white rounded-2xl border border-red-200 p-6 text-center">
+          <p className="text-sm text-red-600">{error ?? "לא ניתן להציג סטטיסטיקות."}</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-light">
-      <PageHeader
-        title="סטטיסטיקות"
-        subtitle="מגמות ונתונים לבניין הנבחר"
-        badge={ctx.building.name}
-      />
-      <main className="page-content -mt-2 flex flex-col gap-4">
-        <PeriodFilter value={period} onChange={setPeriod} />
-        <SummaryCard totalFaults={snapshot.totalFaults} />
-        <MonthlyChart data={snapshot.monthly} />
-        <FaultTypeChart data={snapshot.byType} />
-        <ElevatorChart data={snapshot.byElevator} />
-      </main>
+    <div className="flex flex-col gap-4">
+      <p className="text-xs text-gray-text">בניין: {ctx.building.name}</p>
+      <PeriodFilter value={period} onChange={setPeriod} />
+      <SummaryCard totalFaults={snapshot.totalFaults} />
+      <MonthlyChart data={snapshot.monthly} />
+      <FaultTypeChart data={snapshot.byType} />
+      <ElevatorChart data={snapshot.byElevator} />
     </div>
   );
 }
