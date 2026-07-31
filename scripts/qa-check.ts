@@ -3311,7 +3311,7 @@ assert(
 );
 
 assert(
-  CLIENT_PERMISSION_KEYS.length === 9 &&
+  CLIENT_PERMISSION_KEYS.length === 10 &&
     CLIENT_PERMISSION_KEYS.every((key) => DEFAULT_CLIENT_PERMISSIONS[key] === false),
   "הרשאות לקוח: ברירת מחדל false לכל ההרשאות"
 );
@@ -3319,7 +3319,8 @@ assert(
   CLIENT_PERMISSION_LABELS.can_view_building_dashboard === "גישה לפורטל לקוח" &&
     CLIENT_PERMISSION_LABELS.can_report_faults === "דיווח תקלות" &&
     CLIENT_PERMISSION_LABELS.can_receive_notifications === "קבלת התראות" &&
-    CLIENT_PERMISSION_LABELS.can_submit_feedback === "שליחת משוב",
+    CLIENT_PERMISSION_LABELS.can_submit_feedback === "שליחת משוב" &&
+    CLIENT_PERMISSION_LABELS.can_view_statistics === "צפייה בסטטיסטיקות",
   "הרשאות לקוח: תוויות עברית"
 );
 assert(
@@ -3345,6 +3346,7 @@ const samplePermissionFlags = extractClientPermissionFlags({
   can_upload_images: false,
   can_receive_notifications: true,
   can_submit_feedback: false,
+  can_view_statistics: false,
   created_at: "2026-06-01T10:00:00.000Z",
   updated_at: "2026-06-01T10:00:00.000Z",
 });

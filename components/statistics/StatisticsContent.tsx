@@ -5,7 +5,6 @@ import ElevatorChart from "@/components/statistics/ElevatorChart";
 import FaultTypeChart from "@/components/statistics/FaultTypeChart";
 import MonthlyChart from "@/components/statistics/MonthlyChart";
 import PeriodFilter from "@/components/statistics/PeriodFilter";
-import { useBuilding } from "@/components/BuildingProvider";
 import {
   buildStatisticsSnapshot,
   fetchStatisticsFaultRows,
@@ -22,8 +21,17 @@ function SummaryCard({ totalFaults }: { totalFaults: number }) {
   );
 }
 
-export default function StatisticsContent() {
-  const { buildingId, ctx } = useBuilding();
+export interface StatisticsContentProps {
+  buildingId: string;
+  buildingName: string;
+  filterRows?: (rows: StatisticsFaultRow[]) => StatisticsFaultRow[];
+}
+
+export default function StatisticsContent({
+  buildingId,
+  buildingName,
+  filterRows,
+}: StatisticsContentProps) {
   const [period, setPeriod] = useState<StatisticsPeriod>("30d");
   const [rows, setRows] = useState<StatisticsFaultRow[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -52,7 +60,7 @@ export default function StatisticsContent() {
         return;
       }
 
-      setRows(result.rows);
+      setRows(filterRows ? filterRows(result.rows) : result.rows);
       setLoading(false);
     }
 
@@ -61,7 +69,7 @@ export default function StatisticsContent() {
     return () => {
       cancelled = true;
     };
-  }, [buildingId]);
+  }, [buildingId, filterRows]);
 
   const snapshot = useMemo(() => {
     if (!rows) return null;
@@ -71,7 +79,7 @@ export default function StatisticsContent() {
   if (loading) {
     return (
       <div className="space-y-4">
-        <p className="text-xs text-gray-text">בניין: {ctx.building.name}</p>
+        <p className="text-xs text-gray-text">בניין: {buildingName}</p>
         <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center">
           <p className="text-sm text-gray-text">טוען סטטיסטיקות...</p>
         </div>
@@ -82,7 +90,7 @@ export default function StatisticsContent() {
   if (error || !snapshot) {
     return (
       <div className="space-y-4">
-        <p className="text-xs text-gray-text">בניין: {ctx.building.name}</p>
+        <p className="text-xs text-gray-text">בניין: {buildingName}</p>
         <div className="bg-white rounded-2xl border border-red-200 p-6 text-center">
           <p className="text-sm text-red-600">{error ?? "לא ניתן להציג סטטיסטיקות."}</p>
         </div>
@@ -92,7 +100,7 @@ export default function StatisticsContent() {
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-xs text-gray-text">בניין: {ctx.building.name}</p>
+      <p className="text-xs text-gray-text">בניין: {buildingName}</p>
       <PeriodFilter value={period} onChange={setPeriod} />
       <SummaryCard totalFaults={snapshot.totalFaults} />
       <MonthlyChart data={snapshot.monthly} />

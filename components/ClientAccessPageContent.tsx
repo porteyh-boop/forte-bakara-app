@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ClientAccessReportForm from "@/components/ClientAccessReportForm";
 import ClientPortalInstallPrompt from "@/components/ClientPortalInstallPrompt";
+import ClientPortalStatisticsSection from "@/components/ClientPortalStatisticsSection";
 import ElevatorStatusRow from "@/components/ElevatorStatusRow";
 import FaultCard from "@/components/FaultCard";
 import FeedbackForm from "@/components/FeedbackForm";
@@ -52,7 +53,7 @@ import {
 } from "@/lib/pilot-cloud";
 import type { Elevator, Fault, FaultStatus, FaultType } from "@/lib/types";
 
-type ClientTab = "home" | "history" | "documents";
+type ClientTab = "home" | "history" | "documents" | "statistics";
 
 const PORTAL_ACCESS_DENIED_MESSAGE = "אין לך הרשאה לגשת לפורטל.";
 const LOGOUT_MESSAGE = "יצאתם מהפורטל.";
@@ -390,8 +391,17 @@ export default function ClientAccessPageContent({
     if (permissions?.can_view_documents) {
       tabs.push({ key: "documents", label: "מסמכים" });
     }
+    if (permissions?.can_view_statistics) {
+      tabs.push({ key: "statistics", label: "סטטיסטיקות" });
+    }
     return tabs;
   }, [permissions]);
+
+  useEffect(() => {
+    if (tab === "statistics" && !permissions?.can_view_statistics) {
+      setTab("home");
+    }
+  }, [tab, permissions]);
 
   function handleLogout() {
     if (!session) return;
@@ -745,6 +755,15 @@ export default function ClientAccessPageContent({
               </div>
             )}
           </section>
+        )}
+
+        {tab === "statistics" && permissions.can_view_statistics && (
+          <ClientPortalStatisticsSection
+            buildingId={buildingResolve.loadedBuildingId}
+            buildingName={buildingResolve.buildingName}
+            access={session.access}
+            elevators={elevators}
+          />
         )}
 
         <button

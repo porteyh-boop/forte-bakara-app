@@ -10,6 +10,7 @@ export type ClientPermissionKey =
   | "can_view_fault_history"
   | "can_view_availability"
   | "can_view_documents"
+  | "can_view_statistics"
   | "can_upload_images"
   | "can_receive_notifications"
   | "can_submit_feedback";
@@ -42,6 +43,7 @@ export const CLIENT_PERMISSION_KEYS: ClientPermissionKey[] = [
   "can_view_fault_history",
   "can_view_availability",
   "can_view_documents",
+  "can_view_statistics",
   "can_upload_images",
   "can_receive_notifications",
   "can_submit_feedback",
@@ -54,6 +56,7 @@ export const CLIENT_PERMISSION_LABELS: Record<ClientPermissionKey, string> = {
   can_view_fault_history: "צפייה בהיסטוריית תקלות",
   can_view_availability: "צפייה בזמינות",
   can_view_documents: "צפייה במסמכים",
+  can_view_statistics: "צפייה בסטטיסטיקות",
   can_upload_images: "העלאת תמונות",
   can_receive_notifications: "קבלת התראות",
   can_submit_feedback: "שליחת משוב",
@@ -66,6 +69,7 @@ export const DEFAULT_CLIENT_PERMISSIONS: ClientPermissionFlags = {
   can_view_fault_history: false,
   can_view_availability: false,
   can_view_documents: false,
+  can_view_statistics: false,
   can_upload_images: false,
   can_receive_notifications: false,
   can_submit_feedback: false,
@@ -93,6 +97,7 @@ function mapPermissionRow(row: Record<string, unknown>): ClientPermissionRecord 
     can_view_fault_history: Boolean(row.can_view_fault_history),
     can_view_availability: Boolean(row.can_view_availability),
     can_view_documents: Boolean(row.can_view_documents),
+    can_view_statistics: Boolean(row.can_view_statistics),
     can_upload_images: Boolean(row.can_upload_images),
     can_receive_notifications: Boolean(row.can_receive_notifications),
     can_submit_feedback: Boolean(row.can_submit_feedback),
@@ -121,6 +126,7 @@ export function extractClientPermissionFlags(
     can_view_fault_history: record.can_view_fault_history,
     can_view_availability: record.can_view_availability,
     can_view_documents: record.can_view_documents,
+    can_view_statistics: record.can_view_statistics,
     can_upload_images: record.can_upload_images,
     can_receive_notifications: record.can_receive_notifications,
     can_submit_feedback: record.can_submit_feedback,
