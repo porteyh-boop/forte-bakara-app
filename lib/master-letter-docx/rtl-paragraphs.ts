@@ -1,8 +1,26 @@
 import { Paragraph, TextRun } from "docx";
-import { masterLetterParagraphStyle, masterLetterRunStyle } from "./theme";
+import { formatAddresseeBlock } from "./parse-body-text";
+import {
+  MASTER_LETTER_DOCX_PARAGRAPH_AFTER,
+  MASTER_LETTER_DOCX_SIGNATURE_BEFORE,
+  MASTER_LETTER_DOCX_SIGNATURE_LINES,
+  masterLetterParagraphStyle,
+  masterLetterRunStyle,
+  masterLetterSubjectRunStyle,
+} from "./theme";
 
-function textBlockToParagraph(block: string, bold = false): Paragraph {
+const MASTER_LETTER_DOCX_ADDRESSEE_BLOCK_AFTER = 120;
+
+function textBlockToParagraph(
+  block: string,
+  options?: {
+    bold?: boolean;
+    spacingBefore?: number;
+    spacingAfter?: number;
+  }
+): Paragraph {
   const lines = block.split("\n").map((line) => line.trim());
+  const runStyle = options?.bold ? masterLetterSubjectRunStyle : masterLetterRunStyle;
 
   const children: TextRun[] = [];
   lines.forEach((line, index) => {
@@ -17,9 +35,9 @@ function textBlockToParagraph(block: string, bold = false): Paragraph {
     if (line) {
       children.push(
         new TextRun({
-          ...masterLetterRunStyle,
+          ...runStyle,
           text: line,
-          bold,
+          bold: options?.bold ?? ("bold" in runStyle ? runStyle.bold : false),
         })
       );
     }
@@ -27,18 +45,81 @@ function textBlockToParagraph(block: string, bold = false): Paragraph {
 
   return new Paragraph({
     ...masterLetterParagraphStyle,
-    children: children.length > 0 ? children : [new TextRun({ ...masterLetterRunStyle, text: "" })],
+    spacing: {
+      ...masterLetterParagraphStyle.spacing,
+      before: options?.spacingBefore,
+      after: options?.spacingAfter ?? masterLetterParagraphStyle.spacing.after,
+    },
+    children:
+      children.length > 0
+        ? children
+        : [new TextRun({ ...masterLetterRunStyle, text: "" })],
   });
 }
 
+export function bodyBlocksToParagraphs(blocks: string[]): Paragraph[] {
+  return blocks.map((block) => textBlockToParagraph(block));
+}
+
+export function createRtlParagraph(
+  text: string,
+  options?: {
+    bold?: boolean;
+    spacingBefore?: number;
+    spacingAfter?: number;
+  }
+): Paragraph {
+  return textBlockToParagraph(text, options);
+}
+
+export function createAddresseeParagraphs(blocks: string[]): Paragraph[] {
+  return blocks.map((block, index) =>
+    textBlockToParagraph(index === 0 ? formatAddresseeBlock(block) : block, {
+      spacingAfter:
+        index < blocks.length - 1
+          ? MASTER_LETTER_DOCX_ADDRESSEE_BLOCK_AFTER
+          : MASTER_LETTER_DOCX_PARAGRAPH_AFTER,
+    })
+  );
+}
+
+export function createSignatureParagraph(): Paragraph {
+  const lines = [...MASTER_LETTER_DOCX_SIGNATURE_LINES];
+  const children: TextRun[] = [];
+
+  lines.forEach((line, index) => {
+    if (index > 0) {
+      children.push(
+        new TextRun({
+          ...masterLetterRunStyle,
+          break: 1,
+        })
+      );
+    }
+    children.push(
+      new TextRun({
+        ...masterLetterRunStyle,
+        text: line,
+        bold: line === MASTER_LETTER_DOCX_SIGNATURE_LINES[3],
+      })
+    );
+  });
+
+  return new Paragraph({
+    ...masterLetterParagraphStyle,
+    spacing: {
+      ...masterLetterParagraphStyle.spacing,
+      before: MASTER_LETTER_DOCX_SIGNATURE_BEFORE,
+    },
+    children,
+  });
+}
+
+/** @deprecated Use bodyBlocksToParagraphs after parseMasterLetterBodyText */
 export function bodyTextToParagraphs(bodyText: string): Paragraph[] {
   return bodyText
     .split(/\n{2,}/)
     .map((block) => block.trim())
     .filter(Boolean)
     .map((block) => textBlockToParagraph(block));
-}
-
-export function createRtlParagraph(text: string, bold = false): Paragraph {
-  return textBlockToParagraph(text, bold);
 }

@@ -1,38 +1,82 @@
 import {
-  AlignmentType,
-  convertInchesToTwip,
+  BorderStyle,
+  convertMillimetersToTwip,
   Document,
   ImageRun,
+  PageOrientation,
   Paragraph,
+  TextRun,
 } from "docx";
-import { loadMasterLetterLogo } from "./logo";
-import { bodyTextToParagraphs, createRtlParagraph } from "./rtl-paragraphs";
+import { loadMasterLetterLogo, scaleLogoTransformation } from "./logo";
+import { parseMasterLetterBodyText } from "./parse-body-text";
 import {
-  MASTER_LETTER_DOCX_PARAGRAPH_AFTER,
+  bodyBlocksToParagraphs,
+  createAddresseeParagraphs,
+  createRtlParagraph,
+  createSignatureParagraph,
+} from "./rtl-paragraphs";
+import {
+  MASTER_LETTER_DOCX_DATE_AFTER,
+  MASTER_LETTER_DOCX_LOGO_AFTER,
+  MASTER_LETTER_DOCX_SUBJECT_AFTER,
+  masterLetterParagraphAlignment,
+  masterLetterParagraphStyle,
+  masterLetterRunStyle,
+  masterLetterSubjectRunStyle,
 } from "./theme";
 
-function formatLetterDate(isoDate?: string): string {
+function formatLetterDateDdMmYyyy(isoDate?: string): string {
   const date = isoDate ? new Date(`${isoDate}T12:00:00`) : new Date();
-  return new Intl.DateTimeFormat("he-IL", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  }).format(date);
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+  return `${day}.${month}.${year}`;
 }
 
-function createLogoParagraph(logo: Awaited<ReturnType<typeof loadMasterLetterLogo>>): Paragraph {
+function createLogoParagraph(
+  logo: NonNullable<Awaited<ReturnType<typeof loadMasterLetterLogo>>>
+): Paragraph {
+  const transformation = scaleLogoTransformation(logo);
   return new Paragraph({
     bidirectional: true,
-    alignment: AlignmentType.RIGHT,
-    spacing: { after: MASTER_LETTER_DOCX_PARAGRAPH_AFTER },
+    alignment: masterLetterParagraphAlignment,
+    spacing: { after: MASTER_LETTER_DOCX_LOGO_AFTER },
     children: [
       new ImageRun({
-        type: logo!.type,
-        data: logo!.data,
-        transformation: {
-          width: 150,
-          height: 50,
-        },
+        type: logo.type,
+        data: logo.data,
+        transformation,
+      }),
+    ],
+  });
+}
+
+function createDateParagraph(isoDate?: string): Paragraph {
+  return createRtlParagraph(formatLetterDateDdMmYyyy(isoDate), {
+    spacingAfter: MASTER_LETTER_DOCX_DATE_AFTER,
+  });
+}
+
+function createSubjectParagraph(subject: string): Paragraph {
+  const text = `הנדון: ${subject.trim()}`;
+  return new Paragraph({
+    ...masterLetterParagraphStyle,
+    spacing: {
+      ...masterLetterParagraphStyle.spacing,
+      after: MASTER_LETTER_DOCX_SUBJECT_AFTER,
+    },
+    border: {
+      bottom: {
+        style: BorderStyle.SINGLE,
+        size: 4,
+        color: "999999",
+        space: 4,
+      },
+    },
+    children: [
+      new TextRun({
+        ...masterLetterSubjectRunStyle,
+        text,
       }),
     ],
   });
@@ -50,20 +94,58 @@ export async function buildMasterLetterDocxDocument(params: {
     children.push(createLogoParagraph(logo));
   }
 
-  children.push(createRtlParagraph(formatLetterDate(params.letterDate)));
-  children.push(createRtlParagraph(`הנדון: ${params.subject.trim()}`, true));
-  children.push(...bodyTextToParagraphs(params.bodyText));
+  children.push(createDateParagraph(params.letterDate));
+
+  const parsed = parseMasterLetterBodyText(params.bodyText);
+
+  if (parsed.addresseeBlocks.length > 0) {
+    children.push(...createAddresseeParagraphs(parsed.addresseeBlocks));
+  }
+
+  children.push(createSubjectParagraph(params.subject));
+
+  if (parsed.salutation) {
+    children.push(createRtlParagraph(parsed.salutation));
+  }
+
+  children.push(...bodyBlocksToParagraphs(parsed.bodyBlocks));
+
+  if (parsed.hasRecognizedSignature) {
+    children.push(createSignatureParagraph());
+  }
 
   return new Document({
+    features: {
+      updateFields: true,
+    },
+    styles: {
+      default: {
+        document: {
+          run: {
+            font: masterLetterRunStyle.font,
+            size: masterLetterRunStyle.size,
+            rightToLeft: true,
+          },
+          paragraph: {
+            alignment: masterLetterParagraphAlignment,
+          },
+        },
+      },
+    },
     sections: [
       {
         properties: {
           page: {
+            size: {
+              width: convertMillimetersToTwip(210),
+              height: convertMillimetersToTwip(297),
+              orientation: PageOrientation.PORTRAIT,
+            },
             margin: {
-              top: convertInchesToTwip(1),
-              right: convertInchesToTwip(1),
-              bottom: convertInchesToTwip(1),
-              left: convertInchesToTwip(1),
+              top: convertMillimetersToTwip(25),
+              right: convertMillimetersToTwip(25),
+              bottom: convertMillimetersToTwip(25),
+              left: convertMillimetersToTwip(25),
             },
           },
         },
