@@ -48,6 +48,7 @@ import {
   buildClosedFault,
   faultIndicatesDisabledElevator,
 } from "../lib/fault-lifecycle";
+import { runAppVersionQa } from "./qa-app-version";
 import { getFaultLifecycleStats } from "../lib/fault-stats";
 import {
   buildFaultFromSubmission,
@@ -5285,6 +5286,8 @@ assert(
   BRAND_EDITOR_TITLE === "שמאות וליווי מקצועי למעליות",
   "מיתוג: תואר רשמי"
 );
+
+runAppVersionQa(assert);
 
 console.log(`\n=== סיכום: ${passed} עברו, ${failed} נכשלו ===`);
 console.log(`=== מיתוג: ${brandFiles.length} קבצים נסרקו ===\n`);

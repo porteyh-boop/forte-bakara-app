@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useAppVersion } from "@/components/AppVersionProvider";
 import { faultTypes } from "@/lib/data";
 import {
   buildFaultFromSubmission,
@@ -26,6 +27,7 @@ function elevatorStatusLabel(status: string): string {
 }
 
 export default function ReportForm() {
+  const { guardSensitiveAction } = useAppVersion();
   const { buildingId, ctx } = useBuilding();
   const { elevators, ready } = useRuntimeBuildingContext();
   const [elevatorId, setElevatorId] = useState("");
@@ -58,6 +60,7 @@ export default function ReportForm() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!isValid || !selectedElevator || submitting) return;
+    if (!guardSensitiveAction()) return;
 
     setSubmitting(true);
 

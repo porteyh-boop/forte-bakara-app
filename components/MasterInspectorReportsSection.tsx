@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useAppVersion } from "@/components/AppVersionProvider";
 import {
   closeInspectorReport,
   computeInspectorFollowUpPhase,
@@ -50,6 +51,7 @@ export default function MasterInspectorReportsSection({
   fixedBuildingId,
   embedded = false,
 }: MasterInspectorReportsSectionProps) {
+  const { guardSensitiveAction } = useAppVersion();
   const cloudReady = isInspectorReportTrackingConfigured();
   const [reports, setReports] = useState<InspectorReportRecord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -153,6 +155,8 @@ export default function MasterInspectorReportsSection({
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
+    if (!guardSensitiveAction()) return;
+
     setMessage(null);
     setUploadProgress(null);
 

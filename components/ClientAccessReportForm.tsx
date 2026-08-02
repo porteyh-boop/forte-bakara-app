@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useAppVersion } from "@/components/AppVersionProvider";
 import { faultTypes } from "@/lib/data";
 import {
   buildFaultFromSubmission,
@@ -37,6 +38,7 @@ export default function ClientAccessReportForm({
   onSubmitted,
   onSubmitSuccess,
 }: ClientAccessReportFormProps) {
+  const { guardSensitiveAction } = useAppVersion();
   const [elevatorId, setElevatorId] = useState(
     lockedElevatorId ?? elevators[0]?.id ?? ""
   );
@@ -67,6 +69,7 @@ export default function ClientAccessReportForm({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!isValid || !selectedElevator || submitting) return;
+    if (!guardSensitiveAction()) return;
 
     setSubmitting(true);
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useAppVersion } from "@/components/AppVersionProvider";
 import {
   collectDocumentTags,
   createDocument,
@@ -95,6 +96,7 @@ function resolveElevatorOptions(
 }
 
 export default function MasterDocumentCenterSection() {
+  const { guardSensitiveAction } = useAppVersion();
   const cloudReady = isDocumentCenterConfigured();
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -283,6 +285,8 @@ export default function MasterDocumentCenterSection() {
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
+    if (!guardSensitiveAction()) return;
+
     setMessage(null);
     setUploadProgress(null);
 

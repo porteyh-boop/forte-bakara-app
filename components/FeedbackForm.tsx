@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useAppVersion } from "@/components/AppVersionProvider";
 import { useBuilding } from "@/components/BuildingProvider";
 import {
   isFeedbackFormValid,
@@ -76,6 +77,7 @@ export default function FeedbackForm({
   buildingName: buildingNameProp,
   buildingCode: buildingCodeProp,
 }: FeedbackFormProps) {
+  const { guardSensitiveAction } = useAppVersion();
   const buildingFromContext = useBuilding();
   const usePortalBuilding = Boolean(
     buildingIdProp?.trim() && buildingNameProp?.trim()
@@ -123,6 +125,8 @@ export default function FeedbackForm({
       setError("נא למלא את כל השדות החובה לפני השליחה.");
       return;
     }
+
+    if (!guardSensitiveAction()) return;
 
     setSubmitting(true);
     const saved = saveFeedbackAndNotify(input, buildingId, buildingName);

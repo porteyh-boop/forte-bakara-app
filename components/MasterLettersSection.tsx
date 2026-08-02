@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useAppVersion } from "@/components/AppVersionProvider";
 import MasterLetterForm, {
   buildLetterDraftFromForm,
 } from "@/components/MasterLetterForm";
@@ -68,6 +69,7 @@ function resolveElevatorOptions(
 }
 
 export default function MasterLettersSection() {
+  const { guardSensitiveAction } = useAppVersion();
   const documentCenterReady = isDocumentCenterConfigured();
   const cloudReadyForBuildings = isPilotCloudConfigured();
 
@@ -204,6 +206,8 @@ export default function MasterLettersSection() {
   }
 
   async function handleSaveLetter() {
+    if (!guardSensitiveAction()) return;
+
     setMessage(null);
     setError(null);
 

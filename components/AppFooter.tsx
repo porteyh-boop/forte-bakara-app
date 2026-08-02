@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { useAppVersion } from "@/components/AppVersionProvider";
 import {
   BRAND_APP,
   BRAND_EDITOR_NAME,
@@ -8,9 +9,11 @@ import {
   BRAND_FORTE,
 } from "@/lib/brand";
 import { isClientAccessPath } from "@/lib/client-access";
+import { VERSION_DISPLAY_LABEL } from "@/lib/app-version-messages";
 
 export default function AppFooter() {
   const pathname = usePathname();
+  const { displayVersion } = useAppVersion();
   if (isClientAccessPath(pathname)) return null;
 
   return (
@@ -21,6 +24,9 @@ export default function AppFooter() {
         {BRAND_FORTE}
       </p>
       <p className="text-[10px] text-gray-text mt-1">{BRAND_APP}</p>
+      <p className="text-[10px] text-gray-text/80 mt-2">
+        {VERSION_DISPLAY_LABEL} {displayVersion}
+      </p>
     </footer>
   );
 }
