@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { spawnSync } from "child_process";
 import { APP_ROLE } from "../lib/config";
 import {
   BRAND_EDITOR_NAME,
@@ -231,7 +232,6 @@ import {
 } from "../lib/master-letters";
 import {
   buildMasterLetterFileName,
-  createMasterLetterDocFile,
 } from "../lib/master-letter-export";
 import {
   buildDocumentInspectorMetaInsertRow,
@@ -4426,6 +4426,7 @@ assert(
     masterLetterForm.includes("letter-template") &&
     masterLettersSection.includes("MASTER_LETTER_TEMPLATES.map") &&
     masterLettersLib.includes("uploadDocumentCenterFile") &&
+    masterLettersLib.includes("await createMasterLetterDocFile") &&
     masterLettersLib.includes("createDocument") &&
     masterLettersLib.includes('documentType: "correspondence"') &&
     masterLettersLib.includes("tags: [MASTER_LETTER_TAG]") &&
@@ -4496,8 +4497,8 @@ assert(
       buildingId: "md25",
       title: "מכתב מעקב",
       date: new Date("2026-06-05T10:00:00.000Z"),
-    }).endsWith(".doc"),
-  "Master Letters: תצוגה מקדימה ושם קובץ .doc"
+    }).endsWith(".docx"),
+  "Master Letters: תצוגה מקדימה ושם קובץ .docx"
 );
 const sampleLetterPreview = buildMasterLetterPreview({
   templateId: MASTER_LETTER_TEMPLATE_BUILDING_FOLLOW_UP,
@@ -4526,20 +4527,42 @@ assert(
     }).includes("מעלית ימין"),
   "Master Letters: תבנית building_follow_up"
 );
-const sampleLetterFile = createMasterLetterDocFile({
-  subject: sampleLetterPreview.subject,
-  bodyText: sampleLetterPreview.bodyText,
-  buildingId: "md25",
-  title: "מכתב מעקב — ישורון 34",
-});
+const sampleLetterDocxProbe = spawnSync(
+  process.platform === "win32" ? "npx.cmd" : "npx",
+  ["tsx", path.join(process.cwd(), "scripts/qa-master-letter-docx-probe.ts")],
+  { encoding: "utf8", cwd: process.cwd(), shell: process.platform === "win32" }
+);
+if (sampleLetterDocxProbe.status !== 0) {
+  failed++;
+  console.error(
+    "✗ Master Letters: יצירת DOCX נכשלה",
+    sampleLetterDocxProbe.stderr || sampleLetterDocxProbe.stdout
+  );
+}
+const sampleLetterProbe = (() => {
+  try {
+    return JSON.parse(sampleLetterDocxProbe.stdout.trim()) as {
+      name: string;
+      type: string;
+      size: number;
+      magic: number[];
+    };
+  } catch {
+    return null;
+  }
+})();
 assert(
-  sampleLetterFile.name.endsWith(".doc") &&
-    sampleLetterFile.type === "application/msword" &&
-    sampleLetterFile.size > 0 &&
+  sampleLetterProbe !== null &&
+    sampleLetterProbe.name.endsWith(".docx") &&
+    sampleLetterProbe.type ===
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document" &&
+    sampleLetterProbe.size > 0 &&
+    sampleLetterProbe.magic[0] === 0x50 &&
+    sampleLetterProbe.magic[1] === 0x4b &&
     validateDocumentCenterFile({
-      name: sampleLetterFile.name,
-      type: sampleLetterFile.type,
-      size: sampleLetterFile.size,
+      name: sampleLetterProbe.name,
+      type: sampleLetterProbe.type,
+      size: sampleLetterProbe.size,
     }) === null &&
     filterDocuments(
       [
@@ -4552,7 +4575,7 @@ assert(
       ],
       { tags: [MASTER_LETTER_TAG] }
     ).length === 1,
-  "Master Letters: קובץ .doc תקין + סינון תגית מכתב במאגר"
+  "Master Letters: קובץ .docx תקין (OOXML/ZIP) + סינון תגית מכתב במאגר"
 );
 
 assert(

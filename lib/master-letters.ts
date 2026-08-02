@@ -386,11 +386,12 @@ export async function saveMasterLetterToDocumentCenter(
 
   const preview = buildMasterLetterPreview(input);
   const template = getMasterLetterTemplate(input.templateId);
-  const file = createMasterLetterDocFile({
+  const file = await createMasterLetterDocFile({
     subject: preview.subject,
     bodyText: preview.bodyText,
     buildingId,
     title,
+    letterDate: input.letterDate,
   });
 
   const upload = await uploadDocumentCenterFile(file, buildingId);
