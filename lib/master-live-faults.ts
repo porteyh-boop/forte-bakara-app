@@ -24,6 +24,9 @@ export function mapDemoFaultToPilot(
     closed_at: fault.resolvedAt ?? null,
     source_device_id: null,
     fault_source: null,
+    treatment_note: null,
+    closure_note: null,
+    treatment_started_at: null,
   };
 }
 

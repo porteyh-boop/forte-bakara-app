@@ -1,12 +1,26 @@
 import { BRAND_EDITOR_NAME } from "./brand";
 import {
   createDocument,
+  deleteDocument,
   filterDocuments,
   getAllDocuments,
+  getDocumentById,
   uploadDocumentCenterFile,
   type DocumentRecord,
 } from "./document-center";
+import { deleteInspectorLetterPreparedEvidence } from "./document-inspector-notifications";
 import { createMasterLetterDocFile } from "./master-letter-export";
+import {
+  buildMasterLetterAiMetadata,
+  parseMasterLetterMetadata,
+  type MasterLetterDossierSection,
+  type MasterLetterInspectorFollowUpMetadata,
+  type MasterLetterRecipientSnapshot,
+  type MasterLetterStoredMetadata,
+} from "./master-letter-metadata";
+import {
+  getProjectV2SectionTag,
+} from "./project-v2-document-sections";
 import {
   getMasterLetterTemplate,
   MASTER_LETTER_TEMPLATE_BUILDING_FOLLOW_UP,
@@ -44,6 +58,12 @@ export interface MasterLetterBuildingContext {
   managementCompany?: string | null;
 }
 
+export type { MasterLetterDossierSection } from "./master-letter-metadata";
+export {
+  getMasterLetterListDisplay,
+  parseMasterLetterMetadata,
+} from "./master-letter-metadata";
+
 export interface MasterLetterDraftInput {
   templateId: MasterLetterTemplateId;
   subject: string;
@@ -53,6 +73,10 @@ export interface MasterLetterDraftInput {
   customNote?: string;
   letterDate?: string;
   templateFields?: Record<string, MasterLetterFieldValue>;
+  recipients?: MasterLetterRecipientSnapshot[];
+  cc?: MasterLetterRecipientSnapshot[];
+  section?: MasterLetterDossierSection;
+  inspectorFollowUp?: MasterLetterInspectorFollowUpMetadata | null;
 }
 
 export interface SaveMasterLetterInput extends MasterLetterDraftInput {
@@ -128,6 +152,14 @@ function defaultRecipient(building: MasterLetterBuildingContext): string {
     : "לכבוד ועד הבית / חברת הניהול";
 }
 
+function resolvePrimaryAddressee(
+  input: MasterLetterDraftInput,
+  fallback: string
+): string {
+  const first = input.recipients?.[0];
+  return first?.addresseeLine?.trim() || fallback;
+}
+
 function joinParagraphs(paragraphs: string[]): string {
   return paragraphs.filter(Boolean).join("\n\n").trim();
 }
@@ -135,7 +167,7 @@ function joinParagraphs(paragraphs: string[]): string {
 function buildBuildingFollowUpBody(input: MasterLetterDraftInput): string {
   const dateLabel = formatLetterDate(input.letterDate);
   const addressLine = buildingAddressLine(input.building);
-  const recipient = defaultRecipient(input.building);
+  const recipient = resolvePrimaryAddressee(input, defaultRecipient(input.building));
   const elevatorLine = input.elevatorName?.trim()
     ? `המכתב מתייחס למעלית: ${input.elevatorName.trim()}.`
     : "";
@@ -183,7 +215,10 @@ function buildInspectorFindingsBody(input: MasterLetterDraftInput): string {
   }
 
   const paragraphs = [
-    companyName ? `לכבוד חברת ${companyName}` : "לכבוד חברת המעליות",
+    resolvePrimaryAddressee(
+      input,
+      companyName ? `לכבוד חברת ${companyName}` : "לכבוד חברת המעליות"
+    ),
     `${input.building.buildingName} · ${buildingAddress}`,
     ccLines.length > 0 ? `העתק: ${ccLines.join(" · ")}` : "",
     "שלום רב,",
@@ -214,7 +249,10 @@ function buildElevatorCompanyResponseBody(input: MasterLetterDraftInput): string
   const addressLine = buildingAddressLine(input.building);
 
   return joinParagraphs([
-    companyName ? `לכבוד חברת ${companyName}` : "לכבוד חברת המעליות",
+    resolvePrimaryAddressee(
+      input,
+      companyName ? `לכבוד חברת ${companyName}` : "לכבוד חברת המעליות"
+    ),
     `${input.building.buildingName} · ${addressLine}`,
     "שלום רב,",
     `בהמשך לבקרת שירות המעליות בבניין ${input.building.buildingName}, אנו פונים אליכם בנושא: ${issueTopic}.`,
@@ -237,7 +275,7 @@ function buildVisitSummaryBody(input: MasterLetterDraftInput): string {
   const addressLine = buildingAddressLine(input.building);
 
   return joinParagraphs([
-    defaultRecipient(input.building),
+    resolvePrimaryAddressee(input, defaultRecipient(input.building)),
     `${input.building.buildingName} · ${addressLine}`,
     "שלום רב,",
     `להלן סיכום הביקור המקצועי שבוצע בבניין ${input.building.buildingName} ביום ${visitDate}.`,
@@ -262,7 +300,7 @@ function buildPriceProposalReviewBody(input: MasterLetterDraftInput): string {
   const addressLine = buildingAddressLine(input.building);
 
   return joinParagraphs([
-    defaultRecipient(input.building),
+    resolvePrimaryAddressee(input, defaultRecipient(input.building)),
     `${input.building.buildingName} · ${addressLine}`,
     "שלום רב,",
     `להלן התייחסותנו להצעת המחיר שהתקבלה מ${vendorName} ביום ${proposalDate}, בסך ${proposalAmount} ₪.`,
@@ -282,7 +320,10 @@ function buildRecurringFaultsBody(input: MasterLetterDraftInput): string {
   const addressLine = buildingAddressLine(input.building);
 
   return joinParagraphs([
-    companyName ? `לכבוד חברת ${companyName}` : "לכבוד חברת המעליות",
+    resolvePrimaryAddressee(
+      input,
+      companyName ? `לכבוד חברת ${companyName}` : "לכבוד חברת המעליות"
+    ),
     `${input.building.buildingName} · ${addressLine}`,
     "שלום רב,",
     `בהמשך לבקרת שירות המעליות בבניין ${input.building.buildingName}, אנו מעלים את תשומת לבכם לתקלה חוזרת שדווחה ${recurrenceCount} פעמים.`,
@@ -386,18 +427,47 @@ export async function saveMasterLetterToDocumentCenter(
 
   const preview = buildMasterLetterPreview(input);
   const template = getMasterLetterTemplate(input.templateId);
+  const section = input.section ?? "general";
+  const recipients = input.recipients ?? [];
+  const cc = input.cc ?? [];
   const file = await createMasterLetterDocFile({
     subject: preview.subject,
     bodyText: preview.bodyText,
     buildingId,
     title,
     letterDate: input.letterDate,
+    recipients,
+    cc,
   });
 
   const upload = await uploadDocumentCenterFile(file, buildingId);
   if (!upload.ok) {
     return { document: null, error: upload.error };
   }
+
+  const tags: string[] = [MASTER_LETTER_TAG];
+  if (section === "inspections") {
+    tags.push(getProjectV2SectionTag("inspections"));
+  } else if (section === "faults") {
+    tags.push(getProjectV2SectionTag("faults"));
+  }
+
+  const letterMetadata: MasterLetterStoredMetadata = {
+    schemaVersion: 1,
+    templateId: input.templateId,
+    subject: preview.subject,
+    section,
+    recipients,
+    cc,
+    templateFields: input.templateFields,
+    customNote: input.customNote?.trim() || null,
+    letterDate: input.letterDate ?? null,
+    elevatorId: input.elevatorId?.trim() || null,
+    elevatorName: input.elevatorName?.trim() || null,
+    bodyText: preview.bodyText,
+    generatedAt: new Date().toISOString(),
+    inspectorFollowUp: input.inspectorFollowUp ?? null,
+  };
 
   const create = await createDocument({
     buildingId,
@@ -410,8 +480,9 @@ export async function saveMasterLetterToDocumentCenter(
     storagePath: upload.storagePath,
     mimeType: upload.contentType,
     fileSizeBytes: file.size,
-    tags: [MASTER_LETTER_TAG],
+    tags,
     visibility: "internal",
+    aiMetadata: buildMasterLetterAiMetadata(letterMetadata),
   });
 
   if (!create.document) {
@@ -422,4 +493,37 @@ export async function saveMasterLetterToDocumentCenter(
   }
 
   return { document: create.document, error: null };
+}
+
+export async function deleteSavedMasterLetter(documentId: string): Promise<{
+  ok: boolean;
+  error: string | null;
+}> {
+  const document = await getDocumentById(documentId);
+  if (!document) {
+    return { ok: false, error: "המכתב לא נמצא." };
+  }
+
+  if (!document.tags?.includes(MASTER_LETTER_TAG)) {
+    return { ok: false, error: "מסמך זה אינו מכתב שמור." };
+  }
+
+  const followUp = parseMasterLetterMetadata(document)?.inspectorFollowUp;
+
+  const deleted = await deleteDocument(documentId);
+  if (!deleted) {
+    return { ok: false, error: "מחיקת המכתב נכשלה." };
+  }
+
+  if (followUp?.reportDocumentId && followUp.letterStage) {
+    const stage = followUp.letterStage;
+    if (stage === "letter_1" || stage === "letter_2" || stage === "letter_3") {
+      await deleteInspectorLetterPreparedEvidence({
+        documentId: followUp.reportDocumentId,
+        letterStage: stage,
+      });
+    }
+  }
+
+  return { ok: true, error: null };
 }

@@ -45,11 +45,13 @@ function resolveBuildingAddress(buildingId: string): string | undefined {
 interface MasterInspectorReportsSectionProps {
   fixedBuildingId?: string;
   embedded?: boolean;
+  showMigrationBanner?: boolean;
 }
 
 export default function MasterInspectorReportsSection({
   fixedBuildingId,
   embedded = false,
+  showMigrationBanner = true,
 }: MasterInspectorReportsSectionProps) {
   const { guardSensitiveAction } = useAppVersion();
   const cloudReady = isInspectorReportTrackingConfigured();
@@ -270,6 +272,7 @@ export default function MasterInspectorReportsSection({
 
   return (
     <div className="space-y-4">
+      {showMigrationBanner && (
       <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-1">
         <p className="text-sm font-bold text-amber-900">תסקירי בודק עברו למאגר מסמכים</p>
         <p className="text-sm text-amber-900/90">
@@ -277,6 +280,7 @@ export default function MasterInspectorReportsSection({
           טאב זה נשאר זמנית לתקופת מעבר — תסקירים ישנים ממשיכים להופיע כאן.
         </p>
       </div>
+      )}
 
       <div className="bg-white rounded-2xl border border-gold/30 p-4 space-y-2">
         <h2 className="text-base font-bold text-navy">

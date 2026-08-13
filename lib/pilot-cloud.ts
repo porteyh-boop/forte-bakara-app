@@ -1,6 +1,9 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { getOrCreatePilotDeviceId } from "./pilot-device";
-import { sendTelegramNotification } from "./telegram";
+import {
+  dispatchFaultNotification,
+  pilotFaultToNotificationInput,
+} from "./fault-notification-client";
 import type { Fault } from "./types";
 import type { FeedbackSubmissionInput } from "./types";
 
@@ -25,6 +28,35 @@ export interface PilotCloudFault {
   closed_at: string | null;
   source_device_id: string | null;
   fault_source: string | null;
+  treatment_note: string | null;
+  closure_note: string | null;
+  treatment_started_at: string | null;
+}
+
+export function mapPilotFaultRow(row: Record<string, unknown>): PilotCloudFault {
+  return {
+    id: String(row.id),
+    building_id: String(row.building_id ?? ""),
+    building_name: String(row.building_name ?? ""),
+    elevator_id: String(row.elevator_id ?? ""),
+    elevator_name: String(row.elevator_name ?? ""),
+    fault_type: String(row.fault_type ?? ""),
+    description: String(row.description ?? ""),
+    is_disabled: Boolean(row.is_disabled),
+    status: String(row.status ?? "פתוחה"),
+    ticket_number: row.ticket_number ? String(row.ticket_number) : null,
+    image_data: row.image_data ? String(row.image_data) : null,
+    image_url: row.image_url ? String(row.image_url) : null,
+    created_at: String(row.created_at ?? new Date().toISOString()),
+    closed_at: row.closed_at ? String(row.closed_at) : null,
+    source_device_id: row.source_device_id ? String(row.source_device_id) : null,
+    fault_source: row.fault_source ? String(row.fault_source) : null,
+    treatment_note: row.treatment_note ? String(row.treatment_note) : null,
+    closure_note: row.closure_note ? String(row.closure_note) : null,
+    treatment_started_at: row.treatment_started_at
+      ? String(row.treatment_started_at)
+      : null,
+  };
 }
 
 export interface PilotCloudFeedback {
@@ -206,17 +238,14 @@ export async function savePilotFault(
     return null;
   }
 
-  console.log("[TRACE] before sendTelegramNotification");
+  console.log("[TRACE] before dispatchFaultNotification");
 
-  void sendTelegramNotification({
-    ticketNumber: String(data.ticket_number ?? data.id),
-    buildingName: String(data.building_name ?? input.buildingName),
-    elevatorName: String(data.elevator_name ?? input.elevatorName),
-    description: String(data.description ?? input.description),
-    createdAt: String(data.created_at ?? new Date().toISOString()),
-  });
+  const mapped = mapPilotFaultRow(data as Record<string, unknown>);
+  dispatchFaultNotification(
+    pilotFaultToNotificationInput(mapped, "FAULT_CREATED")
+  );
 
-  return data as PilotCloudFault;
+  return mapped;
 }
 
 export function savePilotFaultFromLocalFault(
@@ -287,7 +316,9 @@ export async function getAllPilotFaults(): Promise<PilotCloudFault[]> {
     return [];
   }
 
-  return (data ?? []) as PilotCloudFault[];
+  return (data ?? []).map((row) =>
+    mapPilotFaultRow(row as Record<string, unknown>)
+  );
 }
 
 /** null = שגיאת רשת/ענן — יש לשמור על localStorage */
@@ -311,7 +342,9 @@ export async function getPilotFaultsForBuilding(
     return null;
   }
 
-  return (data ?? []) as PilotCloudFault[];
+  return (data ?? []).map((row) =>
+    mapPilotFaultRow(row as Record<string, unknown>)
+  );
 }
 
 export async function getAllPilotFeedback(): Promise<PilotCloudFeedback[]> {
@@ -340,17 +373,73 @@ export async function getAllPilotFeedback(): Promise<PilotCloudFeedback[]> {
   return mapped;
 }
 
-export async function closePilotFault(id: string): Promise<boolean> {
+export async function startPilotFaultTreatment(
+  id: string,
+  options?: { treatmentNote?: string | null }
+): Promise<boolean> {
+  const client = getPilotSupabaseClient();
+  if (!client) return false;
+
+  const payload: Record<string, unknown> = {
+    status: "בטיפול",
+    treatment_started_at: new Date().toISOString(),
+  };
+
+  if (options && "treatmentNote" in options) {
+    payload.treatment_note = options.treatmentNote?.trim() || null;
+  }
+
+  const { error } = await client
+    .from(PILOT_FAULTS_TABLE)
+    .update(payload)
+    .eq("id", id);
+
+  if (error) {
+    console.warn("[pilot-cloud] startPilotFaultTreatment failed:", error.message);
+    return false;
+  }
+  return true;
+}
+
+export async function updatePilotFaultTreatmentNote(
+  id: string,
+  treatmentNote: string
+): Promise<boolean> {
   const client = getPilotSupabaseClient();
   if (!client) return false;
 
   const { error } = await client
     .from(PILOT_FAULTS_TABLE)
-    .update({
-      status: "סגורה",
-      closed_at: new Date().toISOString(),
-    })
+    .update({ treatment_note: treatmentNote.trim() || null })
     .eq("id", id);
+
+  if (error) {
+    console.warn(
+      "[pilot-cloud] updatePilotFaultTreatmentNote failed:",
+      error.message
+    );
+    return false;
+  }
+  return true;
+}
+
+export async function closePilotFault(
+  id: string,
+  options?: { closureNote?: string | null }
+): Promise<boolean> {
+  const client = getPilotSupabaseClient();
+  if (!client) return false;
+
+  const payload: Record<string, unknown> = {
+    status: "סגורה",
+    closed_at: new Date().toISOString(),
+  };
+
+  if (options?.closureNote !== undefined) {
+    payload.closure_note = options.closureNote?.trim() || null;
+  }
+
+  const { error } = await client.from(PILOT_FAULTS_TABLE).update(payload).eq("id", id);
 
   if (error) {
     console.warn("[pilot-cloud] closePilotFault failed:", error.message);

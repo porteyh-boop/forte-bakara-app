@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { Suspense } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 import { isClientAccessPath } from "@/lib/client-access";
 import { isExpert } from "@/lib/roles";
+import { isMasterUiV2Enabled } from "@/lib/master-ui-v2";
 
 const NAV_ICON_CLASS = "w-[23px] h-[23px]";
 const FEEDBACK_ICON_CLASS = "w-[25px] h-[25px]";
@@ -82,8 +84,19 @@ const expertNavItem = {
 };
 
 export default function BottomNav() {
+  return (
+    <Suspense fallback={null}>
+      <BottomNavInner />
+    </Suspense>
+  );
+}
+
+function BottomNavInner() {
   const pathname = usePathname();
-  if (isClientAccessPath(pathname)) return null;
+  const searchParams = useSearchParams();
+  if (isClientAccessPath(pathname) || pathname.startsWith("/forte")) return null;
+  if (pathname === "/master" && isMasterUiV2Enabled(searchParams)) return null;
+  if (pathname.startsWith("/master/project-v2")) return null;
   const showExpert = isExpert();
   const navItems = showExpert
     ? [...baseNavItems, expertNavItem]

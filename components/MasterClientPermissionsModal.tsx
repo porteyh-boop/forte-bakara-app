@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import ClientPermissionsFieldList from "@/components/ClientPermissionsFieldList";
 import {
-  CLIENT_PERMISSION_KEYS,
-  CLIENT_PERMISSION_LABELS,
   getClientPermissionsOrDefaults,
   saveClientPermissions,
   type ClientPermissionFlags,
+  type ClientPermissionKey,
 } from "@/lib/client-permissions";
 
 interface MasterClientPermissionsModalProps {
@@ -66,7 +66,8 @@ export default function MasterClientPermissionsModal({
     onClose();
   }
 
-  function toggleFlag(key: keyof ClientPermissionFlags) {
+  function toggleFlag(key: ClientPermissionKey) {
+    if (key === "can_receive_notifications") return;
     setFlags((current) =>
       current ? { ...current, [key]: !current[key] } : current
     );
@@ -94,31 +95,7 @@ export default function MasterClientPermissionsModal({
         {loading || !flags ? (
           <p className="text-sm text-gray-text">טוען הרשאות...</p>
         ) : (
-          <div className="space-y-3">
-            {CLIENT_PERMISSION_KEYS.map((key) => (
-              <label
-                key={key}
-                className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 px-3 py-2.5"
-              >
-                <span className="text-sm text-navy">{CLIENT_PERMISSION_LABELS[key]}</span>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={flags[key]}
-                  onClick={() => toggleFlag(key)}
-                  className={`relative w-12 h-7 rounded-full transition-colors shrink-0 ${
-                    flags[key] ? "bg-navy" : "bg-gray-300"
-                  }`}
-                >
-                  <span
-                    className={`absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-all duration-200 ${
-                      flags[key] ? "end-0.5" : "end-5"
-                    }`}
-                  />
-                </button>
-              </label>
-            ))}
-          </div>
+          <ClientPermissionsFieldList flags={flags} onToggle={toggleFlag} />
         )}
 
         {error && <p className="text-sm text-red-600">{error}</p>}

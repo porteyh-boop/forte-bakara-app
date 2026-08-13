@@ -1,18 +1,32 @@
 "use client";
 
+import MasterLetterPartyEditor, {
+  snapshotsPreviewLines,
+} from "@/components/MasterLetterPartyEditor";
 import {
   buildMasterLetterPreview,
   type MasterLetterBuildingContext,
   type MasterLetterDraftInput,
+  type MasterLetterDossierSection,
   type MasterLetterFieldValue,
   type MasterLetterTemplateId,
 } from "@/lib/master-letters";
+import {
+  MASTER_LETTER_DOSSIER_SECTION_LABELS,
+  MASTER_LETTER_DOSSIER_SECTIONS,
+} from "@/lib/master-letter-metadata";
+import {
+  collectUsedContactRelationIds,
+  resolvePartySnapshots,
+  type MasterLetterPartyEntry,
+} from "@/lib/master-letter-parties";
 import {
   getMasterLetterTemplate,
   MASTER_LETTER_TEMPLATES,
   type MasterLetterTemplateField,
 } from "@/lib/master-letter-templates";
 import type { MasterBuildingSearchHit } from "@/lib/master-building-search";
+import type { ProjectContactWithDetails } from "@/lib/contacts";
 import MasterExistingBuildingSearch, {
   MasterBuildingProfileCard,
 } from "@/components/MasterExistingBuildingSearch";
@@ -21,6 +35,8 @@ import type { MasterBuildingEntry } from "@/lib/master-buildings-list";
 interface MasterLetterFormProps {
   entries: MasterBuildingEntry[];
   resolveElevatorCount: (buildingId: string) => number;
+  fixedBuildingId?: string;
+  projectContacts?: ProjectContactWithDetails[];
   templateId: MasterLetterTemplateId;
   onTemplateIdChange: (templateId: MasterLetterTemplateId) => void;
   templateFields: Record<string, MasterLetterFieldValue>;
@@ -36,6 +52,12 @@ interface MasterLetterFormProps {
   onSubjectChange: (subject: string) => void;
   customNote: string;
   onCustomNoteChange: (note: string) => void;
+  recipientEntries: MasterLetterPartyEntry[];
+  onRecipientEntriesChange: (entries: MasterLetterPartyEntry[]) => void;
+  ccEntries: MasterLetterPartyEntry[];
+  onCcEntriesChange: (entries: MasterLetterPartyEntry[]) => void;
+  dossierSection: MasterLetterDossierSection;
+  onDossierSectionChange: (section: MasterLetterDossierSection) => void;
   showPreview: boolean;
   onTogglePreview: () => void;
 }
@@ -143,12 +165,22 @@ export function buildLetterDraftFromForm(params: {
   elevatorOptions: Array<{ id: string; name: string }>;
   subject: string;
   customNote: string;
+  recipientEntries: MasterLetterPartyEntry[];
+  ccEntries: MasterLetterPartyEntry[];
+  projectContacts: ProjectContactWithDetails[];
+  dossierSection: MasterLetterDossierSection;
 }): MasterLetterDraftInput | null {
   if (!params.selectedBuildingHit) return null;
 
   const elevatorName =
     params.elevatorOptions.find((elevator) => elevator.id === params.elevatorId)
       ?.name ?? null;
+
+  const recipients = resolvePartySnapshots(
+    params.recipientEntries,
+    params.projectContacts
+  );
+  const cc = resolvePartySnapshots(params.ccEntries, params.projectContacts);
 
   return {
     templateId: params.templateId,
@@ -158,12 +190,17 @@ export function buildLetterDraftFromForm(params: {
     elevatorId: params.elevatorId.trim() || null,
     elevatorName,
     customNote: params.customNote,
+    recipients,
+    cc,
+    section: params.dossierSection,
   };
 }
 
 export default function MasterLetterForm({
   entries,
   resolveElevatorCount,
+  fixedBuildingId,
+  projectContacts = [],
   templateId,
   onTemplateIdChange,
   templateFields,
@@ -179,6 +216,12 @@ export default function MasterLetterForm({
   onSubjectChange,
   customNote,
   onCustomNoteChange,
+  recipientEntries,
+  onRecipientEntriesChange,
+  ccEntries,
+  onCcEntriesChange,
+  dossierSection,
+  onDossierSectionChange,
   showPreview,
   onTogglePreview,
 }: MasterLetterFormProps) {
@@ -191,16 +234,26 @@ export default function MasterLetterForm({
     elevatorOptions,
     subject,
     customNote,
+    recipientEntries,
+    ccEntries,
+    projectContacts,
+    dossierSection,
   });
   const preview = draft ? buildMasterLetterPreview(draft) : null;
+  const partyPreview =
+    draft?.recipients && draft.recipients.length > 0
+      ? snapshotsPreviewLines(draft.recipients, draft.cc ?? [])
+      : [];
   const visibleFields =
-    template?.fields.filter((field) => isFieldVisible(field, templateFields)) ?? [];
+    template?.fields.filter((field) => isFieldVisible(field, templateFields)) ??
+    [];
+  const recipientBlockedForCc = collectUsedContactRelationIds(recipientEntries);
 
   return (
     <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-4">
       <div>
         <label className="form-label" htmlFor="letter-template">
-          תבנית מכתב
+          סוג / תבנית מכתב
         </label>
         <select
           id="letter-template"
@@ -222,8 +275,49 @@ export default function MasterLetterForm({
       </div>
 
       <div>
+        <label className="form-label" htmlFor="letter-dossier-section">
+          תחום בתיק הבניין
+        </label>
+        <select
+          id="letter-dossier-section"
+          value={dossierSection}
+          onChange={(event) =>
+            onDossierSectionChange(event.target.value as MasterLetterDossierSection)
+          }
+          className="form-input"
+        >
+          {MASTER_LETTER_DOSSIER_SECTIONS.map((section) => (
+            <option key={section} value={section}>
+              {MASTER_LETTER_DOSSIER_SECTION_LABELS[section]}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <MasterLetterPartyEditor
+        title="נמענים"
+        primaryLabel="נמען ראשי"
+        addLabel="+ הוסף נמען"
+        entries={recipientEntries}
+        onChange={onRecipientEntriesChange}
+        projectContacts={projectContacts}
+        blockedContactRelationIds={new Set()}
+      />
+
+      <MasterLetterPartyEditor
+        title="עותק"
+        rowLabel="עותק"
+        addLabel="+ הוסף עותק"
+        entries={ccEntries}
+        onChange={onCcEntriesChange}
+        projectContacts={projectContacts}
+        blockedContactRelationIds={recipientBlockedForCc}
+        allowEmpty
+      />
+
+      <div>
         <label className="form-label" htmlFor="letter-title">
-          כותרת המכתב (למאגר המסמכים)
+          כותרת (לתיק הבניין)
         </label>
         <input
           id="letter-title"
@@ -249,19 +343,28 @@ export default function MasterLetterForm({
         />
       </div>
 
-      <div className="space-y-2">
-        <p className="form-label mb-0">בניין</p>
-        <MasterExistingBuildingSearch
-          entries={entries}
-          resolveElevatorCount={resolveElevatorCount}
-          selectedHit={selectedBuildingHit}
-          onSelectHit={onSelectBuildingHit}
-          mode="select"
-        />
-        {selectedBuildingHit && (
-          <MasterBuildingProfileCard profile={selectedBuildingHit.profile} compact />
-        )}
-      </div>
+      {!fixedBuildingId ? (
+        <div className="space-y-2">
+          <p className="form-label mb-0">בניין</p>
+          <MasterExistingBuildingSearch
+            entries={entries}
+            resolveElevatorCount={resolveElevatorCount}
+            selectedHit={selectedBuildingHit}
+            onSelectHit={onSelectBuildingHit}
+            mode="select"
+          />
+          {selectedBuildingHit && (
+            <MasterBuildingProfileCard profile={selectedBuildingHit.profile} compact />
+          )}
+        </div>
+      ) : (
+        selectedBuildingHit && (
+          <div className="rounded-xl border border-gray-100 bg-gray-light/40 p-3">
+            <p className="text-xs text-gray-text mb-1">פרויקט</p>
+            <MasterBuildingProfileCard profile={selectedBuildingHit.profile} compact />
+          </div>
+        )
+      )}
 
       <div>
         <label className="form-label" htmlFor="letter-elevator">
@@ -323,6 +426,11 @@ export default function MasterLetterForm({
       {showPreview && preview && (
         <div className="rounded-xl border border-gold/30 bg-gold/5 p-4 space-y-3">
           <p className="text-xs font-semibold text-gold">תצוגה מקדימה</p>
+          {partyPreview.length > 0 && (
+            <pre className="text-sm text-navy whitespace-pre-wrap font-sans leading-relaxed">
+              {partyPreview.join("\n")}
+            </pre>
+          )}
           <p className="text-sm font-semibold text-navy">{preview.subject}</p>
           <pre className="text-sm text-navy whitespace-pre-wrap font-sans leading-relaxed">
             {preview.bodyText}

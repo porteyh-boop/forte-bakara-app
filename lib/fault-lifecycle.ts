@@ -58,6 +58,21 @@ export function buildClosedFault(
   };
 }
 
+/** Cloud / Master pilot_faults.status — closed values */
+export function isPilotFaultClosedStatus(status: string): boolean {
+  return status === "סגורה" || status === "טופלה";
+}
+
+/** Active lifecycle: open or in treatment (not closed) */
+export function isPilotFaultActiveStatus(status: string): boolean {
+  return !isPilotFaultClosedStatus(status);
+}
+
+/** Master can move fault to treatment from these statuses */
+export function canStartPilotFaultTreatment(status: string): boolean {
+  return isPilotFaultActiveStatus(status) && status !== "בטיפול";
+}
+
 export function getFaultOpenDurationHours(fault: Fault): number | null {
   if (isClosedFault(fault) && fault.resolvedAt) {
     return (

@@ -48,6 +48,8 @@ interface MasterClientAccessSectionProps {
   resetBuildingOptions?: BuildingOption[];
   onResetAllPilotData?: () => void | Promise<void>;
   onResetPilotDataByBuilding?: () => void | Promise<void>;
+  fixedBuildingId?: string;
+  embedded?: boolean;
 }
 
 function formatScopeLabel(item: ClientUserAccessListItem): string {
@@ -65,6 +67,8 @@ export default function MasterClientAccessSection({
   resetBuildingOptions = [],
   onResetAllPilotData,
   onResetPilotDataByBuilding,
+  fixedBuildingId,
+  embedded = false,
 }: MasterClientAccessSectionProps) {
   const cloudReady = isClientAccessCloudConfigured();
   const [view, setView] = useState<ClientAccessView>("access");
@@ -92,7 +96,9 @@ export default function MasterClientAccessSection({
     resetForNewClient,
     getWelcomeMessageForSave,
   } = useClientWelcomeFields();
-  const [buildingId, setBuildingId] = useState(() => getAllBuildingIds()[0] ?? "");
+  const [buildingId, setBuildingId] = useState(
+    () => fixedBuildingId ?? getAllBuildingIds()[0] ?? ""
+  );
   const [accessLevel, setAccessLevel] = useState<ClientAccessLevel>("building");
   const [elevatorId, setElevatorId] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
@@ -123,6 +129,23 @@ export default function MasterClientAccessSection({
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (fixedBuildingId) {
+      setBuildingId(fixedBuildingId);
+    }
+  }, [fixedBuildingId]);
+
+  const visibleRecords = useMemo(() => {
+    if (!fixedBuildingId) return records;
+    return records.filter((item) => item.access.building_id === fixedBuildingId);
+  }, [records, fixedBuildingId]);
+
+  const visibleActivityLogs = useMemo(() => {
+    if (!fixedBuildingId) return activityLogs;
+    const clientIds = new Set(visibleRecords.map((item) => item.user.id));
+    return activityLogs.filter((log) => clientIds.has(log.client_user_id));
+  }, [activityLogs, fixedBuildingId, visibleRecords]);
 
   useEffect(() => {
     if (view === "activityLog") {
@@ -237,6 +260,7 @@ export default function MasterClientAccessSection({
 
   return (
     <div className="space-y-4">
+      {!embedded && (
       <div className="bg-white rounded-2xl border border-gold/30 p-4 space-y-2">
         <h2 className="text-base font-bold text-navy">ניהול גישות לקוחות</h2>
         <p className="text-sm text-gray-text">
@@ -255,8 +279,14 @@ export default function MasterClientAccessSection({
           </p>
         )}
       </div>
+      )}
+      {embedded && message && (
+        <p className="text-xs font-semibold text-navy bg-gray-50 border border-gray-200 rounded-md px-3 py-2">
+          {message}
+        </p>
+      )}
 
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+      <div className={`grid grid-cols-1 gap-2 ${embedded ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
         <button
           type="button"
           onClick={() => setView("access")}
@@ -279,6 +309,7 @@ export default function MasterClientAccessSection({
         >
           יומן פעילות
         </button>
+        {!embedded && (
         <button
           type="button"
           onClick={() => setView("system")}
@@ -290,9 +321,10 @@ export default function MasterClientAccessSection({
         >
           ניהול מערכת
         </button>
+        )}
       </div>
 
-      {view === "system" && (
+      {!embedded && view === "system" && (
         <MasterSystemManagementSection
           cloudReady={pilotCloudReady}
           loading={pilotLoading}
@@ -360,18 +392,25 @@ export default function MasterClientAccessSection({
               </div>
               <div>
                 <label className="text-xs text-gray-text">בניין</label>
-                <select
-                  value={buildingId}
-                  onChange={(e) => setBuildingId(e.target.value)}
-                  className="form-input mt-1"
-                  required
-                >
-                  {buildingOptions.map((building) => (
-                    <option key={building.buildingId} value={building.buildingId}>
-                      {building.name} ({building.buildingId})
-                    </option>
-                  ))}
-                </select>
+                {fixedBuildingId ? (
+                  <p className="form-input mt-1 bg-gray-light text-navy">
+                    {buildingOptions.find((b) => b.buildingId === fixedBuildingId)?.name ??
+                      fixedBuildingId}
+                  </p>
+                ) : (
+                  <select
+                    value={buildingId}
+                    onChange={(e) => setBuildingId(e.target.value)}
+                    className="form-input mt-1"
+                    required
+                  >
+                    {buildingOptions.map((building) => (
+                      <option key={building.buildingId} value={building.buildingId}>
+                        {building.name} ({building.buildingId})
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
               <div>
                 <label className="text-xs text-gray-text">היקף גישה</label>
@@ -426,13 +465,13 @@ export default function MasterClientAccessSection({
               </button>
             </div>
 
-            {records.length === 0 ? (
+            {visibleRecords.length === 0 ? (
               <p className="text-sm text-gray-text">
                 {cloudReady ? "אין לקוחות עם גישה." : "Supabase לא מחובר."}
               </p>
             ) : (
               <div className="space-y-3 xl:grid xl:grid-cols-2 xl:gap-4 xl:space-y-0">
-                {records.map((item) => {
+                {visibleRecords.map((item) => {
                   const buildingLabel =
                     buildingOptions.find(
                       (building) => building.buildingId === item.access.building_id
@@ -560,7 +599,7 @@ export default function MasterClientAccessSection({
             </button>
           </div>
 
-          {activityLogs.length === 0 ? (
+          {visibleActivityLogs.length === 0 ? (
             <p className="text-sm text-gray-text">
               {cloudReady ? "אין פעילות מתועדת." : "Supabase לא מחובר."}
             </p>
@@ -576,7 +615,7 @@ export default function MasterClientAccessSection({
                   </tr>
                 </thead>
                 <tbody>
-                  {activityLogs.map((entry) => (
+                  {visibleActivityLogs.map((entry) => (
                     <tr key={entry.id} className="border-b border-gray-100 align-top">
                       <td className="py-2 px-2 text-xs whitespace-nowrap">
                         {formatClientActivityDate(entry.created_at)}

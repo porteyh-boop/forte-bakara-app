@@ -35,7 +35,7 @@ function isBuildingContextPath(pathname: string): boolean {
 export default function MasterSubpageBackBar() {
   const pathname = usePathname();
 
-  if (pathname === "/master") {
+  if (pathname === "/master" || pathname.startsWith("/master/project-v2")) {
     return null;
   }
 

@@ -73,6 +73,7 @@ export interface InspectorReportRecord {
   document_description: string | null;
   has_remarks: boolean;
   deadline_at: string | null;
+  next_inspection_date: string | null;
   status: InspectorReportStatus;
   closed_at: string | null;
   closure_notes: string | null;
@@ -92,6 +93,7 @@ export interface CreateInspectorReportInput {
   fileSizeBytes?: number;
   documentDescription?: string;
   hasRemarks: boolean;
+  nextInspectionDate?: string | null;
 }
 
 export interface CloseInspectorReportInput {
@@ -129,6 +131,7 @@ function mapDocumentInspectorToReport(
     document_description: document.description,
     has_remarks: meta.has_remarks,
     deadline_at: meta.deadline_at,
+    next_inspection_date: meta.next_inspection_date,
     status: meta.status,
     closed_at: meta.closed_at,
     closure_notes: meta.closure_notes,
@@ -155,6 +158,9 @@ function mapInspectorReportRow(row: Record<string, unknown>): Omit<
       : null,
     has_remarks: Boolean(row.has_remarks),
     deadline_at: row.deadline_at ? String(row.deadline_at) : null,
+    next_inspection_date: row.next_inspection_date
+      ? normalizeReportDate(String(row.next_inspection_date))
+      : null,
     status: row.status === "closed" ? "closed" : "open",
     closed_at: row.closed_at ? String(row.closed_at) : null,
     closure_notes: row.closure_notes ? String(row.closure_notes) : null,
@@ -593,6 +599,7 @@ export async function createInspectorReport(
     reportDate: input.reportDate,
     inspectorName: input.inspectorName,
     hasRemarks: input.hasRemarks,
+    nextInspectionDate: input.nextInspectionDate,
   });
 
   if (!meta) {

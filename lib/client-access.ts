@@ -634,7 +634,7 @@ export function isClientAccessCloudConfigured(): boolean {
 }
 
 export function formatClientAccessExpiry(iso: string | null): string {
-  if (!iso) return "ללא תוקף";
+  if (!iso) return "ללא הגבלת זמן";
   return new Intl.DateTimeFormat("he-IL", {
     day: "numeric",
     month: "short",
@@ -642,4 +642,61 @@ export function formatClientAccessExpiry(iso: string | null): string {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(iso));
+}
+
+export type ClientAccessDisplayStatus = "active" | "disabled" | "expired";
+
+export function getClientAccessDisplayStatus(
+  user: Pick<ClientUserRecord, "is_active" | "expires_at">,
+  now: Date = new Date()
+): ClientAccessDisplayStatus {
+  if (!user.is_active) return "disabled";
+  if (
+    user.expires_at &&
+    new Date(user.expires_at).getTime() < now.getTime()
+  ) {
+    return "expired";
+  }
+  return "active";
+}
+
+export const CLIENT_ACCESS_STATUS_LABELS: Record<ClientAccessDisplayStatus, string> = {
+  active: "פעיל",
+  disabled: "מושבת",
+  expired: "פג תוקף",
+};
+
+function normalizePhoneForLookup(phone: string): string {
+  return phone.replace(/\D/g, "");
+}
+
+export function findClientAccessForContact(
+  records: ClientUserAccessListItem[],
+  buildingId: string,
+  contact: { email?: string; phone?: string }
+): ClientUserAccessListItem | null {
+  const normalizedBuilding = buildingId.trim().toLowerCase();
+  const normalizedEmail = contact.email?.trim().toLowerCase() ?? "";
+  const normalizedPhone = normalizePhoneForLookup(contact.phone ?? "");
+
+  if (!normalizedEmail && !normalizedPhone) return null;
+
+  return (
+    records.find((item) => {
+      if (item.access.building_id !== normalizedBuilding) return false;
+      if (
+        normalizedEmail &&
+        item.user.email?.trim().toLowerCase() === normalizedEmail
+      ) {
+        return true;
+      }
+      if (
+        normalizedPhone &&
+        normalizePhoneForLookup(item.user.phone ?? "") === normalizedPhone
+      ) {
+        return true;
+      }
+      return false;
+    }) ?? null
+  );
 }

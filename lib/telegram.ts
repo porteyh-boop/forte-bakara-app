@@ -79,7 +79,9 @@ export type TelegramDeliveryResult =
   | { ok: true }
   | { ok: false; error: string };
 
-async function deliverTelegramMessage(text: string): Promise<TelegramDeliveryResult> {
+export async function deliverTelegramMessage(
+  text: string
+): Promise<TelegramDeliveryResult> {
   const botToken = process.env.TELEGRAM_BOT_TOKEN?.trim();
   const chatId = process.env.TELEGRAM_CHAT_ID?.trim();
   if (!botToken || !chatId) {

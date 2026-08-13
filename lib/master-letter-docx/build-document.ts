@@ -12,9 +12,12 @@ import { parseMasterLetterBodyText } from "./parse-body-text";
 import {
   bodyBlocksToParagraphs,
   createAddresseeParagraphs,
+  createLetterCcParagraphs,
+  createLetterRecipientsParagraphs,
   createRtlParagraph,
   createSignatureParagraph,
 } from "./rtl-paragraphs";
+import type { MasterLetterRecipientSnapshot } from "../master-letter-metadata";
 import {
   MASTER_LETTER_DOCX_DATE_AFTER,
   MASTER_LETTER_DOCX_LOGO_AFTER,
@@ -86,6 +89,8 @@ export async function buildMasterLetterDocxDocument(params: {
   subject: string;
   bodyText: string;
   letterDate?: string;
+  recipients?: MasterLetterRecipientSnapshot[];
+  cc?: MasterLetterRecipientSnapshot[];
 }): Promise<Document> {
   const children: Paragraph[] = [];
 
@@ -97,8 +102,14 @@ export async function buildMasterLetterDocxDocument(params: {
   children.push(createDateParagraph(params.letterDate));
 
   const parsed = parseMasterLetterBodyText(params.bodyText);
+  const explicitRecipients = params.recipients ?? [];
 
-  if (parsed.addresseeBlocks.length > 0) {
+  if (explicitRecipients.length > 0) {
+    children.push(...createLetterRecipientsParagraphs(explicitRecipients));
+    if (params.cc && params.cc.length > 0) {
+      children.push(...createLetterCcParagraphs(params.cc));
+    }
+  } else if (parsed.addresseeBlocks.length > 0) {
     children.push(...createAddresseeParagraphs(parsed.addresseeBlocks));
   }
 

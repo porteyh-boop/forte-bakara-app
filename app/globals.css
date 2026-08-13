@@ -9,6 +9,16 @@
   --gray-light: #f4f5f7;
   --gray: #e2e4e9;
   --gray-text: #6b7280;
+  /* FORTE V2 design tokens */
+  --forte-primary: #0d1b3e;
+  --forte-primary-hover: #152852;
+  --forte-blue-light: #e8eef8;
+  --forte-border: #d4dae8;
+  --forte-background: #f5f7fb;
+  --forte-surface: #ffffff;
+  --forte-text: #0d1b3e;
+  --forte-text-secondary: #5c6b8a;
+  --forte-table-header: #f0f4fa;
 }
 
 @theme inline {
@@ -19,6 +29,15 @@
   --color-gray-light: var(--gray-light);
   --color-gray: var(--gray);
   --color-gray-text: var(--gray-text);
+  --color-forte-primary: var(--forte-primary);
+  --color-forte-primary-hover: var(--forte-primary-hover);
+  --color-forte-blue-light: var(--forte-blue-light);
+  --color-forte-border: var(--forte-border);
+  --color-forte-background: var(--forte-background);
+  --color-forte-surface: var(--forte-surface);
+  --color-forte-text: var(--forte-text);
+  --color-forte-text-secondary: var(--forte-text-secondary);
+  --color-forte-table-header: var(--forte-table-header);
   --font-sans: var(--font-heebo);
 }
 

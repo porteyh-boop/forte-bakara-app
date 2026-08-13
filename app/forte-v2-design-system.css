@@ -1,0 +1,1047 @@
+/**
+ * FORTE V2 Design System — scoped visual layer.
+ * Applied via .forte-v2 wrapper; does not affect Legacy Master.
+ */
+
+.forte-v2 {
+  color: var(--forte-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Sidebar — dark FORTE rail ── */
+.forte-v2 .fv2-sidebar {
+  width: 16rem;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: linear-gradient(185deg, #0d1b3e 0%, #091428 55%, #070f22 100%);
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 8px 0 32px rgba(13, 27, 62, 0.18);
+}
+
+.forte-v2 .fv2-sidebar-brand {
+  padding: 1.375rem 1.125rem 1.25rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.forte-v2 .fv2-sidebar-brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.625rem;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+  font-size: 1rem;
+  font-weight: 900;
+  margin-bottom: 0.625rem;
+}
+
+.forte-v2 .fv2-sidebar-brand-title {
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: #ffffff;
+  line-height: 1.15;
+}
+
+.forte-v2 .fv2-sidebar-brand-sub {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.52);
+  margin-top: 0.3125rem;
+}
+
+.forte-v2 .fv2-sidebar-section-label {
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.32);
+  padding: 1rem 1rem 0.375rem;
+}
+
+.forte-v2 .fv2-sidebar-nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.375rem 0.625rem 0.75rem;
+}
+
+.forte-v2 .fv2-sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6875rem;
+  width: 100%;
+  text-align: right;
+  padding: 0.625rem 0.8125rem;
+  margin-bottom: 0.1875rem;
+  border-radius: 0.5625rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.78);
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s, transform 0.1s;
+  border: 1px solid transparent;
+}
+
+.forte-v2 .fv2-sidebar-item:hover:not([aria-disabled="true"]) {
+  background: rgba(255, 255, 255, 0.09);
+  color: #ffffff;
+}
+
+.forte-v2 .fv2-sidebar-item-active {
+  background: #ffffff;
+  color: #0d1b3e;
+  font-weight: 700;
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
+}
+
+.forte-v2 .fv2-sidebar-item-active .fv2-sidebar-icon {
+  opacity: 1;
+}
+
+.forte-v2 .fv2-sidebar-item-disabled {
+  opacity: 0.28;
+  cursor: not-allowed;
+}
+
+.forte-v2 .fv2-sidebar-icon {
+  width: 1.25rem;
+  text-align: center;
+  flex-shrink: 0;
+  font-size: 0.9375rem;
+  opacity: 0.72;
+}
+
+.forte-v2 .fv2-sidebar-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0.875rem 0.625rem;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.forte-v2 .fv2-sidebar-user {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.375rem;
+}
+
+.forte-v2 .fv2-sidebar-avatar {
+  width: 2.125rem;
+  height: 2.125rem;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, #3b5a9a, #6b8fd4);
+  color: white;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+.forte-v2 .fv2-sidebar-user-name {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.forte-v2 .fv2-sidebar-user-role {
+  font-size: 0.625rem;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+/* ── Page header ── */
+.forte-v2 .fv2-page-header {
+  position: relative;
+  background: linear-gradient(180deg, #ffffff 0%, #f6f8fc 100%);
+  border-bottom: 1px solid var(--forte-border);
+  box-shadow: 0 2px 12px rgba(13, 27, 62, 0.06);
+  padding: 1.625rem 2rem 1.375rem;
+}
+
+.forte-v2 .fv2-page-header::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #0d1b3e 0%, #2a4a8a 60%, #4a6db5 100%);
+}
+
+.forte-v2 .fv2-page-header-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.forte-v2 .fv2-page-title {
+  font-size: 1.625rem;
+  font-weight: 800;
+  color: var(--forte-primary);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.forte-v2 .fv2-page-subtitle {
+  font-size: 0.8125rem;
+  color: var(--forte-text-secondary);
+  margin-top: 0.375rem;
+  line-height: 1.4;
+}
+
+/* ── Toolbar card ── */
+.forte-v2 .fv2-toolbar-card {
+  background: var(--forte-surface);
+  border: 1px solid var(--forte-border);
+  border-radius: 0.875rem;
+  box-shadow: 0 2px 8px rgba(13, 27, 62, 0.05);
+  padding: 1rem 1.25rem;
+  margin: 0 2rem 1.25rem;
+}
+
+.forte-v2 .fv2-toolbar-card-inner {
+  background: #fafbfe;
+  border: 1px solid var(--forte-border);
+  border-radius: 0.75rem;
+  padding: 0.875rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.forte-v2 .fv2-toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.forte-v2 .fv2-search-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 14rem;
+}
+
+.forte-v2 .fv2-search-icon {
+  position: absolute;
+  right: 0.875rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--forte-text-secondary);
+  pointer-events: none;
+  font-size: 0.875rem;
+}
+
+.forte-v2 .fv2-search-input {
+  width: 100%;
+  padding: 0.625rem 2.25rem 0.625rem 0.875rem;
+  border: 1px solid var(--forte-border);
+  border-radius: 0.625rem;
+  background: #fafbfe;
+  font-size: 0.875rem;
+  color: var(--forte-text);
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+
+.forte-v2 .fv2-search-input:focus {
+  outline: none;
+  border-color: var(--forte-primary);
+  background: var(--forte-surface);
+  box-shadow: 0 0 0 3px rgba(13, 27, 62, 0.1);
+}
+
+.forte-v2 .fv2-filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.4375rem 0.75rem;
+  border: 1px solid var(--forte-border);
+  border-radius: 0.5rem;
+  background: #fafbfe;
+  font-size: 0.8125rem;
+  color: var(--forte-text);
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.forte-v2 .fv2-filter-pill-active {
+  border-color: var(--forte-primary);
+  background: var(--forte-blue-light);
+}
+
+.forte-v2 .fv2-filter-pill-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--forte-text-secondary);
+  white-space: nowrap;
+}
+
+.forte-v2 .fv2-filter-pill select {
+  background: transparent;
+  border: none;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--forte-text);
+  cursor: pointer;
+  outline: none;
+}
+
+/* ── Buttons ── */
+.forte-v2 .fv2-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  padding: 0.5625rem 1.125rem;
+  border-radius: 0.5625rem;
+  background: var(--forte-primary);
+  color: #ffffff;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(13, 27, 62, 0.22);
+  transition: background 0.15s, box-shadow 0.15s, transform 0.1s;
+}
+
+.forte-v2 .fv2-btn-primary:hover:not(:disabled) {
+  background: var(--forte-primary-hover);
+  box-shadow: 0 4px 14px rgba(13, 27, 62, 0.28);
+}
+
+.forte-v2 .fv2-btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.forte-v2 .fv2-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  padding: 0.5625rem 1rem;
+  border-radius: 0.5625rem;
+  background: var(--forte-surface);
+  color: var(--forte-primary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border: 1px solid var(--forte-border);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.forte-v2 .fv2-btn-secondary:hover:not(:disabled) {
+  background: var(--forte-blue-light);
+  border-color: rgba(13, 27, 62, 0.2);
+}
+
+.forte-v2 .fv2-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.4375rem 0.75rem;
+  border-radius: 0.4375rem;
+  background: transparent;
+  color: var(--forte-text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.forte-v2 .fv2-btn-ghost:hover:not(:disabled) {
+  color: var(--forte-text);
+  background: var(--forte-blue-light);
+}
+
+.forte-v2 .fv2-btn-sm {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  border-radius: 0.4375rem;
+}
+
+.forte-v2 .fv2-btn-danger {
+  background: #dc2626;
+  color: white;
+  box-shadow: 0 2px 6px rgba(220, 38, 38, 0.2);
+}
+
+.forte-v2 .fv2-btn-danger:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+/* ── Data table ── */
+.forte-v2 .fv2-table-card {
+  margin: 0 2rem 2rem;
+  background: var(--forte-surface);
+  border: 1px solid var(--forte-border);
+  border-radius: 0.875rem;
+  box-shadow: 0 4px 16px rgba(13, 27, 62, 0.06);
+  overflow: hidden;
+}
+
+.forte-v2 .fv2-table-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.875rem 1.25rem;
+  background: linear-gradient(180deg, #f0f4fa 0%, #e8eef8 100%);
+  border-bottom: 1px solid var(--forte-border);
+}
+
+.forte-v2 .fv2-table-card-title {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--forte-primary);
+}
+
+.forte-v2 .fv2-table-card-count {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--forte-text-secondary);
+  background: rgba(255, 255, 255, 0.7);
+  padding: 0.1875rem 0.5rem;
+  border-radius: 9999px;
+  border: 1px solid var(--forte-border);
+}
+
+.forte-v2 .fv2-data-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: right;
+  font-size: 0.8125rem;
+}
+
+.forte-v2 .fv2-data-table thead tr {
+  background: #f0f4fa;
+  border-bottom: 2px solid var(--forte-border);
+}
+
+.forte-v2 .fv2-data-table th {
+  padding: 0.75rem 1rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--forte-primary);
+  white-space: nowrap;
+}
+
+.forte-v2 .fv2-data-table tbody tr {
+  border-bottom: 1px solid rgba(212, 218, 232, 0.7);
+  transition: background 0.12s;
+}
+
+.forte-v2 .fv2-data-table tbody tr:nth-child(even) {
+  background: rgba(245, 247, 251, 0.6);
+}
+
+.forte-v2 .fv2-data-table tbody tr:hover {
+  background: var(--forte-blue-light);
+}
+
+.forte-v2 .fv2-data-table tbody tr.fv2-row-clickable {
+  cursor: pointer;
+}
+
+.forte-v2 .fv2-data-table td {
+  padding: 0.875rem 1rem;
+  color: var(--forte-text);
+  vertical-align: middle;
+}
+
+.forte-v2 .fv2-cell-id {
+  font-family: ui-monospace, monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--forte-primary);
+}
+
+.forte-v2 .fv2-cell-name {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--forte-text);
+}
+
+.forte-v2 .fv2-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1875rem 0.5625rem;
+  border-radius: 9999px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.forte-v2 .fv2-badge-blue {
+  background: var(--forte-blue-light);
+  color: var(--forte-primary);
+  border-color: rgba(13, 27, 62, 0.12);
+}
+
+.forte-v2 .fv2-badge-neutral {
+  background: #f1f3f8;
+  color: var(--forte-text-secondary);
+  border-color: var(--forte-border);
+}
+
+/* ── Panels & cards ── */
+.forte-v2 .fv2-panel {
+  background: var(--forte-surface);
+  border: 1px solid var(--forte-border);
+  border-radius: 0.875rem;
+  box-shadow: 0 2px 10px rgba(13, 27, 62, 0.05);
+  padding: 1.25rem 1.5rem;
+}
+
+.forte-v2 .fv2-panel-lg {
+  padding: 1.5rem;
+}
+
+.forte-v2 .fv2-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-bottom: 0.875rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--forte-border);
+}
+
+.forte-v2 .fv2-section-title {
+  font-size: 0.9375rem;
+  font-weight: 800;
+  color: var(--forte-primary);
+}
+
+.forte-v2 .fv2-section-desc {
+  font-size: 0.75rem;
+  color: var(--forte-text-secondary);
+  margin-top: 0.125rem;
+}
+
+.forte-v2 .fv2-card {
+  background: var(--forte-surface);
+  border: 1px solid var(--forte-border);
+  border-radius: 0.75rem;
+  padding: 1rem 1.125rem;
+  box-shadow: 0 1px 4px rgba(13, 27, 62, 0.04);
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+
+.forte-v2 .fv2-card:hover {
+  box-shadow: 0 4px 12px rgba(13, 27, 62, 0.07);
+}
+
+/* ── Project workspace header ── */
+.forte-v2 .fv2-project-header {
+  background: var(--forte-surface);
+  border-bottom: 1px solid var(--forte-border);
+  box-shadow: 0 2px 8px rgba(13, 27, 62, 0.04);
+}
+
+.forte-v2 .fv2-project-header-top {
+  background: linear-gradient(180deg, #ffffff 0%, #f8faff 100%);
+  padding: 0.75rem 1.5rem 0;
+  border-bottom: 1px solid var(--forte-border);
+}
+
+.forte-v2 .fv2-project-title {
+  font-size: 1.375rem;
+  font-weight: 800;
+  color: var(--forte-primary);
+  line-height: 1.25;
+}
+
+.forte-v2 .fv2-project-id {
+  font-family: ui-monospace, monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--forte-text-secondary);
+  margin-top: 0.25rem;
+}
+
+.forte-v2 .fv2-meta-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+}
+
+.forte-v2 .fv2-meta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.3125rem 0.75rem;
+  background: var(--forte-blue-light);
+  border: 1px solid rgba(13, 27, 62, 0.1);
+  border-radius: 9999px;
+  font-size: 0.6875rem;
+}
+
+.forte-v2 .fv2-meta-chip-label {
+  color: var(--forte-text-secondary);
+  font-weight: 500;
+}
+
+.forte-v2 .fv2-meta-chip-value {
+  color: var(--forte-primary);
+  font-weight: 700;
+}
+
+/* ── Tabs ── */
+.forte-v2 .fv2-tab-bar {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.625rem 1.5rem;
+  overflow-x: auto;
+  background: #f5f7fb;
+  border-bottom: 1px solid var(--forte-border);
+}
+
+.forte-v2 .fv2-tab {
+  flex-shrink: 0;
+  padding: 0.4375rem 0.875rem;
+  border-radius: 0.4375rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--forte-text-secondary);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.forte-v2 .fv2-tab:hover {
+  color: var(--forte-primary);
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.forte-v2 .fv2-tab-active {
+  color: #ffffff;
+  background: var(--forte-primary);
+  border-color: var(--forte-primary);
+  box-shadow: 0 2px 6px rgba(13, 27, 62, 0.2);
+}
+
+/* ── Forms ── */
+.forte-v2 .form-input,
+.forte-v2 .fv2-input {
+  border-color: var(--forte-border);
+  border-radius: 0.5rem;
+  color: var(--forte-text);
+  padding: 0.5625rem 0.875rem;
+  font-size: 0.875rem;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.forte-v2 .form-input:focus,
+.forte-v2 .fv2-input:focus {
+  border-color: var(--forte-primary);
+  box-shadow: 0 0 0 3px rgba(13, 27, 62, 0.1);
+  outline: none;
+}
+
+.forte-v2 .form-label,
+.forte-v2 .fv2-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--forte-text);
+  margin-bottom: 0.375rem;
+}
+
+.forte-v2 .form-hint {
+  color: var(--forte-text-secondary);
+}
+
+.forte-v2 .form-section {
+  border-color: var(--forte-border);
+  border-radius: 0.75rem;
+  box-shadow: 0 2px 8px rgba(13, 27, 62, 0.04);
+  padding: 1.25rem;
+}
+
+.forte-v2 .btn-primary {
+  background: var(--forte-primary);
+  border-radius: 0.5rem;
+  box-shadow: 0 2px 8px rgba(13, 27, 62, 0.18);
+  font-weight: 700;
+}
+
+.forte-v2 .btn-primary:hover {
+  background: var(--forte-primary-hover);
+}
+
+/* ── Dialogs ── */
+.forte-v2 .fv2-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(13, 27, 62, 0.45);
+  backdrop-filter: blur(2px);
+}
+
+.forte-v2 .fv2-dialog {
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  background: var(--forte-surface);
+  border: 1px solid var(--forte-border);
+  border-radius: 0.875rem;
+  box-shadow: 0 20px 48px rgba(13, 27, 62, 0.18);
+  padding: 1.25rem 1.5rem;
+}
+
+.forte-v2 .fv2-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-bottom: 0.875rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--forte-border);
+}
+
+.forte-v2 .fv2-dialog-title {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--forte-primary);
+}
+
+/* ── Status banner ── */
+.forte-v2 .fv2-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.625rem;
+  font-size: 0.8125rem;
+  border: 1px solid;
+  margin-bottom: 0.875rem;
+}
+
+.forte-v2 .fv2-banner-info {
+  background: var(--forte-blue-light);
+  border-color: rgba(13, 27, 62, 0.15);
+  color: var(--forte-primary);
+}
+
+.forte-v2 .fv2-banner-success {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #065f46;
+}
+
+.forte-v2 .fv2-banner-warning {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #92400e;
+}
+
+.forte-v2 .fv2-banner-error {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+
+/* ── Empty state ── */
+.forte-v2 .fv2-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1.5rem;
+  text-align: center;
+}
+
+.forte-v2 .fv2-empty-icon {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 9999px;
+  background: var(--forte-blue-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  margin-bottom: 0.875rem;
+}
+
+.forte-v2 .fv2-empty-title {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--forte-primary);
+}
+
+.forte-v2 .fv2-empty-desc {
+  font-size: 0.8125rem;
+  color: var(--forte-text-secondary);
+  margin-top: 0.375rem;
+  max-width: 20rem;
+  line-height: 1.5;
+}
+
+/* ── Legacy embed ── */
+.forte-v2 .fv2-legacy-embed h2,
+.forte-v2 .fv2-legacy-embed h3,
+.forte-v2 .fv2-legacy-embed h4 {
+  color: var(--forte-text);
+  font-weight: 700;
+}
+
+.forte-v2 .fv2-legacy-embed .rounded-2xl,
+.forte-v2 .fv2-legacy-embed .form-section {
+  border-radius: 0.75rem;
+  border-color: var(--forte-border);
+  box-shadow: 0 2px 8px rgba(13, 27, 62, 0.04);
+}
+
+.forte-v2 .fv2-legacy-embed .btn-primary {
+  width: auto;
+  padding: 0.4375rem 0.875rem;
+  font-size: 0.75rem;
+  border-radius: 0.4375rem;
+}
+
+.forte-v2 .fv2-legacy-embed .filter-tab-active {
+  background: var(--forte-primary);
+}
+
+.forte-v2 .fv2-legacy-embed .filter-tab-inactive:hover {
+  border-color: var(--forte-primary);
+  color: var(--forte-text);
+}
+
+.forte-v2 .fv2-workspace-content {
+  padding: 0 1.5rem 1.5rem;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.forte-v2 .fv2-page-body {
+  flex: 1;
+  min-width: 0;
+  background: #eef1f7;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.forte-v2 .fv2-main-canvas {
+  flex: 1;
+  background: #eef1f7;
+}
+
+/* ── Tab shell & detail grid ── */
+.forte-v2 .fv2-tab-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  flex: 1;
+  min-height: 0;
+}
+
+.forte-v2 .fv2-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 0.625rem;
+}
+
+@media (min-width: 640px) {
+  .forte-v2 .fv2-detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .forte-v2 .fv2-detail-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.forte-v2 .fv2-detail-item {
+  padding: 0.875rem 1rem;
+  background: linear-gradient(180deg, #fafbfe 0%, #f5f7fb 100%);
+  border: 1px solid var(--forte-border);
+  border-radius: 0.625rem;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.forte-v2 .fv2-detail-item:hover {
+  border-color: rgba(13, 27, 62, 0.18);
+  box-shadow: 0 2px 8px rgba(13, 27, 62, 0.05);
+}
+
+.forte-v2 .fv2-detail-label {
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--forte-text-secondary);
+  margin-bottom: 0.3125rem;
+}
+
+.forte-v2 .fv2-detail-value {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--forte-primary);
+  line-height: 1.35;
+}
+
+.forte-v2 .fv2-workspace-canvas {
+  background: #eef1f7;
+  padding: 1rem 1.25rem 1.25rem;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Tab shell header (inside project workspace) ── */
+.forte-v2 .fv2-tab-shell-header {
+  background: var(--forte-surface);
+  border: 1px solid var(--forte-border);
+  border-radius: 0.875rem;
+  padding: 1rem 1.25rem;
+  box-shadow: 0 2px 8px rgba(13, 27, 62, 0.05);
+  margin-bottom: 0.25rem;
+}
+
+.forte-v2 .fv2-tab-shell-header .fv2-section-header {
+  padding-bottom: 0;
+  margin-bottom: 0;
+  border-bottom: none;
+}
+
+/* ── Permission / list cards ── */
+.forte-v2 .fv2-list-card {
+  background: var(--forte-surface);
+  border: 1px solid var(--forte-border);
+  border-radius: 0.75rem;
+  padding: 1rem 1.125rem;
+  box-shadow: 0 2px 8px rgba(13, 27, 62, 0.04);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.forte-v2 .fv2-list-card:hover {
+  border-color: rgba(13, 27, 62, 0.18);
+  box-shadow: 0 4px 14px rgba(13, 27, 62, 0.07);
+}
+
+.forte-v2 .fv2-list-card-title {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--forte-text);
+}
+
+.forte-v2 .fv2-list-card-meta {
+  font-size: 0.6875rem;
+  color: var(--forte-text-secondary);
+  line-height: 1.45;
+}
+
+.forte-v2 .fv2-list-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  padding-top: 0.625rem;
+  margin-top: 0.625rem;
+  border-top: 1px solid rgba(212, 218, 232, 0.7);
+}
+
+/* ── Fault card ── */
+.forte-v2 .fv2-fault-card {
+  border-right: 3px solid var(--forte-primary);
+}
+
+.forte-v2 .fv2-fault-card-title {
+  font-size: 0.9375rem;
+  font-weight: 800;
+  color: var(--forte-primary);
+}
+
+/* ── Chat panel ── */
+.forte-v2 .fv2-chat-area {
+  flex: 1;
+  overflow: auto;
+  padding: 1rem;
+  background: linear-gradient(180deg, #f5f7fb 0%, #eef1f7 100%);
+}
+
+.forte-v2 .fv2-chat-bubble-user {
+  margin-right: auto;
+  max-width: 85%;
+  border-radius: 0.875rem 0.875rem 0.25rem 0.875rem;
+  padding: 0.75rem 1rem;
+  background: var(--forte-primary);
+  color: #ffffff;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  box-shadow: 0 2px 8px rgba(13, 27, 62, 0.18);
+}
+
+.forte-v2 .fv2-chat-bubble-assistant {
+  margin-left: auto;
+  max-width: 85%;
+  border-radius: 0.875rem 0.875rem 0.875rem 0.25rem;
+  padding: 0.75rem 1rem;
+  background: var(--forte-surface);
+  border: 1px solid var(--forte-border);
+  color: var(--forte-text);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  box-shadow: 0 1px 4px rgba(13, 27, 62, 0.06);
+}
+
+.forte-v2 .fv2-chat-compose {
+  border-top: 1px solid var(--forte-border);
+  background: var(--forte-surface);
+  padding: 0.875rem 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* ── Legacy embed panel ── */
+.forte-v2 .fv2-legacy-panel {
+  padding: 0;
+  overflow: hidden;
+  min-height: 20rem;
+}
+
+.forte-v2 .fv2-legacy-panel .fv2-legacy-embed {
+  padding: 1rem 1.25rem;
+}
+
+/* ── Danger zone ── */
+.forte-v2 .fv2-danger-zone {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid #fecaca;
+  background: linear-gradient(180deg, #fffafa 0%, #ffffff 100%);
+  border-radius: 0.75rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid #fecaca;
+}
+
+.forte-v2 .fv2-danger-zone-title {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #991b1b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}

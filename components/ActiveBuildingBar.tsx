@@ -13,7 +13,8 @@ export default function ActiveBuildingBar() {
     !isReady ||
     pathname === "/buildings" ||
     isClientAccessPath(pathname) ||
-    pathname.startsWith("/master")
+    pathname.startsWith("/master") ||
+    pathname.startsWith("/forte")
   ) {
     return null;
   }

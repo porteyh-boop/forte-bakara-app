@@ -1,6 +1,11 @@
 import { Paragraph, TextRun } from "docx";
 import { formatAddresseeBlock } from "./parse-body-text";
 import {
+  formatCcSnapshotLine,
+  formatRecipientSnapshotLines,
+} from "./format-parties";
+import type { MasterLetterRecipientSnapshot } from "../master-letter-metadata";
+import {
   MASTER_LETTER_DOCX_PARAGRAPH_AFTER,
   MASTER_LETTER_DOCX_SIGNATURE_BEFORE,
   MASTER_LETTER_DOCX_SIGNATURE_LINES,
@@ -81,6 +86,43 @@ export function createAddresseeParagraphs(blocks: string[]): Paragraph[] {
           : MASTER_LETTER_DOCX_PARAGRAPH_AFTER,
     })
   );
+}
+
+export function createLetterRecipientsParagraphs(
+  recipients: MasterLetterRecipientSnapshot[]
+): Paragraph[] {
+  const paragraphs: Paragraph[] = [];
+
+  recipients.forEach((recipient, index) => {
+    const lines = formatRecipientSnapshotLines(recipient, {
+      includeLekavodLabel: index === 0,
+    });
+    if (lines.length === 0) return;
+
+    paragraphs.push(
+      textBlockToParagraph(lines.join("\n"), {
+        spacingAfter:
+          index < recipients.length - 1
+            ? MASTER_LETTER_DOCX_ADDRESSEE_BLOCK_AFTER
+            : MASTER_LETTER_DOCX_PARAGRAPH_AFTER,
+      })
+    );
+  });
+
+  return paragraphs;
+}
+
+export function createLetterCcParagraphs(
+  cc: MasterLetterRecipientSnapshot[]
+): Paragraph[] {
+  if (cc.length === 0) return [];
+
+  const lines = ["עותק:", ...cc.map((entry) => formatCcSnapshotLine(entry))];
+  return [
+    textBlockToParagraph(lines.join("\n"), {
+      spacingAfter: MASTER_LETTER_DOCX_PARAGRAPH_AFTER,
+    }),
+  ];
 }
 
 export function createSignatureParagraph(): Paragraph {

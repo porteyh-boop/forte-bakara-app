@@ -1,5 +1,5 @@
 import { Resend } from "resend";
-import type { InspectorNotificationType } from "./document-inspector-notifications";
+import type { InspectorLegacyNotificationType } from "./document-inspector-notifications";
 
 export const INSPECTOR_NOTIFY_EMAIL = "lifts.forte@gmail.com";
 
@@ -14,7 +14,7 @@ export interface InspectorNotificationEmailPayload {
 }
 
 export function buildInspectorNotificationSubject(
-  type: InspectorNotificationType
+  type: InspectorLegacyNotificationType
 ): string {
   switch (type) {
     case "day_35":
@@ -47,7 +47,7 @@ function getResendFromEmail(): string {
 }
 
 export async function sendInspectorNotificationEmail(
-  type: InspectorNotificationType,
+  type: InspectorLegacyNotificationType,
   payload: InspectorNotificationEmailPayload
 ): Promise<{ ok: boolean; error?: string }> {
   const resendApiKey = process.env.RESEND_API_KEY;

@@ -11,6 +11,7 @@ export interface DocumentInspectorMetaRecord {
   inspector_name: string | null;
   has_remarks: boolean;
   deadline_at: string | null;
+  next_inspection_date: string | null;
   status: DocumentInspectorStatus;
   closed_at: string | null;
   closure_notes: string | null;
@@ -24,6 +25,7 @@ export interface CreateDocumentInspectorMetaInput {
   reportDate: string;
   inspectorName?: string;
   hasRemarks: boolean;
+  nextInspectionDate?: string | null;
   legacyInspectorReportId?: string | null;
 }
 
@@ -35,6 +37,64 @@ export interface CloseDocumentInspectorMetaInput {
 
 function normalizeReportDate(value: string): string {
   return value.trim().split("T")[0];
+}
+
+function normalizeOptionalDate(value?: string | null): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  return trimmed.split("T")[0];
+}
+
+export function formatNextInspectionDate(iso: string | null): string {
+  if (!iso) return "לא הוגדר";
+  const normalized = normalizeReportDate(iso);
+  return new Intl.DateTimeFormat("he-IL", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(new Date(`${normalized}T12:00:00`));
+}
+
+export type NextInspectionDisplayStatus =
+  | "not_set"
+  | "upcoming"
+  | "due_soon"
+  | "overdue";
+
+export function daysUntilDate(
+  isoDate: string,
+  now: Date = new Date()
+): number {
+  const normalized = normalizeReportDate(isoDate);
+  const target = new Date(`${normalized}T00:00:00`);
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+  return Math.floor((target.getTime() - today.getTime()) / 86_400_000);
+}
+
+export function getNextInspectionDisplayStatus(
+  isoDate: string | null,
+  now: Date = new Date()
+): NextInspectionDisplayStatus {
+  if (!isoDate?.trim()) return "not_set";
+  const days = daysUntilDate(isoDate, now);
+  if (days < 0) return "overdue";
+  if (days <= 30) return "due_soon";
+  return "upcoming";
+}
+
+export function formatNextInspectionStatusLabel(
+  isoDate: string | null,
+  now: Date = new Date()
+): string {
+  const status = getNextInspectionDisplayStatus(isoDate, now);
+  if (status === "not_set") return "לא הוגדר";
+  if (status === "overdue") return "בדיקה נדרשת";
+  const days = daysUntilDate(isoDate!, now);
+  if (status === "due_soon") {
+    return days === 0 ? "בדיקה היום" : `נותרו ${days} ימים`;
+  }
+  return formatNextInspectionDate(isoDate);
 }
 
 function computeInspectorDeadlineAt(reportDate: string): string {
@@ -54,6 +114,9 @@ function mapDocumentInspectorMetaRow(
     inspector_name: row.inspector_name ? String(row.inspector_name) : null,
     has_remarks: Boolean(row.has_remarks),
     deadline_at: row.deadline_at ? String(row.deadline_at) : null,
+    next_inspection_date: row.next_inspection_date
+      ? normalizeReportDate(String(row.next_inspection_date))
+      : null,
     status: row.status === "closed" ? "closed" : "open",
     closed_at: row.closed_at ? String(row.closed_at) : null,
     closure_notes: row.closure_notes ? String(row.closure_notes) : null,
@@ -78,6 +141,7 @@ export function buildDocumentInspectorMetaInsertRow(
     inspector_name: input.inspectorName?.trim() || null,
     has_remarks: hasRemarks,
     deadline_at: hasRemarks ? computeInspectorDeadlineAt(reportDate) : null,
+    next_inspection_date: normalizeOptionalDate(input.nextInspectionDate),
     status: "open",
     closed_at: null,
     closure_notes: null,

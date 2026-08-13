@@ -22,13 +22,6 @@ export async function GET(request: Request) {
     );
   }
 
-  if (!process.env.RESEND_API_KEY) {
-    return NextResponse.json(
-      { error: "RESEND_API_KEY is not configured" },
-      { status: 503 }
-    );
-  }
-
   const result = await runInspectorDailyNotifications();
   return NextResponse.json(result, { status: result.ok ? 200 : 207 });
 }

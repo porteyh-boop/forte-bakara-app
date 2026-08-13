@@ -49,7 +49,10 @@ import {
   type CloudElevatorRow,
 } from "@/lib/buildings-cloud";
 import { buildMasterBuildingList } from "@/lib/master-buildings-list";
-import type { MasterBuildingSearchHit } from "@/lib/master-building-search";
+import {
+  findMasterBuildingById,
+  type MasterBuildingSearchHit,
+} from "@/lib/master-building-search";
 import {
   getAllBuildingIds,
   getBuildingDataset,
@@ -95,7 +98,17 @@ function resolveElevatorOptions(
   }
 }
 
-export default function MasterDocumentCenterSection() {
+interface MasterDocumentCenterSectionProps {
+  fixedBuildingId?: string;
+  embedded?: boolean;
+  compactUpload?: boolean;
+}
+
+export default function MasterDocumentCenterSection({
+  fixedBuildingId,
+  embedded = false,
+  compactUpload = false,
+}: MasterDocumentCenterSectionProps = {}) {
   const { guardSensitiveAction } = useAppVersion();
   const cloudReady = isDocumentCenterConfigured();
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
@@ -137,8 +150,9 @@ export default function MasterDocumentCenterSection() {
     ""
   );
   const [filterTag, setFilterTag] = useState("");
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
 
-  const buildingId = selectedBuildingHit?.profile.buildingId ?? "";
+  const buildingId = selectedBuildingHit?.profile.buildingId ?? fixedBuildingId ?? "";
 
   const cloudReadyForBuildings = isPilotCloudConfigured();
 
@@ -178,6 +192,21 @@ export default function MasterDocumentCenterSection() {
     },
     [elevatorsByBuilding]
   );
+
+  useEffect(() => {
+    if (!fixedBuildingId) return;
+    setFilterBuildingId(fixedBuildingId);
+    const hit = findMasterBuildingById(
+      buildingOptions,
+      fixedBuildingId,
+      resolveElevatorCount
+    );
+    if (hit) setSelectedBuildingHit(hit);
+  }, [fixedBuildingId, buildingOptions, resolveElevatorCount]);
+
+  const fixedBuildingName = fixedBuildingId
+    ? resolveBuildingName(fixedBuildingId)
+    : null;
 
   const elevatorOptions = useMemo(() => {
     if (!buildingId) return [];
@@ -290,7 +319,7 @@ export default function MasterDocumentCenterSection() {
     setMessage(null);
     setUploadProgress(null);
 
-    if (!selectedBuildingHit || !buildingId) {
+    if (!buildingId) {
       setMessage("יש לבחור בניין מהמערכת לפני שמירת המסמך.");
       return;
     }
@@ -329,7 +358,9 @@ export default function MasterDocumentCenterSection() {
       setDescription("");
       setSelectedTags([]);
       setElevatorId("");
-      setSelectedBuildingHit(null);
+      if (!fixedBuildingId) {
+        setSelectedBuildingHit(null);
+      }
       setInspectorName("");
       setHasRemarks(false);
       setSelectedFile(null);
@@ -340,6 +371,7 @@ export default function MasterDocumentCenterSection() {
           ? "תסקיר בודק נשמר במאגר ודוח מעקב נפתח."
           : "תסקיר בודק נשמר במאגר ללא מעקב הערות."
       );
+      if (compactUpload) setUploadDialogOpen(false);
       const refreshed = await refresh();
       if (refreshed.error) {
         setMessage(`התסקיר נשמר, אך טעינת הרשימה נכשלה: ${refreshed.error}`);
@@ -354,7 +386,7 @@ export default function MasterDocumentCenterSection() {
 
     traceDocumentCenter("submit.start", {
       buildingId,
-      buildingName: selectedBuildingHit.profile.name,
+      buildingName: selectedBuildingHit?.profile.name ?? fixedBuildingName ?? buildingId,
       fileName: selectedFile.name,
       fileType: selectedFile.type,
       fileSizeBytes: selectedFile.size,
@@ -441,11 +473,14 @@ export default function MasterDocumentCenterSection() {
     setDescription("");
     setSelectedTags([]);
     setElevatorId("");
-    setSelectedBuildingHit(null);
+    if (!fixedBuildingId) {
+      setSelectedBuildingHit(null);
+    }
     setSelectedFile(null);
     setDocumentType("other");
     setDocumentVisibility(DEFAULT_DOCUMENT_VISIBILITY);
     setMessage("המסמך נשמר במאגר.");
+    if (compactUpload) setUploadDialogOpen(false);
     const refreshed = await refresh();
     if (refreshed.error) {
       setMessage(`המסמך נשמר, אך טעינת הרשימה נכשלה: ${refreshed.error}`);
@@ -502,45 +537,55 @@ export default function MasterDocumentCenterSection() {
     await refresh();
   }
 
-  return (
-    <div className="space-y-4">
-      <div className="bg-white rounded-2xl border border-gold/30 p-4 space-y-2">
-        <h2 className="text-base font-bold text-navy">Document Center — מאגר מסמכים</h2>
-        <p className="text-sm text-gray-text">
-          מאגר מרכזי לשיוך מסמכים לבניין/מעלית, סוג, תגיות וחיפוש.
-          תשתית מוכנה ל-OCR ו-AI בעתיד — ללא OCR/AI ב-V1.
-        </p>
-        {!cloudReady && (
-          <p className="text-sm text-red-600">
-            Supabase לא מוגדר. הריצו migration 008 ב-SQL Editor.
-          </p>
-        )}
-        {message && (
-          <p className="text-sm font-semibold text-navy bg-gray-light rounded-lg px-3 py-2">
-            {message}
-          </p>
-        )}
-      </div>
+  function closeUploadDialog() {
+    setUploadDialogOpen(false);
+  }
 
+  function openUploadDialog(type: DocumentTypeId = "other") {
+    setDocumentType(type);
+    setUploadDialogOpen(true);
+  }
+
+  const canSaveDocument =
+    Boolean(buildingId) && (Boolean(selectedBuildingHit) || Boolean(fixedBuildingId));
+
+  const uploadForm = (
       <form
         onSubmit={(e) => void handleCreate(e)}
         className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3"
       >
-        <h3 className="text-sm font-bold text-navy">הוספת מסמך</h3>
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-sm font-bold text-navy">הוספת מסמך</h3>
+          {compactUpload && uploadDialogOpen && (
+            <button
+              type="button"
+              onClick={closeUploadDialog}
+              className="text-xs font-semibold text-navy/70 hover:text-navy"
+            >
+              סגור
+            </button>
+          )}
+        </div>
 
-        <MasterExistingBuildingSearch
-          entries={buildingOptions}
-          resolveElevatorCount={resolveElevatorCount}
-          selectedHit={selectedBuildingHit}
-          onSelectHit={(hit) => {
-            setSelectedBuildingHit(hit);
-            setElevatorId("");
-          }}
-          mode="select"
-        />
+        {embedded && fixedBuildingId ? (
+          <p className="text-xs text-navy bg-gray-50 border border-gray-200 rounded-md px-3 py-2">
+            בניין: <span className="font-semibold">{fixedBuildingName ?? fixedBuildingId}</span>
+          </p>
+        ) : (
+          <MasterExistingBuildingSearch
+            entries={buildingOptions}
+            resolveElevatorCount={resolveElevatorCount}
+            selectedHit={selectedBuildingHit}
+            onSelectHit={(hit) => {
+              setSelectedBuildingHit(hit);
+              setElevatorId("");
+            }}
+            mode="select"
+          />
+        )}
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {selectedBuildingHit && (
+          {(selectedBuildingHit || fixedBuildingId) && (
             <div className="sm:col-span-2 lg:col-span-3 xl:col-span-4">
               <label className="text-xs text-gray-text">מעלית (אופציונלי)</label>
               {elevatorOptions.length > 0 ? (
@@ -703,7 +748,7 @@ export default function MasterDocumentCenterSection() {
 
         <button
           type="submit"
-          disabled={!cloudReady || creating || !selectedBuildingHit}
+          disabled={!cloudReady || creating || !canSaveDocument}
           className="btn-primary w-full sm:w-auto disabled:opacity-50"
         >
           {creating
@@ -712,26 +757,89 @@ export default function MasterDocumentCenterSection() {
               : "שומר..."
             : "שמור במאגר"}
         </button>
-        {!selectedBuildingHit && cloudReady && (
+        {!canSaveDocument && cloudReady && (
           <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-            יש לבחור בניין מהרשימה למעלה לפני שמירה (לחיצה על התוצאה או Enter).
+            יש לבחור בניין מהרשימה לפני שמירה (לחיצה על התוצאה או Enter).
           </p>
         )}
       </form>
+  );
+
+  return (
+    <div className="space-y-4">
+      {!embedded && (
+        <div className="bg-white rounded-2xl border border-gold/30 p-4 space-y-2">
+          <h2 className="text-base font-bold text-navy">Document Center — מאגר מסמכים</h2>
+          <p className="text-sm text-gray-text">
+            מאגר מרכזי לשיוך מסמכים לבניין/מעלית, סוג, תגיות וחיפוש.
+            תשתית מוכנה ל-OCR ו-AI בעתיד — ללא OCR/AI ב-V1.
+          </p>
+          {!cloudReady && (
+            <p className="text-sm text-red-600">
+              Supabase לא מוגדר. הריצו migration 008 ב-SQL Editor.
+            </p>
+          )}
+          {message && (
+            <p className="text-sm font-semibold text-navy bg-gray-light rounded-lg px-3 py-2">
+              {message}
+            </p>
+          )}
+        </div>
+      )}
+      {embedded && message && (
+        <p className="text-xs font-semibold text-navy bg-gray-50 border border-gray-200 rounded-md px-3 py-2">
+          {message}
+        </p>
+      )}
+      {embedded && !cloudReady && (
+        <p className="text-xs text-red-600">
+          Supabase לא מוגדר. הריצו migration 008 ב-SQL Editor.
+        </p>
+      )}
+
+      {!compactUpload && uploadForm}
+
+      {compactUpload && uploadDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-navy/40 p-4">
+          <div className="w-full max-w-3xl max-h-[90vh] overflow-auto rounded-lg shadow-xl">
+            {uploadForm}
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="text-sm font-bold text-navy">
             מאגר מסמכים ({filteredDocuments.length})
           </h3>
-          <button
-            type="button"
-            onClick={() => void refresh()}
-            disabled={!cloudReady || loading}
-            className="text-xs font-semibold text-navy border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 disabled:opacity-50"
-          >
-            {loading ? "טוען..." : "רענון"}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {compactUpload && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => openUploadDialog("other")}
+                  className="text-xs font-semibold text-white bg-navy rounded-lg px-3 py-1.5 hover:bg-navy-light"
+                >
+                  מסמך חדש
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openUploadDialog("other")}
+                  className="text-xs font-semibold text-navy border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50"
+                >
+                  העלאת קובץ
+                </button>
+              </>
+            )}
+            <button
+              type="button"
+              onClick={() => void refresh()}
+              disabled={!cloudReady || loading}
+              className="text-xs font-semibold text-navy border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 disabled:opacity-50"
+            >
+              {loading ? "טוען..." : "רענון"}
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -741,18 +849,20 @@ export default function MasterDocumentCenterSection() {
             placeholder="חיפוש..."
             className="form-input"
           />
-          <select
-            value={filterBuildingId}
-            onChange={(e) => setFilterBuildingId(e.target.value)}
-            className="form-input"
-          >
-            <option value="">כל הבניינים</option>
-            {buildingOptions.map((building) => (
-              <option key={building.buildingId} value={building.buildingId}>
-                {building.name}
-              </option>
-            ))}
-          </select>
+          {!embedded && (
+            <select
+              value={filterBuildingId}
+              onChange={(e) => setFilterBuildingId(e.target.value)}
+              className="form-input"
+            >
+              <option value="">כל הבניינים</option>
+              {buildingOptions.map((building) => (
+                <option key={building.buildingId} value={building.buildingId}>
+                  {building.name}
+                </option>
+              ))}
+            </select>
+          )}
           <select
             value={filterDocumentType}
             onChange={(e) =>

@@ -31,18 +31,24 @@ interface InspectorCreateFieldsProps {
   reportDate: string;
   inspectorName: string;
   hasRemarks: boolean;
+  nextInspectionDate?: string;
+  showNextInspectionDate?: boolean;
   onReportDateChange: (value: string) => void;
   onInspectorNameChange: (value: string) => void;
   onHasRemarksChange: (value: boolean) => void;
+  onNextInspectionDateChange?: (value: string) => void;
 }
 
 export function InspectorCreateFields({
   reportDate,
   inspectorName,
   hasRemarks,
+  nextInspectionDate = "",
+  showNextInspectionDate = false,
   onReportDateChange,
   onInspectorNameChange,
   onHasRemarksChange,
+  onNextInspectionDateChange,
 }: InspectorCreateFieldsProps) {
   return (
     <>
@@ -65,6 +71,18 @@ export function InspectorCreateFields({
           placeholder="אופציונלי"
         />
       </div>
+      {showNextInspectionDate && (
+        <div>
+          <label className="text-xs text-gray-text">מועד הבדיקה הבאה</label>
+          <input
+            type="date"
+            value={nextInspectionDate}
+            onChange={(e) => onNextInspectionDateChange?.(e.target.value)}
+            className="form-input mt-1"
+          />
+          <p className="text-[11px] text-gray-text mt-0.5">אופציונלי — נקבע ידנית</p>
+        </div>
+      )}
       <div className="sm:col-span-2">
         <label className="flex items-start gap-2 text-sm text-navy">
           <input
@@ -123,6 +141,7 @@ export function InspectorDocumentCard({
     document_description: document.description,
     has_remarks: meta.has_remarks,
     deadline_at: meta.deadline_at,
+    next_inspection_date: meta.next_inspection_date,
     status: meta.status,
     closed_at: meta.closed_at,
     closure_notes: meta.closure_notes,

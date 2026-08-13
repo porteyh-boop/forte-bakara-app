@@ -3,11 +3,28 @@ import { getPilotSupabaseClient } from "./pilot-cloud";
 export const DOCUMENT_INSPECTOR_NOTIFICATIONS_TABLE =
   "document_inspector_notifications";
 
-export const INSPECTOR_NOTIFICATION_TYPES = [
+export const INSPECTOR_LEGACY_NOTIFICATION_TYPES = [
   "day_35",
   "day_40",
   "day_45_plus",
 ] as const;
+
+export const INSPECTOR_LETTER_NOTIFICATION_TYPES = [
+  "letter_1",
+  "letter_2",
+  "letter_3",
+] as const;
+
+export const INSPECTOR_NOTIFICATION_TYPES = [
+  ...INSPECTOR_LEGACY_NOTIFICATION_TYPES,
+  ...INSPECTOR_LETTER_NOTIFICATION_TYPES,
+] as const;
+
+export type InspectorLegacyNotificationType =
+  (typeof INSPECTOR_LEGACY_NOTIFICATION_TYPES)[number];
+
+export type InspectorLetterStage =
+  (typeof INSPECTOR_LETTER_NOTIFICATION_TYPES)[number];
 
 export type InspectorNotificationType =
   (typeof INSPECTOR_NOTIFICATION_TYPES)[number];
@@ -23,6 +40,22 @@ function isInspectorNotificationType(
   value: string
 ): value is InspectorNotificationType {
   return (INSPECTOR_NOTIFICATION_TYPES as readonly string[]).includes(value);
+}
+
+export function isInspectorLegacyNotificationType(
+  type: InspectorNotificationType
+): type is InspectorLegacyNotificationType {
+  return (INSPECTOR_LEGACY_NOTIFICATION_TYPES as readonly string[]).includes(
+    type
+  );
+}
+
+export function isInspectorLetterStage(
+  type: InspectorNotificationType
+): type is InspectorLetterStage {
+  return (INSPECTOR_LETTER_NOTIFICATION_TYPES as readonly string[]).includes(
+    type
+  );
 }
 
 function mapDocumentInspectorNotificationRow(
@@ -105,6 +138,31 @@ export function getSentNotificationTypes(
   return new Set(rows.map((row) => row.notification_type));
 }
 
+export function getPreparedInspectorLetterStages(
+  rows: DocumentInspectorNotificationRecord[]
+): Set<InspectorLetterStage> {
+  const prepared = new Set<InspectorLetterStage>();
+  for (const row of rows) {
+    if (isInspectorLetterStage(row.notification_type)) {
+      prepared.add(row.notification_type);
+    }
+  }
+  return prepared;
+}
+
+export function groupPreparedLetterStagesByDocumentId(
+  rows: DocumentInspectorNotificationRecord[]
+): Record<string, Set<InspectorLetterStage>> {
+  const grouped: Record<string, Set<InspectorLetterStage>> = {};
+  for (const row of rows) {
+    if (!isInspectorLetterStage(row.notification_type)) continue;
+    const current = grouped[row.document_id] ?? new Set<InspectorLetterStage>();
+    current.add(row.notification_type);
+    grouped[row.document_id] = current;
+  }
+  return grouped;
+}
+
 export async function recordNotificationSent(input: {
   documentId: string;
   notificationType: InspectorNotificationType;
@@ -138,6 +196,43 @@ export async function recordNotificationSent(input: {
   return mapDocumentInspectorNotificationRow(data);
 }
 
+export async function recordInspectorLetterPrepared(input: {
+  documentId: string;
+  letterStage: InspectorLetterStage;
+  preparedAt?: string;
+}): Promise<DocumentInspectorNotificationRecord | null> {
+  return recordNotificationSent({
+    documentId: input.documentId,
+    notificationType: input.letterStage,
+    sentAt: input.preparedAt,
+  });
+}
+
+/** Removes prepared letter evidence so follow-up alerts can reappear for the same stage. */
+export async function deleteInspectorLetterPreparedEvidence(input: {
+  documentId: string;
+  letterStage: InspectorLetterStage;
+}): Promise<boolean> {
+  const client = getPilotSupabaseClient();
+  if (!client || !input.documentId.trim()) return false;
+
+  const { error } = await client
+    .from(DOCUMENT_INSPECTOR_NOTIFICATIONS_TABLE)
+    .delete()
+    .eq("document_id", input.documentId.trim())
+    .eq("notification_type", input.letterStage);
+
+  if (error) {
+    console.warn(
+      "[document-inspector-notifications] delete prepared evidence failed:",
+      error.message
+    );
+    return false;
+  }
+
+  return true;
+}
+
 export function getInspectorNotificationSentLabel(
   type: InspectorNotificationType
 ): string {
@@ -148,6 +243,12 @@ export function getInspectorNotificationSentLabel(
       return "נשלחה התראת 40";
     case "day_45_plus":
       return "נשלחה התראת חריגה";
+    case "letter_1":
+      return "מכתב ראשון הוכן";
+    case "letter_2":
+      return "מכתב שני הוכן";
+    case "letter_3":
+      return "מכתב שלישי הוכן";
   }
 }
 

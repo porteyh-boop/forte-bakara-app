@@ -4,8 +4,11 @@ import {
   FaultReportImageThumbnails,
   useFaultReportImageViewer,
 } from "@/components/FaultReportImageSection";
+import StatusBadge from "@/components/StatusBadge";
+import { isPilotFaultClosedStatus } from "@/lib/fault-lifecycle";
 import { resolveFaultReportImagesFromCloud } from "@/lib/fault-images";
 import type { PilotCloudFault } from "@/lib/pilot-cloud";
+import type { FaultStatus } from "@/lib/types";
 
 interface MasterCloudFaultCardProps {
   fault: PilotCloudFault;
@@ -14,6 +17,20 @@ interface MasterCloudFaultCardProps {
   onClose: (faultId: string) => void;
   onReopen: (faultId: string) => void;
   onDelete: (faultId: string) => void;
+}
+
+function faultStatusForBadge(status: string): FaultStatus {
+  if (
+    status === "פתוחה" ||
+    status === "בטיפול" ||
+    status === "סגורה" ||
+    status === "טופלה" ||
+    status === "מושבתת" ||
+    status === "פעילה"
+  ) {
+    return status;
+  }
+  return "פתוחה";
 }
 
 export default function MasterCloudFaultCard({
@@ -26,6 +43,7 @@ export default function MasterCloudFaultCard({
 }: MasterCloudFaultCardProps) {
   const reportImages = resolveFaultReportImagesFromCloud(fault);
   const imageViewer = useFaultReportImageViewer(reportImages);
+  const isClosed = isPilotFaultClosedStatus(fault.status);
 
   return (
     <article className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
@@ -40,13 +58,28 @@ export default function MasterCloudFaultCard({
               {fault.ticket_number}
             </p>
           )}
+          {fault.fault_source && (
+            <p className="text-[11px] text-gray-text mt-0.5">
+              מקור: {fault.fault_source}
+            </p>
+          )}
         </div>
-        <span className="text-xs font-semibold px-2 py-1 rounded-lg bg-gray-light text-navy shrink-0">
-          {fault.status}
-        </span>
+        <StatusBadge status={faultStatusForBadge(fault.status)} size="sm" />
       </div>
 
       <p className="text-sm text-navy/80 leading-relaxed">{fault.description}</p>
+
+      {fault.status === "בטיפול" && fault.treatment_note?.trim() && (
+        <p className="text-xs text-navy/75 mt-2 bg-amber-50/60 border border-amber-100 rounded-lg px-3 py-2 whitespace-pre-wrap">
+          {fault.treatment_note}
+        </p>
+      )}
+
+      {isClosed && fault.closure_note?.trim() && (
+        <p className="text-xs text-navy/75 mt-2 bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 whitespace-pre-wrap">
+          {fault.closure_note}
+        </p>
+      )}
 
       <FaultReportImageThumbnails
         images={reportImages}
@@ -56,6 +89,12 @@ export default function MasterCloudFaultCard({
 
       <p className="text-xs text-gray-text mt-2">
         {formatDate(fault.created_at)}
+        {fault.treatment_started_at && fault.status === "בטיפול" && (
+          <span className="mr-2">
+            {" "}
+            · בטיפול מ-{formatDate(fault.treatment_started_at)}
+          </span>
+        )}
         {fault.source_device_id && (
           <span className="mr-2"> · מכשיר: {fault.source_device_id.slice(0, 12)}…</span>
         )}
@@ -84,7 +123,7 @@ export default function MasterCloudFaultCard({
             </button>
           </>
         )}
-        {fault.status !== "סגורה" ? (
+        {!isClosed ? (
           <button
             type="button"
             disabled={actionId === fault.id}

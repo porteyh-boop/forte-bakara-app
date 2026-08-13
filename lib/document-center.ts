@@ -127,6 +127,7 @@ export interface CreateDocumentInput {
   fileSizeBytes?: number;
   tags?: string[];
   visibility?: DocumentVisibility;
+  aiMetadata?: Record<string, unknown> | null;
 }
 
 export interface DocumentSearchFilters {
@@ -323,7 +324,7 @@ export function buildDocumentInsertRow(input: CreateDocumentInput) {
     ocr_status: "none",
     ocr_text: null,
     ai_summary: null,
-    ai_metadata: null,
+    ai_metadata: input.aiMetadata ?? null,
     visibility,
     updated_at: now,
   };
@@ -335,9 +336,13 @@ export function buildDocumentInsertRowWithoutVisibilityColumn(
 ) {
   const row = buildDocumentInsertRow(input);
   const { visibility, ...withoutVisibility } = row;
+  const existingMeta =
+    input.aiMetadata && typeof input.aiMetadata === "object"
+      ? input.aiMetadata
+      : {};
   return {
     ...withoutVisibility,
-    ai_metadata: { visibility },
+    ai_metadata: { ...existingMeta, visibility },
   };
 }
 

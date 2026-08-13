@@ -75,6 +75,24 @@ export const DEFAULT_CLIENT_PERMISSIONS: ClientPermissionFlags = {
   can_submit_feedback: false,
 };
 
+/** Permissions shown in Project V2 create/edit UI (portal access is implicit). */
+export const CLIENT_PERMISSION_UI_KEYS: ClientPermissionKey[] =
+  CLIENT_PERMISSION_KEYS.filter((key) => key !== "can_view_building_dashboard");
+
+export const DEFAULT_NEW_CLIENT_ACCESS_PERMISSIONS: ClientPermissionFlags = {
+  ...DEFAULT_CLIENT_PERMISSIONS,
+  can_view_building_dashboard: true,
+  can_report_faults: true,
+};
+
+export function formatClientPermissionsSummary(
+  flags: ClientPermissionFlags
+): string {
+  const enabled = CLIENT_PERMISSION_UI_KEYS.filter((key) => flags[key]);
+  if (enabled.length === 0) return "ללא הרשאות נוספות";
+  return enabled.map((key) => CLIENT_PERMISSION_LABELS[key]).join(" · ");
+}
+
 export const CLIENT_ACTIVITY_ACTION_LABELS: Record<string, string> = {
   permissions_updated: "עדכון הרשאות",
   permissions_created: "יצירת הרשאות",

@@ -1,6 +1,7 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { Suspense } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useAppVersion } from "@/components/AppVersionProvider";
 import {
   BRAND_APP,
@@ -9,12 +10,16 @@ import {
   BRAND_FORTE,
 } from "@/lib/brand";
 import { isClientAccessPath } from "@/lib/client-access";
+import { isMasterUiV2Enabled } from "@/lib/master-ui-v2";
 import { VERSION_DISPLAY_LABEL } from "@/lib/app-version-messages";
 
-export default function AppFooter() {
+function AppFooterInner() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { displayVersion } = useAppVersion();
   if (isClientAccessPath(pathname)) return null;
+  if (pathname === "/master" && isMasterUiV2Enabled(searchParams)) return null;
+  if (pathname.startsWith("/master/project-v2")) return null;
 
   return (
     <footer className="print:hidden max-w-lg mx-auto px-5 py-6 pb-28 text-center">
@@ -28,5 +33,13 @@ export default function AppFooter() {
         {VERSION_DISPLAY_LABEL} {displayVersion}
       </p>
     </footer>
+  );
+}
+
+export default function AppFooter() {
+  return (
+    <Suspense fallback={null}>
+      <AppFooterInner />
+    </Suspense>
   );
 }

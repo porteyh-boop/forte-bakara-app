@@ -1,5 +1,6 @@
 import { Packer } from "docx";
 import { buildMasterLetterDocxDocument } from "./master-letter-docx/build-document";
+import type { MasterLetterRecipientSnapshot } from "./master-letter-metadata";
 import { MASTER_LETTER_DOCX_MIME } from "./master-letter-docx/theme";
 
 export { MASTER_LETTER_DOCX_MIME };
@@ -26,11 +27,15 @@ export async function createMasterLetterDocFile(params: {
   buildingId: string;
   title: string;
   letterDate?: string;
+  recipients?: MasterLetterRecipientSnapshot[];
+  cc?: MasterLetterRecipientSnapshot[];
 }): Promise<File> {
   const document = await buildMasterLetterDocxDocument({
     subject: params.subject,
     bodyText: params.bodyText,
     letterDate: params.letterDate,
+    recipients: params.recipients,
+    cc: params.cc,
   });
 
   const fileName = buildMasterLetterFileName({
