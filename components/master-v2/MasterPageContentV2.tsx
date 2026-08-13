@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useBuilding } from "@/components/BuildingProvider";
 import MasterCodeGate from "@/components/master-v2/MasterCodeGate";
@@ -37,7 +36,6 @@ import {
 } from "@/lib/pilot-cloud";
 
 export default function MasterPageContentV2() {
-  const router = useRouter();
   const { selectBuilding } = useBuilding();
   const [authed, setAuthed] = useState(false);
   const [cloudReady, setCloudReady] = useState(false);
@@ -144,7 +142,7 @@ export default function MasterPageContentV2() {
 
   function handleRowClick(buildingId: string) {
     selectBuilding(buildingId);
-    router.push(buildMasterProjectV2Path(buildingId));
+    window.location.assign(buildMasterProjectV2Path(buildingId));
   }
 
   function handleLogout() {
