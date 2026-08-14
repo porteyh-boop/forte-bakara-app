@@ -49,6 +49,11 @@ import {
   faultIndicatesDisabledElevator,
 } from "../lib/fault-lifecycle";
 import { runAppVersionQa } from "./qa-app-version";
+import {
+  parseProjectNumberSortValue,
+  sortMasterProjectTableRowsByProjectNumber,
+  type MasterProjectTableRow,
+} from "../components/master-v2/master-v2-project-rows";
 import { getFaultLifecycleStats } from "../lib/fault-stats";
 import {
   buildFaultFromSubmission,
@@ -5305,6 +5310,108 @@ assert(
 );
 
 runAppVersionQa(assert);
+
+const masterProjectsTableSource = fs.readFileSync(
+  path.join(process.cwd(), "components/master-v2/MasterProjectsTable.tsx"),
+  "utf8"
+);
+const masterProjectsViewSource = fs.readFileSync(
+  path.join(process.cwd(), "components/master-v2/MasterProjectsView.tsx"),
+  "utf8"
+);
+const masterProjectRowsSource = fs.readFileSync(
+  path.join(process.cwd(), "components/master-v2/master-v2-project-rows.ts"),
+  "utf8"
+);
+
+const sampleProjectRows: MasterProjectTableRow[] = [
+  {
+    buildingId: "b3",
+    projectNumber: "826110",
+    buildingName: "C",
+    client: "—",
+    city: "—",
+    stage: "—",
+    projectStage: "—",
+    progress: null,
+    updatedAt: null,
+  },
+  {
+    buildingId: "b1",
+    projectNumber: "826101",
+    buildingName: "A",
+    client: "—",
+    city: "—",
+    stage: "—",
+    projectStage: "—",
+    progress: null,
+    updatedAt: null,
+  },
+  {
+    buildingId: "b4",
+    projectNumber: "—",
+    buildingName: "D",
+    client: "—",
+    city: "—",
+    stage: "—",
+    projectStage: "—",
+    progress: null,
+    updatedAt: null,
+  },
+  {
+    buildingId: "b2",
+    projectNumber: "826102",
+    buildingName: "B",
+    client: "—",
+    city: "—",
+    stage: "—",
+    projectStage: "—",
+    progress: null,
+    updatedAt: null,
+  },
+];
+
+assert(
+  parseProjectNumberSortValue("826101") === 826101 &&
+    parseProjectNumberSortValue("826110") === 826110 &&
+    parseProjectNumberSortValue("—") === null &&
+    parseProjectNumberSortValue("") === null &&
+    parseProjectNumberSortValue("826101")! < parseProjectNumberSortValue("826110")!,
+  "Master Projects V2: מיון מספר פרויקט — parse מספרי"
+);
+
+const ascSorted = sortMasterProjectTableRowsByProjectNumber(
+  sampleProjectRows,
+  "asc"
+).map((row) => row.buildingId);
+const descSorted = sortMasterProjectTableRowsByProjectNumber(
+  sampleProjectRows,
+  "desc"
+).map((row) => row.buildingId);
+
+assert(
+  ascSorted.join(",") === "b1,b2,b3,b4" &&
+    descSorted.join(",") === "b3,b2,b1,b4",
+  "Master Projects V2: מיון מספר פרויקט — עולה/יורד + חסר בסוף"
+);
+
+assert(
+  masterProjectsTableSource.includes("onProjectNumberSortClick") &&
+    masterProjectsTableSource.includes('aria-sort') &&
+    masterProjectsTableSource.includes("onClick={() => onRowClick(row.buildingId)}"),
+  "Master Projects V2: כותרת מיון + buildingId בלחיצת שורה"
+);
+assert(
+  masterProjectsViewSource.includes("sortMasterProjectTableRowsByProjectNumber") &&
+    masterProjectsViewSource.includes("displayedRows") &&
+    masterProjectsViewSource.includes('if (prev === null) return "asc"'),
+  "Master Projects V2: filter לפני sort + toggle עולה/יורד"
+);
+assert(
+  masterProjectRowsSource.includes("sortMasterProjectTableRowsByProjectNumber") &&
+    masterProjectRowsSource.includes("parseProjectNumberSortValue"),
+  "Master Projects V2: helpers למיון מספר פרויקט"
+);
 
 console.log(`\n=== סיכום: ${passed} עברו, ${failed} נכשלו ===`);
 console.log(`=== מיתוג: ${brandFiles.length} קבצים נסרקו ===\n`);

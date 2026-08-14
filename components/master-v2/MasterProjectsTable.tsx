@@ -1,6 +1,9 @@
 "use client";
 
-import type { MasterProjectTableRow } from "@/components/master-v2/master-v2-project-rows";
+import type {
+  MasterProjectTableRow,
+  ProjectNumberSortDirection,
+} from "@/components/master-v2/master-v2-project-rows";
 import { formatMasterProjectDate } from "@/components/master-v2/master-v2-project-rows";
 import {
   ForteV2DataTable,
@@ -13,6 +16,8 @@ interface MasterProjectsTableProps {
   rows: MasterProjectTableRow[];
   loading: boolean;
   onRowClick: (buildingId: string) => void;
+  projectNumberSort: ProjectNumberSortDirection | null;
+  onProjectNumberSortClick: () => void;
 }
 
 function projectStageTone(value: string): "blue" | "neutral" {
@@ -24,6 +29,8 @@ export default function MasterProjectsTable({
   rows,
   loading,
   onRowClick,
+  projectNumberSort,
+  onProjectNumberSortClick,
 }: MasterProjectsTableProps) {
   if (loading && rows.length === 0) {
     return (
@@ -53,7 +60,32 @@ export default function MasterProjectsTable({
         <thead>
           <tr>
             <th className="w-10" aria-hidden="true" />
-            <th>מספר פרויקט</th>
+            <th>
+              <button
+                type="button"
+                onClick={onProjectNumberSortClick}
+                className="inline-flex items-center gap-1 font-inherit text-inherit hover:text-forte-primary transition-colors cursor-pointer"
+                aria-sort={
+                  projectNumberSort === "asc"
+                    ? "ascending"
+                    : projectNumberSort === "desc"
+                      ? "descending"
+                      : "none"
+                }
+              >
+                <span>מספר פרויקט</span>
+                {projectNumberSort === "asc" && (
+                  <span aria-hidden="true" className="text-forte-primary">
+                    ↑
+                  </span>
+                )}
+                {projectNumberSort === "desc" && (
+                  <span aria-hidden="true" className="text-forte-primary">
+                    ↓
+                  </span>
+                )}
+              </button>
+            </th>
             <th>שם הבניין</th>
             <th>לקוח</th>
             <th>עיר</th>

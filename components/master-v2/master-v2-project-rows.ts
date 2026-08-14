@@ -94,3 +94,39 @@ export function projectUpdatedYear(iso: string | null): number | null {
   const year = new Date(iso).getFullYear();
   return Number.isFinite(year) ? year : null;
 }
+
+export type ProjectNumberSortDirection = "asc" | "desc";
+
+/** Numeric value for display sort; null when missing or not a whole number. */
+export function parseProjectNumberSortValue(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "—") return null;
+  if (!/^\d+$/.test(trimmed)) return null;
+  const num = Number.parseInt(trimmed, 10);
+  return Number.isFinite(num) ? num : null;
+}
+
+export function compareMasterProjectRowsByProjectNumber(
+  a: MasterProjectTableRow,
+  b: MasterProjectTableRow,
+  direction: ProjectNumberSortDirection
+): number {
+  const aNum = parseProjectNumberSortValue(a.projectNumber);
+  const bNum = parseProjectNumberSortValue(b.projectNumber);
+
+  if (aNum == null && bNum == null) return 0;
+  if (aNum == null) return 1;
+  if (bNum == null) return -1;
+
+  const diff = aNum - bNum;
+  return direction === "asc" ? diff : -diff;
+}
+
+export function sortMasterProjectTableRowsByProjectNumber(
+  rows: MasterProjectTableRow[],
+  direction: ProjectNumberSortDirection
+): MasterProjectTableRow[] {
+  return [...rows].sort((a, b) =>
+    compareMasterProjectRowsByProjectNumber(a, b, direction)
+  );
+}

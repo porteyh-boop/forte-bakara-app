@@ -5,6 +5,8 @@ import MasterProjectsTable from "@/components/master-v2/MasterProjectsTable";
 import {
   buildMasterProjectTableRow,
   projectUpdatedYear,
+  sortMasterProjectTableRowsByProjectNumber,
+  type ProjectNumberSortDirection,
 } from "@/components/master-v2/master-v2-project-rows";
 import {
   ForteV2FilterPill,
@@ -46,6 +48,8 @@ export default function MasterProjectsView({
   const [stageFilter, setStageFilter] = useState("הכל");
   const [statusFilter, setStatusFilter] = useState("הכל");
   const [yearFilter, setYearFilter] = useState("הכל");
+  const [projectNumberSort, setProjectNumberSort] =
+    useState<ProjectNumberSortDirection | null>(null);
 
   const tableRows = useMemo(() => {
     return entries.map((entry) =>
@@ -114,6 +118,21 @@ export default function MasterProjectsView({
     statusFilter,
     yearFilter,
   ]);
+
+  const displayedRows = useMemo(() => {
+    if (!projectNumberSort) return filteredRows;
+    return sortMasterProjectTableRowsByProjectNumber(
+      filteredRows,
+      projectNumberSort
+    );
+  }, [filteredRows, projectNumberSort]);
+
+  function toggleProjectNumberSort() {
+    setProjectNumberSort((prev) => {
+      if (prev === null) return "asc";
+      return prev === "asc" ? "desc" : "asc";
+    });
+  }
 
   const hasActiveFilters =
     clientFilter !== "הכל" ||
@@ -193,9 +212,11 @@ export default function MasterProjectsView({
       </ForteV2ToolbarCard>
 
       <MasterProjectsTable
-        rows={filteredRows}
+        rows={displayedRows}
         loading={loading}
         onRowClick={onRowClick}
+        projectNumberSort={projectNumberSort}
+        onProjectNumberSortClick={toggleProjectNumberSort}
       />
     </div>
   );
