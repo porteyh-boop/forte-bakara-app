@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAppVersion } from "@/components/AppVersionProvider";
 import MasterBuildingDetailsForm from "@/components/MasterBuildingDetailsForm";
+import CentralContactPickerDialog from "@/components/master-v2/CentralContactPickerDialog";
 import {
   ForteV2DangerButton,
   ForteV2Dialog,
@@ -18,6 +19,7 @@ import {
 import { getProjectStage } from "@/lib/get-project-stage";
 import {
   buildSaveBuildingPayload,
+  masterBuildingContactPatchFromDirectoryContact,
   masterBuildingFormFromRow,
   type MasterBuildingFormState,
 } from "@/lib/master-building-form";
@@ -38,7 +40,9 @@ import {
 import { MASTER_PROJECTS_V2_LIST_PATH } from "@/lib/master-project-v2-routes";
 import ProjectDocumentsPanel from "@/components/master-v2/project-v2/ProjectDocumentsPanel";
 import { deleteBuildingProject } from "@/lib/buildings-delete-cloud";
+import { isContactsConfigured } from "@/lib/contacts-cloud";
 import { isPilotCloudConfigured } from "@/lib/pilot-cloud";
+import type { Contact } from "@/lib/contacts";
 
 export interface MasterProjectV2Details {
   buildingId: string;
@@ -96,6 +100,8 @@ export default function MasterProjectV2DetailsTab({
   const [deleteConfirmInput, setDeleteConfirmInput] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [contactPickerOpen, setContactPickerOpen] = useState(false);
+  const contactsConfigured = isContactsConfigured();
 
   useEffect(() => {
     if (cloudRow) {
@@ -197,6 +203,13 @@ export default function MasterProjectV2DetailsTab({
     router.push(MASTER_PROJECTS_V2_LIST_PATH);
   }
 
+  function handleDirectoryContactSelected(contact: Contact) {
+    setForm((current) => ({
+      ...current,
+      ...masterBuildingContactPatchFromDirectoryContact(contact),
+    }));
+  }
+
   if (editing && cloudRow && cloudReady) {
     return (
       <ForteV2TabShell
@@ -207,6 +220,7 @@ export default function MasterProjectV2DetailsTab({
           <MasterProjectV2SecondaryButton
             onClick={() => {
               setEditing(false);
+              setContactPickerOpen(false);
               setError(null);
               if (cloudRow) {
                 setForm(masterBuildingFormFromRow(cloudRow));
@@ -233,6 +247,14 @@ export default function MasterProjectV2DetailsTab({
             onChange={(patch) => setForm((current) => ({ ...current, ...patch }))}
             isEdit
             showBuildingId={false}
+            onPickContact={
+              contactsConfigured ? () => setContactPickerOpen(true) : undefined
+            }
+          />
+          <CentralContactPickerDialog
+            open={contactPickerOpen}
+            onClose={() => setContactPickerOpen(false)}
+            onSelect={handleDirectoryContactSelected}
           />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-forte-border/60">
             <label className="block space-y-1 sm:col-span-2">

@@ -303,6 +303,7 @@ import {
 } from "../lib/master-building-create";
 import {
   buildSaveBuildingPayload,
+  masterBuildingContactPatchFromDirectoryContact,
   masterBuildingFormFromRow,
   MASTER_BUILDING_EDITABLE_FIELD_LABELS,
 } from "../lib/master-building-form";
@@ -2573,6 +2574,22 @@ assert(
     editPayload.elevatorCompany === "KONE" &&
     editPayload.floorsCount === 10,
   "עריכת פרטי בניין: מיפוי שמירה לענן"
+);
+const directoryContactPatch = masterBuildingContactPatchFromDirectoryContact({
+  fullName: "  דני כהן  ",
+  phone: " 050-1234567 ",
+});
+assert(
+  directoryContactPatch.contactName === "דני כהן" &&
+    directoryContactPatch.contactPhone === "050-1234567",
+  "פרטי פרויקט: העתקת איש קשר מהספר — שם וטלפון"
+);
+assert(
+  masterBuildingContactPatchFromDirectoryContact({
+    fullName: "ללא טלפון",
+    phone: "",
+  }).contactPhone === "",
+  "פרטי פרויקט: העתקת איש קשר ללא טלפון — ריק"
 );
 assert(
   !bottomNavMasterCheck.includes("ניהול בניינים"),

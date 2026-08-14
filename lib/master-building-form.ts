@@ -3,6 +3,7 @@ import {
   isOtherElevatorCompany,
 } from "./elevator-companies";
 import type { CloudBuildingRow, SaveBuildingInput } from "./buildings-cloud";
+import type { Contact } from "./contacts";
 
 export type MasterBuildingFormState = {
   buildingId: string;
@@ -60,6 +61,16 @@ export function masterBuildingFormFromRow(
     contactName: row.contact_name ?? "",
     contactPhone: row.contact_phone ?? "",
     floorsCount: row.floors_count != null ? String(row.floors_count) : "",
+  };
+}
+
+/** Copy-only mapping from central directory contact to building form fields. */
+export function masterBuildingContactPatchFromDirectoryContact(
+  contact: Pick<Contact, "fullName" | "phone">
+): Pick<MasterBuildingFormState, "contactName" | "contactPhone"> {
+  return {
+    contactName: contact.fullName.trim(),
+    contactPhone: contact.phone.trim(),
   };
 }
 

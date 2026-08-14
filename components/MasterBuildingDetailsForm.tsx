@@ -26,6 +26,7 @@ interface MasterBuildingDetailsFormProps {
   onChange: (patch: Partial<MasterBuildingFormState>) => void;
   isEdit: boolean;
   showBuildingId?: boolean;
+  onPickContact?: () => void;
   children?: React.ReactNode;
 }
 
@@ -34,6 +35,7 @@ export default function MasterBuildingDetailsForm({
   onChange,
   isEdit,
   showBuildingId = true,
+  onPickContact,
   children,
 }: MasterBuildingDetailsFormProps) {
   return (
@@ -102,6 +104,17 @@ export default function MasterBuildingDetailsForm({
             onChange={(e) => onChange({ customElevatorCompany: e.target.value })}
           />
         </FormField>
+      )}
+      {onPickContact && isEdit && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={onPickContact}
+            className="text-xs font-semibold text-forte-primary hover:text-forte-primary-hover hover:underline"
+          >
+            בחר מאנשי הקשר
+          </button>
+        </div>
       )}
       <div className="grid grid-cols-2 gap-2">
         <FormField label="איש קשר תפעולי של הבניין">
