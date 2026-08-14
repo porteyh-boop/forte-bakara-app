@@ -1,27 +1,30 @@
 "use client";
 
-import type { ProjectContactWithDetails } from "@/lib/contacts";
+import CentralContactCombobox from "@/components/master-v2/CentralContactCombobox";
+import type { Contact, ProjectContactWithDetails } from "@/lib/contacts";
+import type { MasterLetterRecipientSnapshot } from "@/lib/master-letter-metadata";
 import {
-  buildRecipientSnapshotFromContact,
-  type MasterLetterRecipientSnapshot,
-} from "@/lib/master-letter-metadata";
-import {
-  collectUsedContactRelationIds,
+  collectBlockedCentralContactIds,
   createMasterLetterPartyEntry,
+  createMasterLetterPartyEntryFromCentralContact,
   EMPTY_MANUAL_PARTY,
+  getPartyEntryDisplayLabel,
+  resolvePartyEntrySnapshot,
   type MasterLetterPartyEntry,
+  type MasterLetterPartyResolveContext,
 } from "@/lib/master-letter-parties";
 
 interface MasterLetterPartyEditorProps {
-  title: string;
+  sectionTitle: string;
+  fieldLabel: string;
   entries: MasterLetterPartyEntry[];
   onChange: (entries: MasterLetterPartyEntry[]) => void;
   projectContacts: ProjectContactWithDetails[];
-  blockedContactRelationIds: Set<string>;
-  primaryLabel?: string;
-  rowLabel?: string;
-  addLabel: string;
+  centralContacts: Contact[];
+  onCentralContactsChange: (contacts: Contact[]) => void;
+  blockedCentralContactIds: Set<string>;
   allowEmpty?: boolean;
+  comboboxInputId?: string;
 }
 
 function updateEntry(
@@ -34,191 +37,119 @@ function updateEntry(
   );
 }
 
-function PartyRow({
+function ManualEntryForm({
   entry,
-  index,
-  projectContacts,
-  blockedContactRelationIds,
-  primaryLabel,
-  rowLabel = "נמען",
   onChange,
-  onRemove,
-  canRemove,
 }: {
   entry: MasterLetterPartyEntry;
-  index: number;
-  projectContacts: ProjectContactWithDetails[];
-  blockedContactRelationIds: Set<string>;
-  primaryLabel?: string;
-  rowLabel?: string;
   onChange: (patch: Partial<MasterLetterPartyEntry>) => void;
-  onRemove: () => void;
-  canRemove: boolean;
 }) {
-  const selectedContact = projectContacts.find(
-    (row) => row.id === entry.contactRelationId
-  );
-
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-3 space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-semibold text-navy">
-          {index === 0 && primaryLabel
-            ? primaryLabel
-            : `${rowLabel}${index === 0 ? "" : ` ${index + 1}`}`}
-        </p>
-        {canRemove && (
-          <button
-            type="button"
-            onClick={onRemove}
-            className="text-xs text-red-600 hover:underline"
-          >
-            הסר
-          </button>
-        )}
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() =>
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border border-gray-200 bg-white p-3">
+      <label className="block space-y-1">
+        <span className="text-xs text-gray-text">שם</span>
+        <input
+          value={entry.manual.fullName}
+          onChange={(event) =>
             onChange({
-              source: "contact",
-              manual: { ...EMPTY_MANUAL_PARTY },
+              manual: { ...entry.manual, fullName: event.target.value },
             })
           }
-          className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${
-            entry.source === "contact"
-              ? "border-gold bg-gold/10 text-navy"
-              : "border-gray-200 text-navy"
-          }`}
-          disabled={projectContacts.length === 0}
-        >
-          מאנשי קשר
-        </button>
-        <button
-          type="button"
-          onClick={() =>
+          className="form-input"
+        />
+      </label>
+      <label className="block space-y-1">
+        <span className="text-xs text-gray-text">חברה / ארגון</span>
+        <input
+          value={entry.manual.company}
+          onChange={(event) =>
             onChange({
-              source: "manual",
-              contactRelationId: "",
+              manual: { ...entry.manual, company: event.target.value },
             })
           }
-          className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${
-            entry.source === "manual"
-              ? "border-gold bg-gold/10 text-navy"
-              : "border-gray-200 text-navy"
-          }`}
-        >
-          הזנה ידנית
-        </button>
+          className="form-input"
+        />
+      </label>
+      <label className="block space-y-1">
+        <span className="text-xs text-gray-text">תפקיד</span>
+        <input
+          value={entry.manual.roleTitle}
+          onChange={(event) =>
+            onChange({
+              manual: { ...entry.manual, roleTitle: event.target.value },
+            })
+          }
+          className="form-input"
+        />
+      </label>
+      <label className="block space-y-1">
+        <span className="text-xs text-gray-text">אימייל</span>
+        <input
+          type="email"
+          value={entry.manual.email}
+          onChange={(event) =>
+            onChange({
+              manual: { ...entry.manual, email: event.target.value },
+            })
+          }
+          className="form-input"
+          dir="ltr"
+        />
+      </label>
+    </div>
+  );
+}
+
+function PartyChip({
+  label,
+  addresseeLine,
+  onRemove,
+}: {
+  label: string;
+  addresseeLine?: string;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="inline-flex max-w-full items-start gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs text-navy">
+      <div className="min-w-0 text-right">
+        <p className="font-semibold truncate">{label}</p>
+        {addresseeLine ? (
+          <p className="text-[11px] text-gray-text truncate">{addresseeLine}</p>
+        ) : null}
       </div>
-
-      {entry.source === "contact" ? (
-        projectContacts.length === 0 ? (
-          <p className="text-xs text-gray-text">אין אנשי קשר זמינים בפרויקט.</p>
-        ) : (
-          <select
-            value={entry.contactRelationId}
-            onChange={(event) =>
-              onChange({ contactRelationId: event.target.value })
-            }
-            className="form-input"
-          >
-            <option value="">בחרו...</option>
-            {projectContacts.map((contact) => {
-              const disabled =
-                blockedContactRelationIds.has(contact.id) &&
-                contact.id !== entry.contactRelationId;
-              return (
-                <option key={contact.id} value={contact.id} disabled={disabled}>
-                  {contact.fullName}
-                  {contact.company ? ` · ${contact.company}` : ""}
-                  {contact.projectRole || contact.roleTitle
-                    ? ` · ${contact.projectRole || contact.roleTitle}`
-                    : ""}
-                  {disabled ? " (כבר נבחר)" : ""}
-                </option>
-              );
-            })}
-          </select>
-        )
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <label className="block space-y-1">
-            <span className="text-xs text-gray-text">שם</span>
-            <input
-              value={entry.manual.fullName}
-              onChange={(event) =>
-                onChange({
-                  manual: { ...entry.manual, fullName: event.target.value },
-                })
-              }
-              className="form-input"
-            />
-          </label>
-          <label className="block space-y-1">
-            <span className="text-xs text-gray-text">חברה / ארגון</span>
-            <input
-              value={entry.manual.company}
-              onChange={(event) =>
-                onChange({
-                  manual: { ...entry.manual, company: event.target.value },
-                })
-              }
-              className="form-input"
-            />
-          </label>
-          <label className="block space-y-1">
-            <span className="text-xs text-gray-text">תפקיד</span>
-            <input
-              value={entry.manual.roleTitle}
-              onChange={(event) =>
-                onChange({
-                  manual: { ...entry.manual, roleTitle: event.target.value },
-                })
-              }
-              className="form-input"
-            />
-          </label>
-          <label className="block space-y-1">
-            <span className="text-xs text-gray-text">אימייל</span>
-            <input
-              type="email"
-              value={entry.manual.email}
-              onChange={(event) =>
-                onChange({
-                  manual: { ...entry.manual, email: event.target.value },
-                })
-              }
-              className="form-input"
-              dir="ltr"
-            />
-          </label>
-        </div>
-      )}
-
-      {entry.source === "contact" && selectedContact && (
-        <div className="text-xs text-navy">
-          <span className="text-gray-text">לכבוד: </span>
-          {buildRecipientSnapshotFromContact(selectedContact).addresseeLine}
-        </div>
-      )}
+      <button
+        type="button"
+        onClick={onRemove}
+        className="shrink-0 text-gray-text hover:text-red-600 leading-none px-0.5"
+        aria-label={`הסר ${label}`}
+      >
+        ×
+      </button>
     </div>
   );
 }
 
 export default function MasterLetterPartyEditor({
-  title,
+  sectionTitle,
+  fieldLabel,
   entries,
   onChange,
   projectContacts,
-  blockedContactRelationIds,
-  primaryLabel,
-  rowLabel = "נמען",
-  addLabel,
+  centralContacts,
+  onCentralContactsChange,
+  blockedCentralContactIds,
   allowEmpty = false,
+  comboboxInputId,
 }: MasterLetterPartyEditorProps) {
+  const resolveContext: MasterLetterPartyResolveContext = {
+    projectContacts,
+    centralContacts,
+  };
+
+  function handleRemove(entryId: string) {
+    onChange(entries.filter((entry) => entry.id !== entryId));
+  }
+
   function handleEntryChange(
     entryId: string,
     patch: Partial<MasterLetterPartyEntry>
@@ -226,58 +157,97 @@ export default function MasterLetterPartyEditor({
     onChange(updateEntry(entries, entryId, patch));
   }
 
-  function handleRemove(entryId: string) {
-    const next = entries.filter((entry) => entry.id !== entryId);
-    if (next.length === 0 && !allowEmpty) {
-      onChange([createMasterLetterPartyEntry(projectContacts.length ? "contact" : "manual")]);
-      return;
-    }
-    onChange(next);
+  function handleSelectContact(contact: Contact) {
+    const blocked = new Set([
+      ...blockedCentralContactIds,
+      ...collectBlockedCentralContactIds(entries, projectContacts),
+    ]);
+    if (blocked.has(contact.id)) return;
+
+    onChange([...entries, createMasterLetterPartyEntryFromCentralContact(contact.id)]);
   }
 
-  function handleAdd() {
+  function handleManualEntry() {
     onChange([
       ...entries,
-      createMasterLetterPartyEntry(projectContacts.length ? "contact" : "manual"),
+      {
+        ...createMasterLetterPartyEntry("manual"),
+        manual: { ...EMPTY_MANUAL_PARTY },
+      },
     ]);
   }
 
+  const contactEntries = entries.filter((entry) => entry.source === "contact");
+  const manualEntries = entries.filter((entry) => entry.source === "manual");
+
   return (
-    <div className="space-y-3 rounded-xl border border-gray-100 bg-gray-light/40 p-4">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-semibold text-gold">{title}</p>
-        <button
-          type="button"
-          onClick={handleAdd}
-          className="text-xs font-semibold text-navy border border-gray-200 rounded-md px-2.5 py-1 hover:bg-white"
-        >
-          {addLabel}
-        </button>
+    <div
+      className="space-y-3 rounded-xl border border-gray-100 bg-gray-light/40 p-4"
+      data-component="master-letter-party-editor"
+    >
+      <p className="text-xs font-semibold text-gold">{sectionTitle}</p>
+
+      {contactEntries.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {contactEntries.map((entry) => {
+            const snapshot = resolvePartyEntrySnapshot(entry, resolveContext);
+            const label = getPartyEntryDisplayLabel(entry, resolveContext);
+
+            return (
+              <PartyChip
+                key={entry.id}
+                label={label}
+                addresseeLine={snapshot?.addresseeLine}
+                onRemove={() => handleRemove(entry.id)}
+              />
+            );
+          })}
+        </div>
+      )}
+
+      {manualEntries.map((entry, index) => (
+        <div key={entry.id} className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-semibold text-navy">
+              {index === 0 ? "הזנה ידנית" : `הזנה ידנית ${index + 1}`}
+            </p>
+            <button
+              type="button"
+              onClick={() => handleRemove(entry.id)}
+              className="text-xs text-red-600 hover:underline"
+            >
+              הסר
+            </button>
+          </div>
+          <ManualEntryForm
+            entry={entry}
+            onChange={(patch) => handleEntryChange(entry.id, patch)}
+          />
+        </div>
+      ))}
+
+      <div className="space-y-1.5">
+        <label className="text-xs font-semibold text-navy" htmlFor={comboboxInputId}>
+          {fieldLabel}
+        </label>
+        <CentralContactCombobox
+          contacts={centralContacts}
+          onContactsChange={onCentralContactsChange}
+          blockedContactIds={
+            new Set([
+              ...blockedCentralContactIds,
+              ...collectBlockedCentralContactIds(entries, projectContacts),
+            ])
+          }
+          onSelectContact={handleSelectContact}
+          onManualEntry={handleManualEntry}
+          inputId={comboboxInputId}
+        />
       </div>
 
-      <div className="space-y-3">
-        {entries.map((entry, index) => {
-          const blocked = new Set([
-            ...blockedContactRelationIds,
-            ...collectUsedContactRelationIds(entries, entry.id),
-          ]);
-
-          return (
-            <PartyRow
-              key={entry.id}
-              entry={entry}
-              index={index}
-              projectContacts={projectContacts}
-              blockedContactRelationIds={blocked}
-              primaryLabel={primaryLabel}
-              rowLabel={rowLabel}
-              onChange={(patch) => handleEntryChange(entry.id, patch)}
-              onRemove={() => handleRemove(entry.id)}
-              canRemove={allowEmpty || entries.length > 1}
-            />
-          );
-        })}
-      </div>
+      {entries.length === 0 && !allowEmpty && (
+        <p className="text-xs text-gray-text">יש להוסיף לפחות נמען אחד.</p>
+      )}
     </div>
   );
 }

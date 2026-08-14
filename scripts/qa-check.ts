@@ -312,6 +312,15 @@ import {
   masterBuildingFormFromRow,
   MASTER_BUILDING_EDITABLE_FIELD_LABELS,
 } from "../lib/master-building-form";
+import { contactMatchesSearch, type Contact } from "../lib/contacts";
+import {
+  collectBlockedCentralContactIds,
+  createMasterLetterPartyEntryFromCentralContact,
+  resolvePartyEntrySnapshot,
+  resolvePartySnapshots,
+  validateLetterParties,
+} from "../lib/master-letter-parties";
+import { buildRecipientSnapshotFromDirectoryContact } from "../lib/master-letter-metadata";
 import {
   cloudBuildingIdExists,
   masterBuildingMatchesSearch,
@@ -4550,6 +4559,106 @@ assert(
     }).includes("מעלית ימין"),
   "Master Letters: תבנית building_follow_up"
 );
+
+const sampleCentralContact: Contact = {
+  id: "contact-qa-1",
+  fullName: "דני כהן",
+  company: "קונה",
+  roleTitle: "מנהל",
+  phone: "050-1234567",
+  email: "dani@example.com",
+  notes: "",
+  createdAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-01-01T00:00:00.000Z",
+};
+const sampleCentralContactTwo: Contact = {
+  ...sampleCentralContact,
+  id: "contact-qa-2",
+  fullName: "רונית לוי",
+  company: "אלקטרה",
+  roleTitle: "נציגה",
+  phone: "052-7654321",
+  email: "ronit@example.com",
+};
+assert(
+  contactMatchesSearch(sampleCentralContact, "דני") &&
+    contactMatchesSearch(sampleCentralContact, "קונה") &&
+    contactMatchesSearch(sampleCentralContact, "מנהל") &&
+    contactMatchesSearch(sampleCentralContact, "050-1234567") &&
+    contactMatchesSearch(sampleCentralContact, "dani@example.com") &&
+    !contactMatchesSearch(sampleCentralContact, "לא קיים"),
+  "Letters Contact Picker: חיפוש לפי שם, חברה, תפקיד, טלפון ודוא\"ל"
+);
+const centralRecipientEntry = createMasterLetterPartyEntryFromCentralContact(
+  sampleCentralContact.id
+);
+const centralSnapshot = resolvePartyEntrySnapshot(centralRecipientEntry, {
+  projectContacts: [],
+  centralContacts: [sampleCentralContact],
+});
+assert(
+  centralSnapshot !== null &&
+    centralSnapshot.contactId === sampleCentralContact.id &&
+    centralSnapshot.fullName === "דני כהן" &&
+    centralSnapshot.company === "קונה" &&
+    buildRecipientSnapshotFromDirectoryContact(sampleCentralContact).addresseeLine ===
+      "לכבוד קונה",
+  "Letters Contact Picker: snapshot מספר אנשי הקשר המרכזי"
+);
+const multiRecipientSnapshots = resolvePartySnapshots(
+  [
+    centralRecipientEntry,
+    createMasterLetterPartyEntryFromCentralContact(sampleCentralContactTwo.id),
+  ],
+  {
+    projectContacts: [],
+    centralContacts: [sampleCentralContact, sampleCentralContactTwo],
+  }
+);
+assert(
+  multiRecipientSnapshots.length === 2 &&
+    multiRecipientSnapshots[0]?.fullName === "דני כהן" &&
+    multiRecipientSnapshots[1]?.fullName === "רונית לוי",
+  "Letters Contact Picker: מספר נמענים מספר המרכזי"
+);
+assert(
+  validateLetterParties(
+    [centralRecipientEntry],
+    [createMasterLetterPartyEntryFromCentralContact(sampleCentralContact.id)],
+    { projectContacts: [], centralContacts: [sampleCentralContact] }
+  ) === "איש קשר שכבר נמצא ב'לכבוד' לא יכול להופיע גם ב'עותק'.",
+  "Letters Contact Picker: מניעת כפילות בין נמען לעותק"
+);
+assert(
+  collectBlockedCentralContactIds(
+    [centralRecipientEntry],
+    []
+  ).has(sampleCentralContact.id),
+  "Letters Contact Picker: חסימת נמען שכבר נבחר"
+);
+const masterLetterPartyEditorPath = path.join(
+  process.cwd(),
+  "components/MasterLetterPartyEditor.tsx"
+);
+const centralContactComboboxPath = path.join(
+  process.cwd(),
+  "components/master-v2/CentralContactCombobox.tsx"
+);
+const masterLetterPartyEditor = fs.readFileSync(masterLetterPartyEditorPath, "utf8");
+const centralContactCombobox = fs.readFileSync(centralContactComboboxPath, "utf8");
+assert(
+  masterLetterPartyEditor.includes("CentralContactCombobox") &&
+    masterLetterPartyEditor.includes("fieldLabel") &&
+    masterLetterPartyEditor.includes("נמען ראשי") &&
+    masterLetterPartyEditor.includes('data-component="master-letter-party-editor"') &&
+    !masterLetterPartyEditor.includes("מאנשי קשר") &&
+    centralContactCombobox.includes("חפש או בחר איש קשר") &&
+    centralContactCombobox.includes("+ איש קשר חדש") &&
+    centralContactCombobox.includes("listContacts") &&
+    centralContactCombobox.includes('data-component="central-contact-combobox"'),
+  "Letters Contact Picker: רכיבי UI מחוברים לספר המרכזי"
+);
+
 const sampleLetterDocxProbe = spawnSync(
   process.platform === "win32" ? "npx.cmd" : "npx",
   ["tsx", path.join(process.cwd(), "scripts/qa-master-letter-docx-probe.ts")],

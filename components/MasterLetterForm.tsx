@@ -16,9 +16,10 @@ import {
   MASTER_LETTER_DOSSIER_SECTIONS,
 } from "@/lib/master-letter-metadata";
 import {
-  collectUsedContactRelationIds,
+  collectBlockedCentralContactIds,
   resolvePartySnapshots,
   type MasterLetterPartyEntry,
+  type MasterLetterPartyResolveContext,
 } from "@/lib/master-letter-parties";
 import {
   getMasterLetterTemplate,
@@ -26,7 +27,7 @@ import {
   type MasterLetterTemplateField,
 } from "@/lib/master-letter-templates";
 import type { MasterBuildingSearchHit } from "@/lib/master-building-search";
-import type { ProjectContactWithDetails } from "@/lib/contacts";
+import type { Contact, ProjectContactWithDetails } from "@/lib/contacts";
 import MasterExistingBuildingSearch, {
   MasterBuildingProfileCard,
 } from "@/components/MasterExistingBuildingSearch";
@@ -37,6 +38,8 @@ interface MasterLetterFormProps {
   resolveElevatorCount: (buildingId: string) => number;
   fixedBuildingId?: string;
   projectContacts?: ProjectContactWithDetails[];
+  centralContacts?: Contact[];
+  onCentralContactsChange?: (contacts: Contact[]) => void;
   templateId: MasterLetterTemplateId;
   onTemplateIdChange: (templateId: MasterLetterTemplateId) => void;
   templateFields: Record<string, MasterLetterFieldValue>;
@@ -168,6 +171,7 @@ export function buildLetterDraftFromForm(params: {
   recipientEntries: MasterLetterPartyEntry[];
   ccEntries: MasterLetterPartyEntry[];
   projectContacts: ProjectContactWithDetails[];
+  centralContacts: Contact[];
   dossierSection: MasterLetterDossierSection;
 }): MasterLetterDraftInput | null {
   if (!params.selectedBuildingHit) return null;
@@ -176,11 +180,13 @@ export function buildLetterDraftFromForm(params: {
     params.elevatorOptions.find((elevator) => elevator.id === params.elevatorId)
       ?.name ?? null;
 
-  const recipients = resolvePartySnapshots(
-    params.recipientEntries,
-    params.projectContacts
-  );
-  const cc = resolvePartySnapshots(params.ccEntries, params.projectContacts);
+  const partyContext: MasterLetterPartyResolveContext = {
+    projectContacts: params.projectContacts,
+    centralContacts: params.centralContacts,
+  };
+
+  const recipients = resolvePartySnapshots(params.recipientEntries, partyContext);
+  const cc = resolvePartySnapshots(params.ccEntries, partyContext);
 
   return {
     templateId: params.templateId,
@@ -201,6 +207,8 @@ export default function MasterLetterForm({
   resolveElevatorCount,
   fixedBuildingId,
   projectContacts = [],
+  centralContacts = [],
+  onCentralContactsChange,
   templateId,
   onTemplateIdChange,
   templateFields,
@@ -237,6 +245,7 @@ export default function MasterLetterForm({
     recipientEntries,
     ccEntries,
     projectContacts,
+    centralContacts,
     dossierSection,
   });
   const preview = draft ? buildMasterLetterPreview(draft) : null;
@@ -247,7 +256,10 @@ export default function MasterLetterForm({
   const visibleFields =
     template?.fields.filter((field) => isFieldVisible(field, templateFields)) ??
     [];
-  const recipientBlockedForCc = collectUsedContactRelationIds(recipientEntries);
+  const recipientBlockedForCc = collectBlockedCentralContactIds(
+    recipientEntries,
+    projectContacts
+  );
 
   return (
     <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-4">
@@ -295,23 +307,27 @@ export default function MasterLetterForm({
       </div>
 
       <MasterLetterPartyEditor
-        title="נמענים"
-        primaryLabel="נמען ראשי"
-        addLabel="+ הוסף נמען"
+        sectionTitle="נמענים"
+        fieldLabel="נמען ראשי"
+        comboboxInputId="letter-recipient-picker"
         entries={recipientEntries}
         onChange={onRecipientEntriesChange}
         projectContacts={projectContacts}
-        blockedContactRelationIds={new Set()}
+        centralContacts={centralContacts}
+        onCentralContactsChange={onCentralContactsChange ?? (() => {})}
+        blockedCentralContactIds={new Set()}
       />
 
       <MasterLetterPartyEditor
-        title="עותק"
-        rowLabel="עותק"
-        addLabel="+ הוסף עותק"
+        sectionTitle="עותק"
+        fieldLabel="עותק"
+        comboboxInputId="letter-cc-picker"
         entries={ccEntries}
         onChange={onCcEntriesChange}
         projectContacts={projectContacts}
-        blockedContactRelationIds={recipientBlockedForCc}
+        centralContacts={centralContacts}
+        onCentralContactsChange={onCentralContactsChange ?? (() => {})}
+        blockedCentralContactIds={recipientBlockedForCc}
         allowEmpty
       />
 

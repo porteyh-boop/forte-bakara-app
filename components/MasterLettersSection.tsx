@@ -28,7 +28,11 @@ import {
   getStaticDemoBuildingMeta,
 } from "@/lib/buildings";
 import { isPilotCloudConfigured } from "@/lib/pilot-cloud";
-import type { ProjectContactWithDetails } from "@/lib/contacts";
+import type { Contact, ProjectContactWithDetails } from "@/lib/contacts";
+import {
+  isContactsConfigured,
+  listContacts,
+} from "@/lib/contacts-cloud";
 import {
   createMasterLetterPartyEntry,
   validateLetterParties,
@@ -108,16 +112,8 @@ function resolveElevatorOptions(
   }
 }
 
-function createInitialRecipientEntry(
-  projectContacts: ProjectContactWithDetails[]
-): MasterLetterPartyEntry {
-  const entry = createMasterLetterPartyEntry(
-    projectContacts.length > 0 ? "contact" : "manual"
-  );
-  if (projectContacts[0]) {
-    entry.contactRelationId = projectContacts[0].id;
-  }
-  return entry;
+function createInitialRecipientEntry(): MasterLetterPartyEntry[] {
+  return [];
 }
 
 function parseInspectorLetterStage(
@@ -148,6 +144,7 @@ export default function MasterLettersSection({
   const [projectContacts, setProjectContacts] = useState<
     ProjectContactWithDetails[]
   >([]);
+  const [centralContacts, setCentralContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -171,7 +168,7 @@ export default function MasterLettersSection({
   const [subject, setSubject] = useState("");
   const [customNote, setCustomNote] = useState("");
   const [recipientEntries, setRecipientEntries] = useState<MasterLetterPartyEntry[]>(
-    () => [createMasterLetterPartyEntry("manual")]
+    () => createInitialRecipientEntry()
   );
   const [ccEntries, setCcEntries] = useState<MasterLetterPartyEntry[]>([]);
   const [dossierSection, setDossierSection] =
@@ -240,22 +237,17 @@ export default function MasterLettersSection({
 
     const result = await listProjectContacts(fixedBuildingId);
     setProjectContacts(result.contacts);
-    setRecipientEntries((current) => {
-      if (current.length !== 1) return current;
-      const only = current[0];
-      if (only.source !== "contact" || only.contactRelationId) return current;
-      if (result.contacts.length === 0) {
-        return [{ ...only, source: "manual" as const }];
-      }
-      return [
-        {
-          ...only,
-          source: "contact" as const,
-          contactRelationId: result.contacts[0].id,
-        },
-      ];
-    });
   }, [fixedBuildingId]);
+
+  const refreshCentralContacts = useCallback(async () => {
+    if (!isContactsConfigured()) {
+      setCentralContacts([]);
+      return;
+    }
+
+    const result = await listContacts();
+    setCentralContacts(result.contacts);
+  }, []);
 
   useEffect(() => {
     void refreshLetters();
@@ -264,6 +256,10 @@ export default function MasterLettersSection({
   useEffect(() => {
     void refreshProjectContacts();
   }, [refreshProjectContacts]);
+
+  useEffect(() => {
+    void refreshCentralContacts();
+  }, [refreshCentralContacts]);
 
   useEffect(() => {
     if (!cloudReadyForBuildings) return;
@@ -421,7 +417,7 @@ export default function MasterLettersSection({
     setTitle("");
     setSubject(getMasterLetterTemplate(resolvedTemplateId)?.defaultSubject ?? "");
     setCustomNote("");
-    setRecipientEntries([createInitialRecipientEntry(projectContacts)]);
+    setRecipientEntries(createInitialRecipientEntry());
     setCcEntries([]);
     setDossierSection("general");
     setShowPreview(false);
@@ -449,11 +445,10 @@ export default function MasterLettersSection({
     setMessage(null);
     setError(null);
 
-    const validationError = validateLetterParties(
-      recipientEntries,
-      ccEntries,
-      projectContacts
-    );
+    const validationError = validateLetterParties(recipientEntries, ccEntries, {
+      projectContacts,
+      centralContacts,
+    });
     if (validationError) {
       setError(validationError);
       return;
@@ -470,6 +465,7 @@ export default function MasterLettersSection({
       recipientEntries,
       ccEntries,
       projectContacts,
+      centralContacts,
       dossierSection,
     });
 
@@ -658,6 +654,8 @@ export default function MasterLettersSection({
             resolveElevatorCount={resolveElevatorCount}
             fixedBuildingId={fixedBuildingId}
             projectContacts={projectContacts}
+            centralContacts={centralContacts}
+            onCentralContactsChange={setCentralContacts}
             templateId={templateId}
             onTemplateIdChange={handleTemplateChange}
             templateFields={templateFields}

@@ -4,7 +4,7 @@ import type {
   MasterLetterTemplateId,
 } from "./master-letters";
 import { getMasterLetterTemplate } from "./master-letter-templates";
-import type { ProjectContactWithDetails } from "./contacts";
+import type { Contact, ProjectContactWithDetails } from "./contacts";
 
 export const MASTER_LETTER_METADATA_SCHEMA_VERSION = 1 as const;
 export const MASTER_LETTER_METADATA_KEY = "letter" as const;
@@ -104,6 +104,23 @@ export function buildRecipientSnapshotFromContact(
     fullName: contact.fullName,
     company: contact.company || null,
     roleTitle: contact.projectRole || contact.roleTitle || null,
+    email: contact.email || null,
+    addresseeLine: buildAddresseeLineFromContact(contact),
+  };
+}
+
+export function buildRecipientSnapshotFromDirectoryContact(
+  contact: Pick<
+    Contact,
+    "id" | "fullName" | "company" | "roleTitle" | "email"
+  >
+): MasterLetterRecipientSnapshot {
+  return {
+    contactId: contact.id,
+    manual: false,
+    fullName: contact.fullName,
+    company: contact.company || null,
+    roleTitle: contact.roleTitle || null,
     email: contact.email || null,
     addresseeLine: buildAddresseeLineFromContact(contact),
   };
