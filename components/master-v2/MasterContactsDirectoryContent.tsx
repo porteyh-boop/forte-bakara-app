@@ -184,9 +184,9 @@ export default function MasterContactsDirectoryContent() {
   }
 
   async function handleVcfFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = e.target.files;
+    const files = Array.from(e.target.files ?? []);
     e.target.value = "";
-    if (!files || files.length === 0) return;
+    if (files.length === 0) return;
 
     try {
       const { contacts: parsedContacts, error } = await parseVCardFileSelection(files);
