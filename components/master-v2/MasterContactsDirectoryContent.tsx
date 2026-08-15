@@ -35,11 +35,7 @@ import {
 } from "@/lib/contacts-cloud";
 import { contactMatchesSearch, type Contact, type ContactInput } from "@/lib/contacts";
 import { isMasterAuthenticated, setMasterAuthenticated } from "@/lib/pilot-cloud";
-import {
-  isSupportedVCardFileName,
-  parseVCardContent,
-  vCardToContactInput,
-} from "@/lib/vcard-parser";
+import { parseVCardFileSelection } from "@/lib/vcard-parser";
 
 type EditorMode = "create" | "edit";
 
@@ -64,7 +60,7 @@ export default function MasterContactsDirectoryContent() {
   const [deleting, setDeleting] = useState(false);
   const vcfInputRef = useRef<HTMLInputElement>(null);
   const [vcfImportOpen, setVcfImportOpen] = useState(false);
-  const [vcfImportForm, setVcfImportForm] = useState<ContactInput | null>(null);
+  const [vcfImportItems, setVcfImportItems] = useState<ContactInput[] | null>(null);
   const [vcfParseError, setVcfParseError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -172,32 +168,24 @@ export default function MasterContactsDirectoryContent() {
   }
 
   async function handleVcfFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
+    const files = e.target.files;
     e.target.value = "";
-    if (!file) return;
-
-    if (!isSupportedVCardFileName(file.name)) {
-      setVcfImportForm(null);
-      setVcfParseError("לא ניתן לקרוא את קובץ איש הקשר.");
-      setVcfImportOpen(true);
-      return;
-    }
+    if (!files || files.length === 0) return;
 
     try {
-      const text = await file.text();
-      const parsed = parseVCardContent(text);
-      if (!parsed) {
-        setVcfImportForm(null);
-        setVcfParseError("לא ניתן לקרוא את קובץ איש הקשר.");
+      const { contacts: parsedContacts, error } = await parseVCardFileSelection(files);
+      if (error || parsedContacts.length === 0) {
+        setVcfImportItems(null);
+        setVcfParseError(error ?? "לא ניתן לקרוא את קובץ איש הקשר.");
         setVcfImportOpen(true);
         return;
       }
 
       setVcfParseError(null);
-      setVcfImportForm(vCardToContactInput(parsed));
+      setVcfImportItems(parsedContacts);
       setVcfImportOpen(true);
     } catch {
-      setVcfImportForm(null);
+      setVcfImportItems(null);
       setVcfParseError("לא ניתן לקרוא את קובץ איש הקשר.");
       setVcfImportOpen(true);
     }
@@ -205,12 +193,12 @@ export default function MasterContactsDirectoryContent() {
 
   function closeVcfImportDialog() {
     setVcfImportOpen(false);
-    setVcfImportForm(null);
+    setVcfImportItems(null);
     setVcfParseError(null);
   }
 
-  async function handleVcfImportSaved() {
-    setMessage("איש הקשר יובא לספר.");
+  async function handleVcfImportSaved(message: string) {
+    setMessage(message);
     await refresh();
   }
 
@@ -250,11 +238,12 @@ export default function MasterContactsDirectoryContent() {
                     disabled={!configured}
                     size="sm"
                   >
-                    ייבוא איש קשר
+                    ייבוא אנשי קשר
                   </ForteV2SecondaryButton>
                   <input
                     ref={vcfInputRef}
                     type="file"
+                    multiple
                     accept=".vcf,.vcard,text/vcard,text/x-vcard"
                     className="hidden"
                     onChange={(e) => void handleVcfFileSelected(e)}
@@ -383,7 +372,7 @@ export default function MasterContactsDirectoryContent() {
 
       <VcfImportContactDialog
         open={vcfImportOpen}
-        initialForm={vcfImportForm}
+        initialItems={vcfImportItems}
         parseError={vcfParseError}
         contacts={contacts}
         onClose={closeVcfImportDialog}

@@ -122,9 +122,15 @@ function parsePropertyLine(line: string): {
   };
 }
 
-function extractFirstVCardBlock(text: string): string | null {
-  const match = text.match(/BEGIN:VCARD[\s\S]*?END:VCARD/i);
-  return match?.[0] ?? null;
+function extractAllVCardBlocks(text: string): string[] {
+  const blocks: string[] = [];
+  const pattern = /BEGIN:VCARD[\s\S]*?END:VCARD/gi;
+  let match = pattern.exec(text);
+  while (match) {
+    blocks.push(match[0]);
+    match = pattern.exec(text);
+  }
+  return blocks;
 }
 
 function nameFromNField(value: string): {
@@ -173,10 +179,7 @@ function collectRemainingLines(
   return [`${label}: ${extras.join(" | ")}`];
 }
 
-export function parseVCardContent(text: string): ParsedVCard | null {
-  const block = extractFirstVCardBlock(text);
-  if (!block) return null;
-
+function parseVCardBlock(block: string): ParsedVCard | null {
   const lines = unfoldVCardLines(block);
   let fullName = "";
   let firstName = "";
@@ -270,6 +273,18 @@ export function parseVCardContent(text: string): ParsedVCard | null {
   };
 }
 
+/** Parse every VCARD block in a file/string. */
+export function parseAllVCardContent(text: string): ParsedVCard[] {
+  return extractAllVCardBlocks(text)
+    .map((block) => parseVCardBlock(block))
+    .filter((item): item is ParsedVCard => item !== null);
+}
+
+/** Backward-compatible: first VCARD only. */
+export function parseVCardContent(text: string): ParsedVCard | null {
+  return parseAllVCardContent(text)[0] ?? null;
+}
+
 export function vCardToContactInput(parsed: ParsedVCard): ContactInput {
   const primaryPhone = pickPreferredValue(parsed.phones, PHONE_TYPE_PRIORITY);
   const primaryEmail = pickPreferredValue(parsed.emails, EMAIL_TYPE_PRIORITY);
@@ -299,7 +314,47 @@ export function vCardToContactInput(parsed: ParsedVCard): ContactInput {
   };
 }
 
+export function parseVCardTextToContactInputs(text: string): ContactInput[] {
+  return parseAllVCardContent(text).map((parsed) => vCardToContactInput(parsed));
+}
+
+export async function parseVCardFileSelection(
+  files: FileList | File[]
+): Promise<{ contacts: ContactInput[]; error: string | null }> {
+  const fileArray = Array.from(files);
+  if (fileArray.length === 0) {
+    return { contacts: [], error: null };
+  }
+
+  const supportedFiles = fileArray.filter((file) =>
+    isSupportedVCardFileName(file.name)
+  );
+  if (supportedFiles.length === 0) {
+    return { contacts: [], error: "לא ניתן לקרוא את קובץ איש הקשר." };
+  }
+
+  const contacts: ContactInput[] = [];
+  for (const file of supportedFiles) {
+    const text = await file.text();
+    contacts.push(...parseVCardTextToContactInputs(text));
+  }
+
+  if (contacts.length === 0) {
+    return { contacts: [], error: "לא ניתן לקרוא את קובץ איש הקשר." };
+  }
+
+  return { contacts, error: null };
+}
+
 export function isSupportedVCardFileName(fileName: string): boolean {
   const lower = fileName.trim().toLowerCase();
   return lower.endsWith(".vcf") || lower.endsWith(".vcard");
+}
+
+export function contactInputDisplayName(form: ContactInput): string {
+  const name = form.fullName.trim();
+  if (name) return name;
+  if (form.phone.trim()) return form.phone.trim();
+  if (form.email.trim()) return form.email.trim();
+  return "ללא שם";
 }

@@ -321,7 +321,9 @@ import {
 } from "../lib/contacts";
 import {
   isSupportedVCardFileName,
+  parseAllVCardContent,
   parseVCardContent,
+  parseVCardTextToContactInputs,
   vCardToContactInput,
 } from "../lib/vcard-parser";
 import {
@@ -4726,6 +4728,43 @@ assert(
     mappedNoName.email === "unknown@example.com",
   "VCF Import: ללא שם — ניתן להשלים בתצוגה מקדימה"
 );
+const vcfMultiFive = [
+  vcfNamePhone,
+  vcfNamePhoneEmail,
+  vcfHebrewIphone,
+  vcfNoNameWithPhone,
+  [
+    "BEGIN:VCARD",
+    "VERSION:3.0",
+    "FN:Contact Five",
+    "ORG:Company Five",
+    "TITLE:Role Five",
+    "END:VCARD",
+  ].join("\n"),
+].join("\n");
+const multiParsed = parseAllVCardContent(vcfMultiFive);
+const multiMapped = parseVCardTextToContactInputs(vcfMultiFive);
+assert(
+  multiParsed.length === 5 &&
+    multiMapped.length === 5 &&
+    parseVCardContent(vcfMultiFive)?.fullName === "דני כהן" &&
+    multiMapped[1]?.email === "maya@example.com" &&
+    multiMapped[4]?.fullName === "Contact Five",
+  "VCF Import: קובץ יחיד עם מספר VCARD-ים"
+);
+const vcfTwenty = Array.from({ length: 20 }, (_, index) =>
+  [
+    "BEGIN:VCARD",
+    "VERSION:3.0",
+    `FN:איש קשר ${index + 1}`,
+    `TEL;TYPE=CELL:050-10000${String(index).padStart(2, "0")}`,
+    "END:VCARD",
+  ].join("\n")
+).join("\n");
+assert(
+  parseVCardTextToContactInputs(vcfTwenty).length === 20,
+  "VCF Import: 20 אנשי קשר בקובץ אחד"
+);
 const duplicatePhoneInput: ContactInput = {
   fullName: "חדש",
   company: "",
@@ -4774,14 +4813,17 @@ const vcfImportDialogSource = fs.readFileSync(
   "utf8"
 );
 assert(
-  masterContactsDirectorySource.includes("ייבוא איש קשר") &&
+  masterContactsDirectorySource.includes("ייבוא אנשי קשר") &&
     masterContactsDirectorySource.includes('accept=".vcf,.vcard') &&
-    masterContactsDirectorySource.includes("parseVCardContent") &&
+    masterContactsDirectorySource.includes("multiple") &&
+    masterContactsDirectorySource.includes("parseVCardFileSelection") &&
     masterContactsDirectorySource.includes("+ איש קשר חדש") &&
-    vcfImportDialogSource.includes("ייבוא איש קשר") &&
-    vcfImportDialogSource.includes("ייתכן שאיש הקשר כבר קיים בספר אנשי הקשר") &&
-    vcfImportDialogSource.includes("שמור איש קשר") &&
+    vcfImportDialogSource.includes("ייבוא אנשי קשר") &&
+    vcfImportDialogSource.includes("ייתכן שכבר קיים") &&
+    vcfImportDialogSource.includes("ייבוא") &&
     vcfImportDialogSource.includes("createContact") &&
+    vcfImportDialogSource.includes("בחר הכול") &&
+    vcfImportDialogSource.includes("בטל בחירת הכול") &&
     !vcfImportDialogSource.includes("updateContact"),
   "VCF Import: UI — כפתור, file picker, תצוגה מקדימה ושמירה"
 );
