@@ -312,7 +312,18 @@ import {
   masterBuildingFormFromRow,
   MASTER_BUILDING_EDITABLE_FIELD_LABELS,
 } from "../lib/master-building-form";
-import { contactMatchesSearch, type Contact } from "../lib/contacts";
+import {
+  contactMatchesSearch,
+  findContactByExactMatch,
+  normalizeContactPhoneForLookup,
+  type Contact,
+  type ContactInput,
+} from "../lib/contacts";
+import {
+  isSupportedVCardFileName,
+  parseVCardContent,
+  vCardToContactInput,
+} from "../lib/vcard-parser";
 import {
   collectBlockedCentralContactIds,
   createMasterLetterPartyEntryFromCentralContact,
@@ -4629,6 +4640,150 @@ assert(
       elevatorName: "מעלית ימין",
     }).includes("מעלית ימין"),
   "Master Letters: תבנית building_follow_up"
+);
+
+const vcfNamePhone = [
+  "BEGIN:VCARD",
+  "VERSION:3.0",
+  "FN:דני כהן",
+  "TEL;TYPE=CELL:050-1234567",
+  "END:VCARD",
+].join("\n");
+const vcfNamePhoneEmail = [
+  "BEGIN:VCARD",
+  "VERSION:3.0",
+  "FN:Maya Levi",
+  "TEL;TYPE=CELL:052-7654321",
+  "EMAIL;TYPE=INTERNET:maya@example.com",
+  "END:VCARD",
+].join("\n");
+const vcfHebrewIphone = [
+  "BEGIN:VCARD",
+  "VERSION:3.0",
+  "N:כהן;יוסי;;;",
+  "FN:יוסי כהן",
+  "ORG:עדי מעליות",
+  "TITLE:מנהל אחזקה",
+  "TEL;TYPE=CELL:+972-50-111-2233",
+  "TEL;TYPE=WORK:03-1234567",
+  "EMAIL;TYPE=INTERNET:yossi@example.com",
+  "ADR;TYPE=HOME:;;רחוב הרצל 1;תל אביב;;;",
+  "NOTE:איש קשר מ-iPhone",
+  "END:VCARD",
+].join("\n");
+const parsedVcfNamePhone = parseVCardContent(vcfNamePhone);
+const parsedVcfNamePhoneEmail = parseVCardContent(vcfNamePhoneEmail);
+const parsedVcfHebrew = parseVCardContent(vcfHebrewIphone);
+const mappedVcfHebrew = parsedVcfHebrew
+  ? vCardToContactInput(parsedVcfHebrew)
+  : null;
+assert(
+  parsedVcfNamePhone !== null &&
+    parsedVcfNamePhone.fullName === "דני כהן" &&
+    vCardToContactInput(parsedVcfNamePhone).phone === "050-1234567",
+  "VCF Import: שם + טלפון"
+);
+assert(
+  parsedVcfNamePhoneEmail !== null &&
+    vCardToContactInput(parsedVcfNamePhoneEmail).phone === "052-7654321" &&
+    vCardToContactInput(parsedVcfNamePhoneEmail).email === "maya@example.com",
+  "VCF Import: שם + טלפון + אימייל"
+);
+assert(
+  mappedVcfHebrew !== null &&
+    mappedVcfHebrew.fullName === "יוסי כהן" &&
+    mappedVcfHebrew.company === "עדי מעליות" &&
+    mappedVcfHebrew.roleTitle === "מנהל אחזקה" &&
+    mappedVcfHebrew.phone.includes("111") &&
+    mappedVcfHebrew.email === "yossi@example.com" &&
+    mappedVcfHebrew.notes.includes("טלפונים נוספים") &&
+    mappedVcfHebrew.notes.includes("כתובת:") &&
+    mappedVcfHebrew.notes.includes("איש קשר מ-iPhone"),
+  "VCF Import: עברית + iPhone + שדות נוספים ב-notes"
+);
+assert(
+  parseVCardContent("not a vcard") === null &&
+    parseVCardContent("BEGIN:VCARD\nEND:VCARD") === null,
+  "VCF Import: קובץ לא תקין"
+);
+assert(
+  isSupportedVCardFileName("contact.vcf") &&
+    isSupportedVCardFileName("contact.vcard") &&
+    !isSupportedVCardFileName("contact.csv"),
+  "VCF Import: סיומות קובץ נתמכות"
+);
+const vcfNoNameWithPhone = [
+  "BEGIN:VCARD",
+  "VERSION:3.0",
+  "TEL;TYPE=CELL:050-9998877",
+  "EMAIL;TYPE=INTERNET:unknown@example.com",
+  "END:VCARD",
+].join("\n");
+const mappedNoName = vCardToContactInput(parseVCardContent(vcfNoNameWithPhone)!);
+assert(
+  mappedNoName.fullName === "" &&
+    mappedNoName.phone === "050-9998877" &&
+    mappedNoName.email === "unknown@example.com",
+  "VCF Import: ללא שם — ניתן להשלים בתצוגה מקדימה"
+);
+const duplicatePhoneInput: ContactInput = {
+  fullName: "חדש",
+  company: "",
+  roleTitle: "",
+  phone: "050-1234567",
+  email: "",
+  notes: "",
+};
+const duplicateEmailInput: ContactInput = {
+  fullName: "חדש",
+  company: "",
+  roleTitle: "",
+  phone: "",
+  email: "dani@example.com",
+  notes: "",
+};
+const qaExistingContact: Contact = {
+  id: "contact-dup",
+  fullName: "דני כהן",
+  company: "קונה",
+  roleTitle: "מנהל",
+  phone: "050-1234567",
+  email: "dani@example.com",
+  notes: "",
+  createdAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-01-01T00:00:00.000Z",
+};
+assert(
+  normalizeContactPhoneForLookup("050-1234567") === "0501234567" &&
+    findContactByExactMatch(duplicatePhoneInput, [qaExistingContact])?.id ===
+      "contact-dup" &&
+    findContactByExactMatch(duplicateEmailInput, [qaExistingContact])?.id ===
+      "contact-dup" &&
+    findContactByExactMatch(
+      { ...duplicatePhoneInput, phone: "052-0000000", email: "new@example.com" },
+      [qaExistingContact]
+    ) === null,
+  "VCF Import: בדיקת כפילויות לפי טלפון ואימייל"
+);
+const masterContactsDirectorySource = fs.readFileSync(
+  path.join(process.cwd(), "components/master-v2/MasterContactsDirectoryContent.tsx"),
+  "utf8"
+);
+const vcfImportDialogSource = fs.readFileSync(
+  path.join(process.cwd(), "components/master-v2/VcfImportContactDialog.tsx"),
+  "utf8"
+);
+assert(
+  masterContactsDirectorySource.includes("ייבוא איש קשר") &&
+    masterContactsDirectorySource.includes('accept=".vcf,.vcard') &&
+    masterContactsDirectorySource.includes("parseVCardContent") &&
+    masterContactsDirectorySource.includes("+ איש קשר חדש") &&
+    vcfImportDialogSource.includes("ייבוא איש קשר") &&
+    vcfImportDialogSource.includes("ייתכן שאיש הקשר כבר קיים בספר אנשי הקשר") &&
+    vcfImportDialogSource.includes("שמור איש קשר") &&
+    vcfImportDialogSource.includes("createContact") &&
+    !vcfImportDialogSource.includes("updateContact"),
+  "VCF Import: UI — כפתור, file picker, תצוגה מקדימה ושמירה"
 );
 
 const sampleCentralContact: Contact = {

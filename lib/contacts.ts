@@ -85,6 +85,35 @@ export function contactInputFromContact(contact: Contact): ContactInput {
   };
 }
 
+export function normalizeContactPhoneForLookup(phone: string): string {
+  return phone.replace(/\D/g, "");
+}
+
+/** Exact match — email (case-insensitive) or normalized phone digits. */
+export function findContactByExactMatch(
+  input: ContactInput,
+  contacts: Contact[]
+): Contact | null {
+  const email = input.email.trim().toLowerCase();
+  if (email) {
+    const match = contacts.find(
+      (contact) => contact.email.trim().toLowerCase() === email
+    );
+    if (match) return match;
+  }
+
+  const phoneNorm = normalizeContactPhoneForLookup(input.phone);
+  if (phoneNorm) {
+    const match = contacts.find(
+      (contact) =>
+        normalizeContactPhoneForLookup(contact.phone) === phoneNorm
+    );
+    if (match) return match;
+  }
+
+  return null;
+}
+
 export function contactMatchesSearch(contact: Contact, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;

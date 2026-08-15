@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAppVersion } from "@/components/AppVersionProvider";
 import ForteContactForm, {
   contactInputFromContact,
@@ -9,6 +9,7 @@ import ForteContactForm, {
 import ContactRowMenu from "@/components/master-v2/ContactRowMenu";
 import MasterCodeGate from "@/components/master-v2/MasterCodeGate";
 import MasterShellLayout from "@/components/master-v2/MasterShellLayout";
+import VcfImportContactDialog from "@/components/master-v2/VcfImportContactDialog";
 import {
   ForteV2DangerButton,
   ForteV2Dialog,
@@ -34,6 +35,11 @@ import {
 } from "@/lib/contacts-cloud";
 import { contactMatchesSearch, type Contact, type ContactInput } from "@/lib/contacts";
 import { isMasterAuthenticated, setMasterAuthenticated } from "@/lib/pilot-cloud";
+import {
+  isSupportedVCardFileName,
+  parseVCardContent,
+  vCardToContactInput,
+} from "@/lib/vcard-parser";
 
 type EditorMode = "create" | "edit";
 
@@ -56,6 +62,10 @@ export default function MasterContactsDirectoryContent() {
   const [deleteTarget, setDeleteTarget] = useState<Contact | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const vcfInputRef = useRef<HTMLInputElement>(null);
+  const [vcfImportOpen, setVcfImportOpen] = useState(false);
+  const [vcfImportForm, setVcfImportForm] = useState<ContactInput | null>(null);
+  const [vcfParseError, setVcfParseError] = useState<string | null>(null);
 
   useEffect(() => {
     setAuthed(isMasterAuthenticated());
@@ -156,6 +166,54 @@ export default function MasterContactsDirectoryContent() {
     await refresh();
   }
 
+  function openVcfImportPicker() {
+    if (!configured) return;
+    vcfInputRef.current?.click();
+  }
+
+  async function handleVcfFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    if (!isSupportedVCardFileName(file.name)) {
+      setVcfImportForm(null);
+      setVcfParseError("לא ניתן לקרוא את קובץ איש הקשר.");
+      setVcfImportOpen(true);
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      const parsed = parseVCardContent(text);
+      if (!parsed) {
+        setVcfImportForm(null);
+        setVcfParseError("לא ניתן לקרוא את קובץ איש הקשר.");
+        setVcfImportOpen(true);
+        return;
+      }
+
+      setVcfParseError(null);
+      setVcfImportForm(vCardToContactInput(parsed));
+      setVcfImportOpen(true);
+    } catch {
+      setVcfImportForm(null);
+      setVcfParseError("לא ניתן לקרוא את קובץ איש הקשר.");
+      setVcfImportOpen(true);
+    }
+  }
+
+  function closeVcfImportDialog() {
+    setVcfImportOpen(false);
+    setVcfImportForm(null);
+    setVcfParseError(null);
+  }
+
+  async function handleVcfImportSaved() {
+    setMessage("איש הקשר יובא לספר.");
+    await refresh();
+  }
+
   function handleLogout() {
     setMasterAuthenticated(false);
     setAuthed(false);
@@ -183,9 +241,25 @@ export default function MasterContactsDirectoryContent() {
                 <MasterProjectV2SearchInput value={search} onChange={setSearch} />
               }
               actions={
-                <ForteV2PrimaryButton onClick={openCreateDialog} disabled={!configured} size="sm">
-                  + איש קשר חדש
-                </ForteV2PrimaryButton>
+                <div className="flex flex-wrap gap-2">
+                  <ForteV2PrimaryButton onClick={openCreateDialog} disabled={!configured} size="sm">
+                    + איש קשר חדש
+                  </ForteV2PrimaryButton>
+                  <ForteV2SecondaryButton
+                    onClick={openVcfImportPicker}
+                    disabled={!configured}
+                    size="sm"
+                  >
+                    ייבוא איש קשר
+                  </ForteV2SecondaryButton>
+                  <input
+                    ref={vcfInputRef}
+                    type="file"
+                    accept=".vcf,.vcard,text/vcard,text/x-vcard"
+                    className="hidden"
+                    onChange={(e) => void handleVcfFileSelected(e)}
+                  />
+                </div>
               }
             />
 
@@ -306,6 +380,16 @@ export default function MasterContactsDirectoryContent() {
           </ForteV2Dialog>
         </ForteV2DialogOverlay>
       )}
+
+      <VcfImportContactDialog
+        open={vcfImportOpen}
+        initialForm={vcfImportForm}
+        parseError={vcfParseError}
+        contacts={contacts}
+        onClose={closeVcfImportDialog}
+        onSaved={handleVcfImportSaved}
+        guardSensitiveAction={guardSensitiveAction}
+      />
 
       {deleteTarget && (
         <ForteV2DialogOverlay

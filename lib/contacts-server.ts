@@ -1,4 +1,5 @@
 import {
+  normalizeContactPhoneForLookup,
   validateContactInput,
   type Contact,
   type ContactInput,
@@ -59,10 +60,6 @@ function buildContactInsertRow(input: ContactInput) {
     notes: input.notes.trim(),
     updated_at: now,
   };
-}
-
-export function normalizeContactPhoneForLookup(phone: string): string {
-  return phone.replace(/\D/g, "");
 }
 
 /** Exact match only — email (case-insensitive) or normalized phone digits. No fuzzy name match. */
