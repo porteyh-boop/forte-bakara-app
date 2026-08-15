@@ -47,6 +47,7 @@ function faultStatusForBadge(status: string): FaultStatus {
 
 interface MasterProjectV2FaultCardProps {
   fault: PilotCloudFault;
+  highlighted?: boolean;
   notifications?: FaultNotificationRecord[];
   actionId: string | null;
   formatDate: (iso: string) => string;
@@ -59,6 +60,7 @@ interface MasterProjectV2FaultCardProps {
 
 export default function MasterProjectV2FaultCard({
   fault,
+  highlighted = false,
   notifications = [],
   actionId,
   formatDate,
@@ -117,7 +119,10 @@ export default function MasterProjectV2FaultCard({
 
   return (
     <>
-      <article className="fv2-card fv2-fault-card">
+      <article
+        className={`fv2-card fv2-fault-card${highlighted ? " fv2-fault-card-highlighted" : ""}`}
+        data-fault-id={fault.id}
+      >
         <div className="flex items-start justify-between gap-2 mb-2">
           <div className="min-w-0">
             <p className="fv2-fault-card-title">{fault.fault_type}</p>

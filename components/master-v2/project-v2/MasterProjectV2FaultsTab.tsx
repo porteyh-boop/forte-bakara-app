@@ -42,10 +42,14 @@ function formatCloudDate(iso: string): string {
 
 interface MasterProjectV2FaultsTabProps {
   buildingId: string;
+  highlightFaultId?: string | null;
+  onHighlightConsumed?: () => void;
 }
 
 export default function MasterProjectV2FaultsTab({
   buildingId,
+  highlightFaultId = null,
+  onHighlightConsumed,
 }: MasterProjectV2FaultsTabProps) {
   const { guardSensitiveAction } = useAppVersion();
   const cloudReady = isPilotCloudConfigured();
@@ -60,6 +64,7 @@ export default function MasterProjectV2FaultsTab({
   const [loading, setLoading] = useState(false);
   const [actionId, setActionId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [activeHighlightId, setActiveHighlightId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!cloudReady) return;
@@ -111,6 +116,32 @@ export default function MasterProjectV2FaultsTab({
         .includes(q)
     );
   }, [faults, liveStartedAtByBuilding, buildingId, search]);
+
+  useEffect(() => {
+    if (!highlightFaultId || loading) return;
+
+    const faultExists = buildingFaults.some((fault) => fault.id === highlightFaultId);
+    if (!faultExists) return;
+
+    setActiveHighlightId(highlightFaultId);
+
+    const scrollFrameId = requestAnimationFrame(() => {
+      const element = document.querySelector(
+        `[data-fault-id="${highlightFaultId}"]`
+      );
+      element?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+
+    const clearTimeoutId = window.setTimeout(() => {
+      setActiveHighlightId(null);
+      onHighlightConsumed?.();
+    }, 4000);
+
+    return () => {
+      cancelAnimationFrame(scrollFrameId);
+      window.clearTimeout(clearTimeoutId);
+    };
+  }, [highlightFaultId, loading, buildingFaults, onHighlightConsumed]);
 
   async function handleStartTreatment(
     id: string,
@@ -187,6 +218,7 @@ export default function MasterProjectV2FaultsTab({
             <MasterProjectV2FaultCard
               key={fault.id}
               fault={fault}
+              highlighted={activeHighlightId === fault.id}
               notifications={notificationsByFault[fault.id] ?? []}
               actionId={actionId}
               formatDate={formatCloudDate}

@@ -25,6 +25,7 @@ import {
 } from "@/lib/buildings-cloud";
 import { getProjectStage } from "@/lib/get-project-stage";
 import {
+  buildMasterProjectV2FaultPath,
   buildMasterProjectV2Path,
   isProjectV2TabId,
   MASTER_PROJECTS_V2_LIST_PATH,
@@ -112,7 +113,11 @@ function resolveDetails(
   return emptyMasterProjectV2Details(buildingId);
 }
 
-function resolveInitialTab(tabParam: string | null): ProjectV2Tab {
+function resolveInitialTab(
+  tabParam: string | null,
+  faultIdParam: string | null
+): ProjectV2Tab {
+  if (faultIdParam) return "faults";
   if (tabParam === "documents") return "details";
   if (tabParam && isProjectV2TabId(tabParam)) return tabParam;
   return "details";
@@ -123,10 +128,11 @@ export default function MasterProjectV2PageContent() {
   const searchParams = useSearchParams();
   const buildingId = (searchParams.get("buildingId") ?? "").trim().toLowerCase();
   const tabParam = searchParams.get("tab");
+  const faultIdParam = (searchParams.get("faultId") ?? "").trim();
 
   const [authed, setAuthed] = useState(false);
   const [activeTab, setActiveTab] = useState<ProjectV2Tab>(() =>
-    resolveInitialTab(tabParam)
+    resolveInitialTab(tabParam, faultIdParam)
   );
   const [details, setDetails] = useState<MasterProjectV2Details>(() =>
     emptyMasterProjectV2Details(buildingId)
@@ -175,8 +181,13 @@ export default function MasterProjectV2PageContent() {
   }, [authed]);
 
   useEffect(() => {
-    setActiveTab(resolveInitialTab(tabParam));
-  }, [tabParam]);
+    setActiveTab(resolveInitialTab(tabParam, faultIdParam));
+  }, [tabParam, faultIdParam]);
+
+  function clearFaultIdFromUrl() {
+    if (!buildingId) return;
+    router.replace(buildMasterProjectV2Path(buildingId, "faults"));
+  }
 
   useEffect(() => {
     if (tabParam === "documents" && buildingId) {
@@ -202,6 +213,10 @@ export default function MasterProjectV2PageContent() {
   function handleTabChange(tab: ProjectV2Tab) {
     setActiveTab(tab);
     if (!buildingId) return;
+    if (tab === "faults" && faultIdParam) {
+      router.replace(buildMasterProjectV2FaultPath(buildingId, faultIdParam));
+      return;
+    }
     router.replace(buildMasterProjectV2Path(buildingId, tab === "details" ? undefined : tab));
   }
 
@@ -236,7 +251,13 @@ export default function MasterProjectV2PageContent() {
       case "inspections":
         return <MasterProjectV2InspectionsTab buildingId={buildingId} />;
       case "faults":
-        return <MasterProjectV2FaultsTab buildingId={buildingId} />;
+        return (
+          <MasterProjectV2FaultsTab
+            buildingId={buildingId}
+            highlightFaultId={faultIdParam || null}
+            onHighlightConsumed={clearFaultIdFromUrl}
+          />
+        );
       case "contacts":
         return <MasterProjectV2ContactsTab buildingId={buildingId} />;
       case "tasks":

@@ -1,11 +1,39 @@
 "use client";
 
 import Link from "next/link";
+import { useMasterFaultInbox } from "@/components/master-v2/MasterFaultInboxProvider";
 import { BRAND_EDITOR_NAME, BRAND_FORTE } from "@/lib/brand";
 import {
   buildMasterProjectV2Path,
   type ProjectV2TabId,
 } from "@/lib/master-project-v2-routes";
+
+function SidebarNotificationsButton({
+  unreadCount,
+  onClick,
+}: {
+  unreadCount: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="fv2-sidebar-item w-full relative"
+      aria-label="התראות"
+      onClick={onClick}
+    >
+      <span className="fv2-sidebar-icon" aria-hidden>
+        🔔
+      </span>
+      <span>התראות</span>
+      {unreadCount > 0 ? (
+        <span className="fv2-sidebar-bell-badge" aria-hidden>
+          {unreadCount}
+        </span>
+      ) : null}
+    </button>
+  );
+}
 
 type SidebarItem = {
   id: string;
@@ -101,11 +129,11 @@ export default function MasterSidebar({
   onLogout,
   projectNav,
 }: MasterSidebarProps) {
+  const inbox = useMasterFaultInbox();
   const resolvedActiveId = resolveActiveItemId(activeItemId, projectNav);
 
   const mainItems: SidebarItem[] = [
     { id: "projects", label: "פרויקטים", icon: "▦", href: "/master?ui=v2", section: "main" },
-    ...GLOBAL_ITEMS,
   ];
 
   const projectItems: SidebarItem[] = STATION_ITEMS.map((item) => {
@@ -135,6 +163,13 @@ export default function MasterSidebar({
         {mainItems.map((item) => (
           <SidebarNavItem key={item.id} item={item} isActive={item.id === resolvedActiveId} />
         ))}
+        <SidebarNotificationsButton
+          unreadCount={inbox?.unreadCount ?? 0}
+          onClick={() => inbox?.togglePanel()}
+        />
+        {GLOBAL_ITEMS.map((item) => (
+          <SidebarNavItem key={item.id} item={item} isActive={item.id === resolvedActiveId} />
+        ))}
 
         <p className="fv2-sidebar-section-label">תיק פרויקט</p>
         {projectItems.map((item) => (
@@ -157,12 +192,6 @@ export default function MasterSidebar({
             <p className="fv2-sidebar-user-role">מנהל מערכת</p>
           </div>
         </div>
-        <button type="button" className="fv2-sidebar-item w-full" aria-label="התראות">
-          <span className="fv2-sidebar-icon" aria-hidden>
-            🔔
-          </span>
-          <span>התראות</span>
-        </button>
         <button type="button" onClick={onLogout} className="fv2-sidebar-item w-full">
           <span className="fv2-sidebar-icon" aria-hidden>
             ⎋

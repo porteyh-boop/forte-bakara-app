@@ -354,6 +354,12 @@ import {
   PROFESSIONAL_RULES,
 } from "../lib/professional-rules";
 import { DEFAULT_ELEVATOR_COMPANIES } from "../lib/elevator-companies";
+import {
+  isMasterFaultInboxUnread,
+  mapMasterFaultInboxRow,
+  summarizeMasterFaultInboxDescription,
+} from "../lib/master-fault-inbox";
+import { buildMasterProjectV2FaultPath } from "../lib/master-project-v2-routes";
 import type { FeedbackSubmissionInput } from "../lib/types";
 
 let passed = 0;
@@ -5520,6 +5526,156 @@ assert(
   masterProjectRowsSource.includes("sortMasterProjectTableRowsByProjectNumber") &&
     masterProjectRowsSource.includes("parseProjectNumberSortValue"),
   "Master Projects V2: helpers למיון מספר פרויקט"
+);
+
+const masterFaultInboxMigration = fs.readFileSync(
+  path.join(process.cwd(), "supabase/migrations/030_master_fault_inbox.sql"),
+  "utf8"
+);
+const masterFaultInboxServerSource = fs.readFileSync(
+  path.join(process.cwd(), "lib/master-fault-inbox-server.ts"),
+  "utf8"
+);
+const masterFaultInboxClientSource = fs.readFileSync(
+  path.join(process.cwd(), "lib/master-fault-inbox.ts"),
+  "utf8"
+);
+const faultNotifyRouteSource = fs.readFileSync(
+  path.join(process.cwd(), "app/api/fault-notify/route.ts"),
+  "utf8"
+);
+const masterFaultInboxApiSource = fs.readFileSync(
+  path.join(process.cwd(), "app/forte/api/master-fault-inbox/route.ts"),
+  "utf8"
+);
+const masterFaultInboxReadApiSource = fs.readFileSync(
+  path.join(process.cwd(), "app/forte/api/master-fault-inbox/read/route.ts"),
+  "utf8"
+);
+const masterShellLayoutSource = fs.readFileSync(
+  path.join(process.cwd(), "components/master-v2/MasterShellLayout.tsx"),
+  "utf8"
+);
+const masterSidebarSource = fs.readFileSync(
+  path.join(process.cwd(), "components/master-v2/MasterSidebar.tsx"),
+  "utf8"
+);
+const masterFaultInboxProviderSource = fs.readFileSync(
+  path.join(process.cwd(), "components/master-v2/MasterFaultInboxProvider.tsx"),
+  "utf8"
+);
+const masterProjectV2PageSource = fs.readFileSync(
+  path.join(
+    process.cwd(),
+    "components/master-v2/project-v2/MasterProjectV2PageContent.tsx"
+  ),
+  "utf8"
+);
+const masterProjectV2FaultsTabSource = fs.readFileSync(
+  path.join(
+    process.cwd(),
+    "components/master-v2/project-v2/MasterProjectV2FaultsTab.tsx"
+  ),
+  "utf8"
+);
+const masterProjectV2FaultCardSource = fs.readFileSync(
+  path.join(
+    process.cwd(),
+    "components/master-v2/project-v2/MasterProjectV2FaultCard.tsx"
+  ),
+  "utf8"
+);
+const masterProjectV2RoutesSource = fs.readFileSync(
+  path.join(process.cwd(), "lib/master-project-v2-routes.ts"),
+  "utf8"
+);
+
+assert(
+  masterFaultInboxMigration.includes("master_fault_inbox") &&
+    masterFaultInboxMigration.includes("unique (fault_id)") &&
+    masterFaultInboxMigration.includes("references public.pilot_faults(id)") &&
+    masterFaultInboxMigration.includes("read_at") &&
+    masterFaultInboxMigration.includes(
+      "create_master_fault_inbox_on_pilot_fault_insert"
+    ) &&
+    masterFaultInboxMigration.includes("after insert on public.pilot_faults") &&
+    masterFaultInboxMigration.includes("on conflict (fault_id) do nothing") &&
+    masterFaultInboxMigration.includes("No backfill") &&
+    !/insert\s+into\s+public\.master_fault_inbox[\s\S]*select[\s\S]*from\s+public\.pilot_faults/i.test(
+      masterFaultInboxMigration
+    ),
+  "Master Fault Inbox: migration + DB trigger AFTER INSERT (ללא backfill)"
+);
+assert(
+  !faultNotifyRouteSource.includes("createMasterFaultInboxItem") &&
+    !faultNotifyRouteSource.includes("master-fault-inbox-server") &&
+    faultNotifyRouteSource.includes("deliverTelegramMessage") &&
+    faultNotifyRouteSource.includes("recordFaultNotificationServer"),
+  "Master Fault Inbox: /api/fault-notify — Telegram + log בלבד (ללא inbox)"
+);
+assert(
+  masterFaultInboxServerSource.includes('.is("read_at", null)') &&
+    !masterFaultInboxServerSource.includes("createMasterFaultInboxItem"),
+  "Master Fault Inbox: mark read ב-read_at; יצירה רק ב-DB trigger"
+);
+assert(
+  faultNotifyRouteSource.includes('status: 502') &&
+    faultNotifyRouteSource.includes("deliverTelegramMessage") &&
+    !faultNotifyRouteSource.includes("master_fault_inbox"),
+  "Master Fault Inbox: Telegram failure לא משפיע על inbox (נתיבים נפרדים)"
+);
+assert(
+  masterFaultInboxApiSource.includes("requireMasterApiSession") &&
+    masterFaultInboxReadApiSource.includes("requireMasterApiSession"),
+  "Master Fault Inbox: API מאובטח Master session בלבד"
+);
+assert(
+  masterShellLayoutSource.includes("MasterFaultInboxProvider") &&
+    masterSidebarSource.includes("fv2-sidebar-bell-badge") &&
+    masterSidebarSource.includes("togglePanel"),
+  "Master Fault Inbox: bell + provider ב-MasterShellLayout"
+);
+assert(
+  masterFaultInboxProviderSource.includes("POLL_INTERVAL_MS = 30_000") &&
+    masterFaultInboxProviderSource.includes('window.addEventListener("focus"'),
+  "Master Fault Inbox: polling 30s + refresh on focus"
+);
+assert(
+  masterFaultInboxClientSource.includes("read_at == null") &&
+    masterFaultInboxClientSource.includes("MASTER_FAULT_INBOX_POPUP_DISMISS_PREFIX"),
+  "Master Fault Inbox: unread ב-DB + sessionStorage ל-popup בלבד"
+);
+assert(
+  masterProjectV2RoutesSource.includes('params.set("faultId"') &&
+    masterProjectV2PageSource.includes("highlightFaultId") &&
+    masterProjectV2FaultsTabSource.includes("data-fault-id") &&
+    masterProjectV2FaultCardSource.includes("fv2-fault-card-highlighted"),
+  "Master Fault Inbox: deep-link faultId + scroll/highlight"
+);
+
+const sampleInboxRow = mapMasterFaultInboxRow({
+  id: "inbox-1",
+  fault_id: "fault-1",
+  building_id: "Bld-001",
+  created_at: "2026-08-15T10:00:00.000Z",
+  read_at: null,
+});
+
+assert(Boolean(sampleInboxRow), "Master Fault Inbox: map row");
+assert(
+  sampleInboxRow &&
+    isMasterFaultInboxUnread(sampleInboxRow) &&
+    !isMasterFaultInboxUnread({ ...sampleInboxRow, read_at: "2026-08-15T11:00:00.000Z" }),
+  "Master Fault Inbox: isMasterFaultInboxUnread לפי read_at"
+);
+assert(
+  summarizeMasterFaultInboxDescription("x".repeat(200)).endsWith("…"),
+  "Master Fault Inbox: תיאור קצר"
+);
+assert(
+  buildMasterProjectV2FaultPath("bld-001", "fault-uuid").includes("faultId=fault-uuid") &&
+    buildMasterProjectV2FaultPath("bld-001", "fault-uuid").includes("tab=faults"),
+  "Master Fault Inbox: buildMasterProjectV2FaultPath"
 );
 
 console.log(`\n=== סיכום: ${passed} עברו, ${failed} נכשלו ===`);

@@ -1,6 +1,7 @@
 "use client";
 
 import "@/app/forte-v2-design-system.css";
+import { MasterFaultInboxProvider } from "@/components/master-v2/MasterFaultInboxProvider";
 import MasterSidebar, {
   type MasterSidebarProjectNav,
 } from "@/components/master-v2/MasterSidebar";
@@ -20,13 +21,15 @@ export default function MasterShellLayout({
   activeItemId,
 }: MasterShellLayoutProps) {
   return (
-    <div className={`min-h-screen bg-forte-background flex flex-row ${FORTE_V2_ROOT_CLASS}`}>
-      <MasterSidebar
-        onLogout={onLogout}
-        projectNav={projectNav}
-        activeItemId={activeItemId}
-      />
-      <main className="flex-1 min-w-0 flex flex-col">{children}</main>
-    </div>
+    <MasterFaultInboxProvider>
+      <div className={`min-h-screen bg-forte-background flex flex-row ${FORTE_V2_ROOT_CLASS}`}>
+        <MasterSidebar
+          onLogout={onLogout}
+          projectNav={projectNav}
+          activeItemId={activeItemId}
+        />
+        <main className="flex-1 min-w-0 flex flex-col">{children}</main>
+      </div>
+    </MasterFaultInboxProvider>
   );
 }
