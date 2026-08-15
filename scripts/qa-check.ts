@@ -379,6 +379,14 @@ import {
   type MasterFaultInboxItem,
 } from "../lib/master-fault-inbox";
 import { buildMasterProjectV2FaultPath } from "../lib/master-project-v2-routes";
+import {
+  getProjectNumberLabel,
+  getTabsForProjectType,
+  isTabAllowedForProjectType,
+  normalizeProjectType,
+  resolveAllowedProjectV2Tab,
+} from "../lib/project-type-config";
+import { validateNewProjectForm } from "../lib/project-v2-create";
 import type { FeedbackSubmissionInput } from "../lib/types";
 
 let passed = 0;
@@ -4902,6 +4910,98 @@ assert(
   "VCF Import: UI — כפתור, file picker, תצוגה מקדימה ושמירה"
 );
 
+assert(
+  normalizeProjectType(undefined) === "standard" &&
+    normalizeProjectType("home_inspection") === "home_inspection" &&
+    normalizeProjectType("unknown") === "standard",
+  "Project Type: normalizeProjectType — backward compatibility"
+);
+assert(
+  getTabsForProjectType("standard").includes("faults") &&
+    getTabsForProjectType("standard").includes("letters") &&
+    !getTabsForProjectType("standard").includes("documents"),
+  "Project Type: standard — כל החוצצים הקיימים"
+);
+assert(
+  getTabsForProjectType("home_inspection").join(",") ===
+    "details,contacts,documents" &&
+    isTabAllowedForProjectType("home_inspection", "contacts") &&
+    !isTabAllowedForProjectType("home_inspection", "faults"),
+  "Project Type: בדק בית — רק פרטים, אנשי קשר, מסמכים"
+);
+assert(
+  resolveAllowedProjectV2Tab("home_inspection", "faults") === "details" &&
+    resolveAllowedProjectV2Tab("standard", "faults") === "faults" &&
+    resolveAllowedProjectV2Tab("home_inspection", "documents") === "documents",
+  "Project Type: resolveAllowedProjectV2Tab — redirect tabs"
+);
+assert(
+  validateNewProjectForm({
+    projectName: "בדיקה",
+    projectType: "home_inspection",
+    elevatorCount: "",
+    projectStage: "",
+  }) === null &&
+    validateNewProjectForm({
+      projectName: "",
+      projectType: "standard",
+      elevatorCount: "1",
+      projectStage: "",
+    }) === "שם הפרויקט הוא שדה חובה.",
+  "Project Type: validateNewProjectForm — בדק בית ללא מעליות"
+);
+const projectTypeMigrationSource = fs.readFileSync(
+  path.join(process.cwd(), "supabase/migrations/031_buildings_project_type.sql"),
+  "utf8"
+);
+const newProjectPageSource = fs.readFileSync(
+  path.join(process.cwd(), "components/master-v2/project-v2/MasterProjectV2NewPageContent.tsx"),
+  "utf8"
+);
+const projectPageSource = fs.readFileSync(
+  path.join(process.cwd(), "components/master-v2/project-v2/MasterProjectV2PageContent.tsx"),
+  "utf8"
+);
+assert(
+  projectTypeMigrationSource.includes("default 'standard'") &&
+    projectTypeMigrationSource.includes("home_inspection") &&
+    newProjectPageSource.includes("סוג פרויקט") &&
+    projectPageSource.includes("getTabsForProjectType") &&
+    projectPageSource.includes("MasterProjectV2DocumentsTab"),
+  "Project Type: migration, יצירה, workspace מצומצם"
+);
+
+assert(
+  getProjectNumberLabel("home_inspection") === "מספר הזמנה" &&
+    getProjectNumberLabel("standard") === "מספר פרויקט",
+  "Project Type: מספר הזמנה בבדק בית / מספר פרויקט ב-standard"
+);
+assert(
+  projectPageSource.includes("getProjectNumberLabel") &&
+    projectPageSource.includes("projectIdLabel"),
+  "Project Type: תצוגת מספר הזמנה בכותרת בדק בית"
+);
+const detailsTabSource = fs.readFileSync(
+  path.join(process.cwd(), "components/master-v2/project-v2/MasterProjectV2DetailsTab.tsx"),
+  "utf8"
+);
+const sidebarSource = fs.readFileSync(
+  path.join(process.cwd(), "components/master-v2/MasterSidebar.tsx"),
+  "utf8"
+);
+assert(
+  detailsTabSource.includes("readDetails") &&
+    detailsTabSource.includes("detailsFromCloudRow(cloudRow") &&
+    detailsTabSource.includes('key: "projectNotes"') &&
+    detailsTabSource.includes("wide: true"),
+  "Project Type: project_notes — תצוגת קריאה מ-cloudRow + שדה רחב"
+);
+assert(
+  sidebarSource.includes("clientReady") &&
+    sidebarSource.includes("getTabsForProjectType") &&
+    sidebarSource.includes("!clientReady || !projectNav?.buildingId"),
+  "Project Type: MasterSidebar — nav לפי projectType אחרי clientReady"
+);
 const sampleCentralContact: Contact = {
   id: "contact-qa-1",
   fullName: "דני כהן",

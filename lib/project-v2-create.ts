@@ -1,7 +1,10 @@
 import type { ProjectStage } from "@/lib/buildings-cloud";
+import type { ProjectTypeId } from "@/lib/project-type-config";
+import { PROJECT_TYPE_IDS } from "@/lib/project-type-config";
 
 export function validateNewProjectForm(form: {
   projectName: string;
+  projectType: ProjectTypeId;
   elevatorCount: string;
   projectStage: string;
 }): string | null {
@@ -9,9 +12,15 @@ export function validateNewProjectForm(form: {
     return "שם הפרויקט הוא שדה חובה.";
   }
 
-  const count = Number(form.elevatorCount);
-  if (form.elevatorCount.trim() && (!Number.isFinite(count) || count < 0)) {
-    return "מספר מעליות חייב להיות מספר תקין.";
+  if (!PROJECT_TYPE_IDS.includes(form.projectType)) {
+    return "סוג פרויקט לא תקין.";
+  }
+
+  if (form.projectType === "standard") {
+    const count = Number(form.elevatorCount);
+    if (form.elevatorCount.trim() && (!Number.isFinite(count) || count < 0)) {
+      return "מספר מעליות חייב להיות מספר תקין.";
+    }
   }
 
   if (

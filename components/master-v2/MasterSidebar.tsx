@@ -1,12 +1,17 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { useMasterFaultInbox } from "@/components/master-v2/MasterFaultInboxProvider";
 import { BRAND_EDITOR_NAME, BRAND_FORTE } from "@/lib/brand";
 import {
   buildMasterProjectV2Path,
   type ProjectV2TabId,
 } from "@/lib/master-project-v2-routes";
+import {
+  getTabsForProjectType,
+  type ProjectTypeId,
+} from "@/lib/project-type-config";
 
 function SidebarNotificationsButton({
   unreadCount,
@@ -50,6 +55,7 @@ const STATION_ITEMS: SidebarItem[] = [
   { id: "inspections", label: "בדיקות", icon: "🔍", tabId: "inspections", section: "project" },
   { id: "faults", label: "תקלות", icon: "⚠", tabId: "faults", section: "project" },
   { id: "contacts", label: "אנשי קשר", icon: "👥", tabId: "contacts", section: "project" },
+  { id: "documents", label: "מסמכים", icon: "📄", tabId: "documents", section: "project" },
   { id: "tasks", label: "משימות", icon: "☑", tabId: "tasks", section: "project" },
   { id: "reports", label: "דוחות", icon: "📊", tabId: "reports", section: "project" },
   { id: "ai", label: "AI Assistant", icon: "✦", tabId: "ai", section: "project" },
@@ -63,6 +69,7 @@ const BOTTOM_ITEMS: SidebarItem[] = [
 export interface MasterSidebarProjectNav {
   buildingId: string;
   activeTab: ProjectV2TabId | "details";
+  projectType?: ProjectTypeId;
 }
 
 interface MasterSidebarProps {
@@ -130,21 +137,32 @@ export default function MasterSidebar({
   projectNav,
 }: MasterSidebarProps) {
   const inbox = useMasterFaultInbox();
+  const [clientReady, setClientReady] = useState(false);
+
+  useEffect(() => {
+    setClientReady(true);
+  }, []);
+
   const resolvedActiveId = resolveActiveItemId(activeItemId, projectNav);
 
   const mainItems: SidebarItem[] = [
     { id: "projects", label: "פרויקטים", icon: "▦", href: "/master?ui=v2", section: "main" },
   ];
 
-  const projectItems: SidebarItem[] = STATION_ITEMS.map((item) => {
-    if (projectNav?.buildingId && item.tabId) {
-      return {
-        ...item,
-        href: buildMasterProjectV2Path(projectNav.buildingId, item.tabId),
-      };
-    }
-    return { ...item, disabled: true };
-  });
+  const projectItems: SidebarItem[] = useMemo(() => {
+    if (!clientReady || !projectNav?.buildingId) return [];
+
+    return STATION_ITEMS.filter((item) => {
+      if (!item.tabId) return false;
+      const allowedTabs = getTabsForProjectType(projectNav.projectType ?? "standard");
+      return allowedTabs.includes(item.tabId);
+    }).map((item) => ({
+      ...item,
+      href: item.tabId
+        ? buildMasterProjectV2Path(projectNav.buildingId, item.tabId)
+        : undefined,
+    }));
+  }, [clientReady, projectNav]);
 
   const userInitials = BRAND_EDITOR_NAME.slice(0, 2).toUpperCase();
 

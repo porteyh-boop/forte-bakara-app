@@ -39,6 +39,7 @@ export const PROJECT_V2_TAB_IDS = [
   "inspections",
   "faults",
   "contacts",
+  "documents",
   "tasks",
   "reports",
   "ai",

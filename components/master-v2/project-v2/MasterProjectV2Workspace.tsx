@@ -31,14 +31,22 @@ export function ForteV2TabShell({
 export function ForteV2DetailGrid({
   items,
 }: {
-  items: Array<{ label: string; value: string; dir?: "ltr" | "rtl" }>;
+  items: Array<{ label: string; value: string; dir?: "ltr" | "rtl"; wide?: boolean }>;
 }) {
   return (
     <div className="fv2-detail-grid">
       {items.map((item) => (
-        <div key={item.label} className="fv2-detail-item">
+        <div
+          key={item.label}
+          className={[
+            "fv2-detail-item",
+            item.wide ? "sm:col-span-2 xl:col-span-3" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+        >
           <dt className="fv2-detail-label">{item.label}</dt>
-          <dd className="fv2-detail-value" dir={item.dir}>
+          <dd className="fv2-detail-value whitespace-pre-wrap" dir={item.dir}>
             {item.value || "—"}
           </dd>
         </div>
@@ -351,6 +359,7 @@ export function ForteV2ProjectHeader({
   backLabel,
   title,
   projectId,
+  projectIdLabel,
   meta,
   tabs,
 }: {
@@ -358,6 +367,7 @@ export function ForteV2ProjectHeader({
   backLabel: string;
   title: string;
   projectId: string;
+  projectIdLabel?: string;
   meta: Array<{ icon: string; label: string; value: string }>;
   tabs: ReactNode;
 }) {
@@ -371,6 +381,9 @@ export function ForteV2ProjectHeader({
           ← {backLabel}
         </Link>
         <h1 className="fv2-project-title">{title}</h1>
+        {projectIdLabel ? (
+          <p className="text-[11px] text-forte-text-secondary mt-1">{projectIdLabel}</p>
+        ) : null}
         <p className="fv2-project-id" dir="ltr">
           {projectId}
         </p>

@@ -1,3 +1,5 @@
+import type { ProjectTypeId } from "./project-type-config";
+import { DEFAULT_PROJECT_TYPE, normalizeProjectType } from "./project-type-config";
 import {
   getPilotSupabaseClient,
   resetPilotCloudDataByBuilding,
@@ -21,6 +23,12 @@ export const PROJECT_STAGE_OPTIONS = [
   "פרויקט סגור",
 ] as const;
 export type ProjectStage = (typeof PROJECT_STAGE_OPTIONS)[number];
+export type { ProjectTypeId } from "./project-type-config";
+export {
+  DEFAULT_PROJECT_TYPE,
+  getProjectTypeLabel,
+  normalizeProjectType,
+} from "./project-type-config";
 
 export interface CloudBuildingRow {
   id: string;
@@ -44,6 +52,7 @@ export interface CloudBuildingRow {
   project_start_date: string | null;
   project_delivery_date: string | null;
   project_notes: string | null;
+  project_type: ProjectTypeId;
 }
 
 export interface CloudElevatorRow {
@@ -76,6 +85,7 @@ export interface SaveBuildingInput {
   projectDeliveryDate?: string | null;
   projectNotes?: string | null;
   projectNumber?: string | null;
+  projectType?: ProjectTypeId;
 }
 
 export interface SaveElevatorInput {
@@ -192,6 +202,7 @@ export function mapCloudBuildingRow(
         : null,
     project_notes:
       raw.project_notes != null ? String(raw.project_notes) : null,
+    project_type: normalizeProjectType(raw.project_type),
   };
 }
 
@@ -286,6 +297,7 @@ export async function createCloudBuilding(
       project_start_date: input.projectStartDate || null,
       project_delivery_date: input.projectDeliveryDate || null,
       project_notes: input.projectNotes?.trim() || null,
+      project_type: input.projectType ?? DEFAULT_PROJECT_TYPE,
     })
     .select("*")
     .single();
@@ -373,6 +385,9 @@ export async function updateCloudBuilding(
   }
   if (input.projectNumber !== undefined) {
     patch.project_number = input.projectNumber?.trim() || null;
+  }
+  if (input.projectType !== undefined) {
+    patch.project_type = input.projectType;
   }
 
   const { data, error } = await client

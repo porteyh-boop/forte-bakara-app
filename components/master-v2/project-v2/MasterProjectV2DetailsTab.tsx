@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAppVersion } from "@/components/AppVersionProvider";
 import MasterBuildingDetailsForm from "@/components/MasterBuildingDetailsForm";
 import CentralContactPickerDialog from "@/components/master-v2/CentralContactPickerDialog";
@@ -37,6 +37,7 @@ import {
   resolveDisplayProjectNumber,
   resolveEditableProjectNumber,
 } from "@/lib/project-number";
+import { getProjectTypeLabel, getProjectNumberLabel, normalizeProjectType } from "@/lib/project-type-config";
 import { MASTER_PROJECTS_V2_LIST_PATH } from "@/lib/master-project-v2-routes";
 import ProjectDocumentsPanel from "@/components/master-v2/project-v2/ProjectDocumentsPanel";
 import { deleteBuildingProject } from "@/lib/buildings-delete-cloud";
@@ -47,6 +48,7 @@ import type { Contact } from "@/lib/contacts";
 export interface MasterProjectV2Details {
   buildingId: string;
   projectNumber: string;
+  projectTypeLabel: string;
   buildingName: string;
   client: string;
   city: string;
@@ -102,6 +104,18 @@ export default function MasterProjectV2DetailsTab({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [contactPickerOpen, setContactPickerOpen] = useState(false);
   const contactsConfigured = isContactsConfigured();
+  const projectType = normalizeProjectType(cloudRow?.project_type);
+  const projectNumberLabel = getProjectNumberLabel(projectType);
+  const detailFields = detailFieldsForProjectType(projectType);
+  const readDetails = useMemo(() => {
+    if (!cloudRow) return details;
+    const parsedElevatorCount = Number.parseInt(details.elevatorCount, 10);
+    const elevatorCount =
+      Number.isFinite(parsedElevatorCount) && parsedElevatorCount > 0
+        ? parsedElevatorCount
+        : null;
+    return detailsFromCloudRow(cloudRow, elevatorCount);
+  }, [cloudRow, details]);
 
   useEffect(() => {
     if (cloudRow) {
@@ -258,7 +272,7 @@ export default function MasterProjectV2DetailsTab({
           />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-forte-border/60">
             <label className="block space-y-1 sm:col-span-2">
-              <span className="text-xs text-forte-text-secondary">מספר פרויקט</span>
+              <span className="text-xs text-forte-text-secondary">{projectNumberLabel}</span>
               <input
                 value={projectNumberInput}
                 onChange={(e) => setProjectNumberInput(e.target.value)}
@@ -407,7 +421,7 @@ export default function MasterProjectV2DetailsTab({
                   {cloudRow.name}
                 </p>
                 <p dir="ltr" className="text-right">
-                  <span className="font-semibold text-forte-text">מספר פרויקט: </span>
+                  <span className="font-semibold text-forte-text">{projectNumberLabel}: </span>
                   {cloudRow.building_id}
                 </p>
                 <p className="text-red-700 font-medium">
@@ -420,7 +434,7 @@ export default function MasterProjectV2DetailsTab({
               </div>
               <label className="block space-y-1">
                 <span className="text-xs text-forte-text-secondary">
-                  הקלידו את מספר הפרויקט לאישור:{" "}
+                  הקלידו את {projectNumberLabel} לאישור:{" "}
                   <span dir="ltr" className="font-mono text-forte-text">
                     {cloudRow.building_id}
                   </span>
@@ -486,10 +500,11 @@ export default function MasterProjectV2DetailsTab({
 
       <ForteV2Panel>
         <ForteV2DetailGrid
-          items={DETAIL_FIELDS.map(({ label, key }) => ({
+          items={detailFields.map(({ label, key, wide }) => ({
             label,
-            value: details[key] || "—",
+            value: readDetails[key]?.trim() ? readDetails[key] : "—",
             dir: key === "projectNumber" ? "ltr" : undefined,
+            wide,
           }))}
         />
       </ForteV2Panel>
@@ -499,22 +514,26 @@ export default function MasterProjectV2DetailsTab({
   );
 }
 
-const DETAIL_FIELDS = [
-  { label: "מספר פרויקט", key: "projectNumber" as const },
-  { label: "שם הבניין", key: "buildingName" as const },
-  { label: "לקוח", key: "client" as const },
-  { label: "עיר", key: "city" as const },
-  { label: "מספר מעליות", key: "elevatorCount" as const },
-  { label: "שלב הפרויקט", key: "projectStage" as const },
-  { label: "כתובת", key: "address" as const },
-  { label: "חברת ניהול", key: "managementCompany" as const },
-  { label: "יצרן מעליות", key: "elevatorCompany" as const },
-  { label: "חברת תחזוקה", key: "maintenanceCompany" as const },
-  { label: "בודק מוסמך", key: "certifiedInspector" as const },
-  { label: "תאריך התחלה", key: "projectStartDate" as const },
-  { label: "תאריך מסירה", key: "projectDeliveryDate" as const },
-  { label: "הערות", key: "projectNotes" as const },
-];
+function detailFieldsForProjectType(projectType: ReturnType<typeof normalizeProjectType>) {
+  const projectNumberLabel = getProjectNumberLabel(projectType);
+  return [
+    { label: projectNumberLabel, key: "projectNumber" as const },
+    { label: "סוג פרויקט", key: "projectTypeLabel" as const },
+    { label: "שם הבניין", key: "buildingName" as const },
+    { label: "לקוח", key: "client" as const },
+    { label: "עיר", key: "city" as const },
+    { label: "מספר מעליות", key: "elevatorCount" as const },
+    { label: "שלב הפרויקט", key: "projectStage" as const },
+    { label: "כתובת", key: "address" as const },
+    { label: "חברת ניהול", key: "managementCompany" as const },
+    { label: "יצרן מעליות", key: "elevatorCompany" as const },
+    { label: "חברת תחזוקה", key: "maintenanceCompany" as const },
+    { label: "בודק מוסמך", key: "certifiedInspector" as const },
+    { label: "תאריך התחלה", key: "projectStartDate" as const },
+    { label: "תאריך מסירה", key: "projectDeliveryDate" as const },
+    { label: "הערות", key: "projectNotes" as const, wide: true },
+  ];
+}
 
 function emptyFormFromDetails(details: MasterProjectV2Details): MasterBuildingFormState {
   return {
@@ -578,6 +597,7 @@ export function emptyMasterProjectV2Details(buildingId: string): MasterProjectV2
   return {
     buildingId: buildingId || "—",
     projectNumber: "—",
+    projectTypeLabel: getProjectTypeLabel("standard"),
     buildingName: "—",
     client: "—",
     city: "—",
@@ -604,6 +624,7 @@ export function detailsFromCloudRow(
       projectNumber: row.project_number,
       buildingId: row.building_id,
     }),
+    projectTypeLabel: getProjectTypeLabel(normalizeProjectType(row.project_type)),
     buildingName: row.name,
     client: row.contact_name?.trim() || "—",
     city: row.city?.trim() || "—",

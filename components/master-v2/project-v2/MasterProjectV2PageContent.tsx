@@ -32,11 +32,22 @@ import {
   type ProjectV2TabId,
 } from "@/lib/master-project-v2-routes";
 import {
+  DEFAULT_PROJECT_TYPE,
+  getProjectTypeLabel,
+  getProjectNumberLabel,
+  getTabsForProjectType,
+  normalizeProjectType,
+  PROJECT_V2_TAB_LABELS,
+  resolveAllowedProjectV2Tab,
+  type ProjectTypeId,
+} from "@/lib/project-type-config";
+import {
   getStaticDemoBuildingMeta,
   getAllDemoBuildingIds,
   getBuildingDataset,
 } from "@/lib/buildings";
 import MasterProjectV2TasksTab from "@/components/master-v2/project-v2/MasterProjectV2TasksTab";
+import MasterProjectV2DocumentsTab from "@/components/master-v2/project-v2/MasterProjectV2DocumentsTab";
 import { ensureMasterV2SessionsValid } from "@/lib/master-v2-auth";
 import {
   isMasterAuthenticated,
@@ -50,20 +61,16 @@ import {
   fv2,
 } from "@/components/master-v2/project-v2/MasterProjectV2Workspace";
 
-const PROJECT_V2_TABS: Array<{ id: ProjectV2TabId | "details"; label: string }> = [
-  { id: "details", label: "פרטי הפרויקט" },
-  { id: "letters", label: "מכתבים" },
-  { id: "inspections", label: "בדיקות" },
-  { id: "faults", label: "תקלות" },
-  { id: "contacts", label: "אנשי קשר" },
-  { id: "tasks", label: "משימות" },
-  { id: "reports", label: "דוחות" },
-  { id: "ai", label: "AI Assistant" },
-  { id: "permissions", label: "הרשאות" },
-  { id: "settings", label: "הגדרות" },
-];
+type ProjectV2Tab = ProjectV2TabId | "details";
 
-type ProjectV2Tab = (typeof PROJECT_V2_TABS)[number]["id"];
+function visibleTabsForProjectType(
+  projectType: ProjectTypeId
+): Array<{ id: ProjectV2Tab; label: string }> {
+  return getTabsForProjectType(projectType).map((id) => ({
+    id,
+    label: PROJECT_V2_TAB_LABELS[id],
+  }));
+}
 
 function resolveElevatorCount(
   buildingId: string,
@@ -94,6 +101,7 @@ function resolveDetails(
     return {
       buildingId,
       projectNumber: "—",
+      projectTypeLabel: getProjectTypeLabel("standard"),
       buildingName: demo.name,
       client: "—",
       city: demo.city ?? "—",
@@ -115,12 +123,14 @@ function resolveDetails(
 
 function resolveInitialTab(
   tabParam: string | null,
-  faultIdParam: string | null
+  faultIdParam: string | null,
+  projectType: ProjectTypeId
 ): ProjectV2Tab {
-  if (faultIdParam) return "faults";
-  if (tabParam === "documents") return "details";
-  if (tabParam && isProjectV2TabId(tabParam)) return tabParam;
-  return "details";
+  const requested =
+    tabParam && isProjectV2TabId(tabParam) ? tabParam : tabParam === "documents" ? "documents" : null;
+  return resolveAllowedProjectV2Tab(projectType, requested, {
+    faultId: faultIdParam,
+  });
 }
 
 export default function MasterProjectV2PageContent() {
@@ -132,7 +142,7 @@ export default function MasterProjectV2PageContent() {
 
   const [authed, setAuthed] = useState(false);
   const [activeTab, setActiveTab] = useState<ProjectV2Tab>(() =>
-    resolveInitialTab(tabParam, faultIdParam)
+    resolveInitialTab(tabParam, faultIdParam, DEFAULT_PROJECT_TYPE)
   );
   const [details, setDetails] = useState<MasterProjectV2Details>(() =>
     emptyMasterProjectV2Details(buildingId)
@@ -180,20 +190,35 @@ export default function MasterProjectV2PageContent() {
     });
   }, [authed]);
 
+  const projectType = normalizeProjectType(cloudRow?.project_type);
+  const visibleTabs = useMemo(
+    () => visibleTabsForProjectType(projectType),
+    [projectType]
+  );
+
   useEffect(() => {
-    setActiveTab(resolveInitialTab(tabParam, faultIdParam));
-  }, [tabParam, faultIdParam]);
+    setActiveTab(resolveInitialTab(tabParam, faultIdParam, projectType));
+  }, [tabParam, faultIdParam, projectType]);
+
+  useEffect(() => {
+    if (!buildingId) return;
+    const allowed = resolveInitialTab(tabParam, faultIdParam, projectType);
+    if (allowed === activeTab) return;
+    if (tabParam === "documents" && projectType === "standard") {
+      router.replace(buildMasterProjectV2Path(buildingId));
+      return;
+    }
+    if (tabParam && isProjectV2TabId(tabParam) && allowed !== tabParam) {
+      router.replace(
+        buildMasterProjectV2Path(buildingId, allowed === "details" ? undefined : allowed)
+      );
+    }
+  }, [tabParam, faultIdParam, projectType, buildingId, activeTab, router]);
 
   function clearFaultIdFromUrl() {
     if (!buildingId) return;
     router.replace(buildMasterProjectV2Path(buildingId, "faults"));
   }
-
-  useEffect(() => {
-    if (tabParam === "documents" && buildingId) {
-      router.replace(buildMasterProjectV2Path(buildingId));
-    }
-  }, [tabParam, buildingId, router]);
 
   useEffect(() => {
     if (!authed) return;
@@ -204,6 +229,26 @@ export default function MasterProjectV2PageContent() {
     if (details.buildingName !== "—") return details.buildingName;
     return buildingId ? `פרויקט ${buildingId}` : "תיק פרויקט";
   }, [details.buildingName, buildingId]);
+
+  const headerMeta = useMemo(() => {
+    const items = [
+      { icon: "📍", label: "עיר", value: details.city },
+      { icon: "👤", label: "לקוח", value: details.client },
+    ];
+    if (projectType === "home_inspection") {
+      items.push({
+        icon: "🏠",
+        label: "סוג",
+        value: getProjectTypeLabel(projectType),
+      });
+    } else {
+      items.push(
+        { icon: "🛗", label: "מעליות", value: details.elevatorCount },
+        { icon: "🏢", label: "ניהול", value: details.managementCompany }
+      );
+    }
+    return items;
+  }, [details, projectType]);
 
   function handleLogout() {
     setMasterAuthenticated(false);
@@ -260,6 +305,8 @@ export default function MasterProjectV2PageContent() {
         );
       case "contacts":
         return <MasterProjectV2ContactsTab buildingId={buildingId} />;
+      case "documents":
+        return <MasterProjectV2DocumentsTab buildingId={buildingId} />;
       case "tasks":
         return <MasterProjectV2TasksTab buildingId={buildingId} />;
       case "reports":
@@ -292,7 +339,9 @@ export default function MasterProjectV2PageContent() {
   return (
     <MasterShellLayout
       onLogout={handleLogout}
-      projectNav={buildingId ? { buildingId, activeTab } : undefined}
+      projectNav={
+        buildingId ? { buildingId, activeTab, projectType } : undefined
+      }
     >
       <div className={fv2.pageBody}>
         <ForteV2ProjectHeader
@@ -300,15 +349,15 @@ export default function MasterProjectV2PageContent() {
           backLabel="חזרה לרשימת הפרויקטים"
           title={projectTitle}
           projectId={details.projectNumber}
-          meta={[
-            { icon: "📍", label: "עיר", value: details.city },
-            { icon: "👤", label: "לקוח", value: details.client },
-            { icon: "🛗", label: "מעליות", value: details.elevatorCount },
-            { icon: "🏢", label: "ניהול", value: details.managementCompany },
-          ]}
+          projectIdLabel={
+            projectType === "home_inspection"
+              ? getProjectNumberLabel(projectType)
+              : undefined
+          }
+          meta={headerMeta}
           tabs={
             <>
-              {PROJECT_V2_TABS.map((tab) => (
+              {visibleTabs.map((tab) => (
                 <ForteV2TabButton
                   key={tab.id}
                   active={activeTab === tab.id}
@@ -322,7 +371,7 @@ export default function MasterProjectV2PageContent() {
         />
 
         <div className={fv2.workspaceCanvas}>
-          {buildingId && (
+          {buildingId && projectType === "standard" && (
             <MasterProjectV2InspectorFollowUpPopup buildingId={buildingId} />
           )}
           <ForteV2Panel large className="flex-1 min-h-[calc(100vh-15rem)] overflow-hidden flex flex-col !p-0">

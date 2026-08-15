@@ -89,6 +89,7 @@ export default function MasterProjectsTable({
             <th>שם הבניין</th>
             <th>לקוח</th>
             <th>עיר</th>
+            <th>סוג</th>
             <th>שלב נוכחי</th>
             <th>שלב הפרויקט</th>
             <th>התקדמות</th>
@@ -113,6 +114,13 @@ export default function MasterProjectsTable({
               </td>
               <td className="text-forte-text/85">{row.client}</td>
               <td className="text-forte-text/85">{row.city}</td>
+              <td className="text-forte-text/85">
+                {row.projectTypeLabel ? (
+                  <ForteV2StatusBadge tone="blue">{row.projectTypeLabel}</ForteV2StatusBadge>
+                ) : (
+                  "—"
+                )}
+              </td>
               <td className="text-forte-text/85">{row.stage}</td>
               <td>
                 <ForteV2StatusBadge tone={projectStageTone(row.projectStage)}>

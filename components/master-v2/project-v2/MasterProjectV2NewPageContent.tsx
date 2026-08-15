@@ -20,6 +20,7 @@ import {
   getAllCloudBuildingsWithMeta,
   createCloudBuildingWithElevators,
   PROJECT_STAGE_OPTIONS,
+  type ProjectTypeId,
 } from "@/lib/buildings-cloud";
 import {
   isPilotCloudConfigured,
@@ -41,8 +42,14 @@ import {
   buildMasterProjectV2Path,
   MASTER_PROJECTS_V2_LIST_PATH,
 } from "@/lib/master-project-v2-routes";
+import {
+  DEFAULT_PROJECT_TYPE,
+  PROJECT_TYPE_LABELS,
+  PROJECT_TYPE_IDS,
+} from "@/lib/project-type-config";
 
 const emptyForm = {
+  projectType: DEFAULT_PROJECT_TYPE as ProjectTypeId,
   projectName: "",
   client: "",
   managementCompany: "",
@@ -86,6 +93,8 @@ export default function MasterProjectV2NewPageContent() {
       return;
     }
 
+    const isHomeInspection = form.projectType === "home_inspection";
+
     if (!cloudReady) {
       setError("Supabase לא מוגדר — לא ניתן לשמור פרויקט.");
       return;
@@ -104,17 +113,21 @@ export default function MasterProjectV2NewPageContent() {
       existingProjectNumbers
     );
 
-    const elevatorCount = Math.max(1, Number(form.elevatorCount) || 1);
+    const elevatorCount = isHomeInspection
+      ? 0
+      : Math.max(1, Number(form.elevatorCount) || 1);
     const elevatorDrafts = Array.from({ length: elevatorCount }, (_, index) => ({
       ...emptyNewBuildingElevatorDraft(),
       elevatorName: `מעלית ${index + 1}`,
     }));
 
-    const elevatorValidation = validateNewBuildingElevators(elevatorDrafts);
-    if (!elevatorValidation.ok) {
-      setSaving(false);
-      setError(elevatorValidation.message);
-      return;
+    if (!isHomeInspection) {
+      const elevatorValidation = validateNewBuildingElevators(elevatorDrafts);
+      if (!elevatorValidation.ok) {
+        setSaving(false);
+        setError(elevatorValidation.message);
+        return;
+      }
     }
 
     const projectStage = mapNewProjectStage(form.projectStage);
@@ -137,6 +150,7 @@ export default function MasterProjectV2NewPageContent() {
         projectStartDate: form.startDate || null,
         projectDeliveryDate: form.deliveryDate || null,
         projectNotes: form.notes.trim(),
+        projectType: form.projectType,
       },
       toSaveElevatorInputs(buildingId, elevatorDrafts)
     );
@@ -183,6 +197,24 @@ export default function MasterProjectV2NewPageContent() {
                 </ForteV2StatusBanner>
               )}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                <FormField label="סוג פרויקט">
+                  <select
+                    value={form.projectType}
+                    onChange={(e) =>
+                      setForm((current) => ({
+                        ...current,
+                        projectType: e.target.value as ProjectTypeId,
+                      }))
+                    }
+                    className="form-input text-sm py-2"
+                  >
+                    {PROJECT_TYPE_IDS.map((typeId) => (
+                      <option key={typeId} value={typeId}>
+                        {PROJECT_TYPE_LABELS[typeId]}
+                      </option>
+                    ))}
+                  </select>
+                </FormField>
                 <FormField label="שם הפרויקט">
                   <input
                     type="text"
@@ -248,6 +280,8 @@ export default function MasterProjectV2NewPageContent() {
                     className="form-input text-sm py-2"
                   />
                 </FormField>
+                {form.projectType === "standard" && (
+                  <>
                 <FormField label="מספר מעליות">
                   <input
                     type="number"
@@ -301,6 +335,8 @@ export default function MasterProjectV2NewPageContent() {
                     className="form-input text-sm py-2"
                   />
                 </FormField>
+                  </>
+                )}
                 <FormField label="שלב הפרויקט">
                   <select
                     value={form.projectStage}

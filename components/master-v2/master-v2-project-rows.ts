@@ -1,6 +1,11 @@
 import { PROJECT_STAGE_OPTIONS } from "@/lib/buildings-cloud";
 import { getProjectStage } from "@/lib/get-project-stage";
 import type { MasterBuildingEntry } from "@/lib/master-buildings-list";
+import {
+  getProjectTypeLabel,
+  normalizeProjectType,
+  shouldShowProjectTypeInList,
+} from "@/lib/project-type-config";
 
 import { resolveDisplayProjectNumber } from "@/lib/project-number";
 
@@ -10,6 +15,7 @@ export interface MasterProjectTableRow {
   buildingName: string;
   client: string;
   city: string;
+  projectTypeLabel: string | null;
   stage: string;
   projectStage: string;
   progress: number | null;
@@ -57,6 +63,13 @@ export function resolveProjectUpdatedAt(
   )[0];
 }
 
+export function resolveProjectTypeLabel(entry: MasterBuildingEntry): string | null {
+  const row = entry.cloudRow;
+  if (!row) return null;
+  const type = normalizeProjectType(row.project_type);
+  return shouldShowProjectTypeInList(type) ? getProjectTypeLabel(type) : null;
+}
+
 export function buildMasterProjectTableRow(
   entry: MasterBuildingEntry,
   dossierLastFaultDate: string | null | undefined
@@ -73,6 +86,7 @@ export function buildMasterProjectTableRow(
     buildingName: entry.name,
     client: resolveProjectClient(entry),
     city: entry.city?.trim() || "—",
+    projectTypeLabel: resolveProjectTypeLabel(entry),
     stage: resolveProjectStage(entry),
     projectStage: resolveProjectStageValue(entry),
     progress: resolveProjectProgress(entry),
