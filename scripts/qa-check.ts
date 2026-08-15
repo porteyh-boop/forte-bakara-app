@@ -314,8 +314,10 @@ import {
 } from "../lib/master-building-form";
 import {
   contactMatchesSearch,
+  contactInputsMatchByPhoneOrEmail,
   findContactByExactMatch,
   normalizeContactPhoneForLookup,
+  splitIncomingContactsByQueueDuplicates,
   type Contact,
   type ContactInput,
 } from "../lib/contacts";
@@ -4804,6 +4806,71 @@ assert(
     ) === null,
   "VCF Import: בדיקת כפילויות לפי טלפון ואימייל"
 );
+const queueExisting: ContactInput = {
+  fullName: "גילי יחיה",
+  company: "",
+  roleTitle: "",
+  phone: "050-1111111",
+  email: "gili@example.com",
+  notes: "",
+};
+const queueIncomingPhoneDup: ContactInput = {
+  fullName: "גילי שוב",
+  company: "",
+  roleTitle: "",
+  phone: "050-111-1111",
+  email: "",
+  notes: "",
+};
+const queueIncomingEmailDup: ContactInput = {
+  fullName: "אחר",
+  company: "",
+  roleTitle: "",
+  phone: "",
+  email: "GILI@example.com",
+  notes: "",
+};
+const queueIncomingNew: ContactInput = {
+  fullName: "משה כהן",
+  company: "",
+  roleTitle: "",
+  phone: "050-2222222",
+  email: "",
+  notes: "",
+};
+assert(
+  contactInputsMatchByPhoneOrEmail(queueExisting, queueIncomingPhoneDup) &&
+    contactInputsMatchByPhoneOrEmail(queueExisting, queueIncomingEmailDup) &&
+    !contactInputsMatchByPhoneOrEmail(queueExisting, queueIncomingNew),
+  "VCF Import Queue: התאמה לפי טלפון/אימייל"
+);
+const queueSplit = splitIncomingContactsByQueueDuplicates(
+  [queueIncomingPhoneDup, queueIncomingNew, queueIncomingEmailDup],
+  [queueExisting]
+);
+assert(
+  queueSplit.accepted.length === 1 &&
+    queueSplit.skipped.length === 2 &&
+    queueSplit.accepted[0]?.fullName === "משה כהן",
+  "VCF Import Queue: מניעת כפילויות בתוך התור"
+);
+const queueTenBatches = Array.from({ length: 10 }, (_, index) => ({
+  fullName: `איש ${index + 1}`,
+  company: "",
+  roleTitle: "",
+  phone: `050-30000${String(index).padStart(2, "0")}`,
+  email: "",
+  notes: "",
+}));
+let queueAccumulator: ContactInput[] = [];
+for (const batch of queueTenBatches) {
+  const split = splitIncomingContactsByQueueDuplicates([batch], queueAccumulator);
+  queueAccumulator = [...queueAccumulator, ...split.accepted];
+}
+assert(
+  queueAccumulator.length === 10,
+  "VCF Import Queue: 10 הוספות רצופות ללא כפילויות"
+);
 const masterContactsDirectorySource = fs.readFileSync(
   path.join(process.cwd(), "components/master-v2/MasterContactsDirectoryContent.tsx"),
   "utf8"
@@ -4817,6 +4884,8 @@ assert(
     masterContactsDirectorySource.includes('accept=".vcf,.vcard') &&
     masterContactsDirectorySource.includes("multiple") &&
     masterContactsDirectorySource.includes("parseVCardFileSelection") &&
+    masterContactsDirectorySource.includes("vcfAppendBatch") &&
+    masterContactsDirectorySource.includes("vcfImportOpenRef") &&
     masterContactsDirectorySource.includes("+ איש קשר חדש") &&
     vcfImportDialogSource.includes("ייבוא אנשי קשר") &&
     vcfImportDialogSource.includes("ייתכן שכבר קיים") &&
@@ -4824,6 +4893,11 @@ assert(
     vcfImportDialogSource.includes("createContact") &&
     vcfImportDialogSource.includes("בחר הכול") &&
     vcfImportDialogSource.includes("בטל בחירת הכול") &&
+    vcfImportDialogSource.includes("+ הוסף אנשי קשר נוספים") &&
+    vcfImportDialogSource.includes("נבחרו") &&
+    vcfImportDialogSource.includes("הסר") &&
+    vcfImportDialogSource.includes("appendBatch") &&
+    vcfImportDialogSource.includes("splitIncomingContactsByQueueDuplicates") &&
     !vcfImportDialogSource.includes("updateContact"),
   "VCF Import: UI — כפתור, file picker, תצוגה מקדימה ושמירה"
 );

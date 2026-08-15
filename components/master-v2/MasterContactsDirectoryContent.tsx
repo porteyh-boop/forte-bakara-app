@@ -59,9 +59,25 @@ export default function MasterContactsDirectoryContent() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const vcfInputRef = useRef<HTMLInputElement>(null);
+  const vcfImportOpenRef = useRef(false);
   const [vcfImportOpen, setVcfImportOpen] = useState(false);
-  const [vcfImportItems, setVcfImportItems] = useState<ContactInput[] | null>(null);
+  const [vcfInitialBatch, setVcfInitialBatch] = useState<ContactInput[] | null>(null);
+  const [vcfAppendBatch, setVcfAppendBatch] = useState<ContactInput[] | null>(null);
   const [vcfParseError, setVcfParseError] = useState<string | null>(null);
+  const [vcfQueueNotice, setVcfQueueNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    vcfImportOpenRef.current = vcfImportOpen;
+  }, [vcfImportOpen]);
+
+  const handleVcfBatchesConsumed = useCallback(() => {
+    setVcfInitialBatch(null);
+    setVcfAppendBatch(null);
+  }, []);
+
+  const handleVcfQueueNoticeClear = useCallback(() => {
+    setVcfQueueNotice(null);
+  }, []);
 
   useEffect(() => {
     setAuthed(isMasterAuthenticated());
@@ -174,27 +190,46 @@ export default function MasterContactsDirectoryContent() {
 
     try {
       const { contacts: parsedContacts, error } = await parseVCardFileSelection(files);
-      if (error || parsedContacts.length === 0) {
-        setVcfImportItems(null);
-        setVcfParseError(error ?? "לא ניתן לקרוא את קובץ איש הקשר.");
+      const dialogOpen = vcfImportOpenRef.current;
+
+      if (!dialogOpen) {
+        if (error || parsedContacts.length === 0) {
+          setVcfInitialBatch(null);
+          setVcfParseError(error ?? "לא ניתן לקרוא את קובץ איש הקשר.");
+          setVcfImportOpen(true);
+          return;
+        }
+
+        setVcfParseError(null);
+        setVcfQueueNotice(null);
+        setVcfInitialBatch(parsedContacts);
         setVcfImportOpen(true);
         return;
       }
 
-      setVcfParseError(null);
-      setVcfImportItems(parsedContacts);
-      setVcfImportOpen(true);
+      if (error || parsedContacts.length === 0) {
+        setVcfQueueNotice(error ?? "לא ניתן לקרוא את קובץ איש הקשר.");
+        return;
+      }
+
+      setVcfAppendBatch(parsedContacts);
     } catch {
-      setVcfImportItems(null);
-      setVcfParseError("לא ניתן לקרוא את קובץ איש הקשר.");
-      setVcfImportOpen(true);
+      if (!vcfImportOpenRef.current) {
+        setVcfInitialBatch(null);
+        setVcfParseError("לא ניתן לקרוא את קובץ איש הקשר.");
+        setVcfImportOpen(true);
+      } else {
+        setVcfQueueNotice("לא ניתן לקרוא את קובץ איש הקשר.");
+      }
     }
   }
 
   function closeVcfImportDialog() {
     setVcfImportOpen(false);
-    setVcfImportItems(null);
+    setVcfInitialBatch(null);
+    setVcfAppendBatch(null);
     setVcfParseError(null);
+    setVcfQueueNotice(null);
   }
 
   async function handleVcfImportSaved(message: string) {
@@ -372,11 +407,16 @@ export default function MasterContactsDirectoryContent() {
 
       <VcfImportContactDialog
         open={vcfImportOpen}
-        initialItems={vcfImportItems}
+        initialBatch={vcfInitialBatch}
+        appendBatch={vcfAppendBatch}
         parseError={vcfParseError}
+        queueNotice={vcfQueueNotice}
         contacts={contacts}
         onClose={closeVcfImportDialog}
         onSaved={handleVcfImportSaved}
+        onAddMore={openVcfImportPicker}
+        onBatchesConsumed={handleVcfBatchesConsumed}
+        onQueueNoticeClear={handleVcfQueueNoticeClear}
         guardSensitiveAction={guardSensitiveAction}
       />
 

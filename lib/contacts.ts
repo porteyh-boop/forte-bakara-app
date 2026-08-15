@@ -114,6 +114,46 @@ export function findContactByExactMatch(
   return null;
 }
 
+/** Match by normalized phone digits or case-insensitive email. */
+export function contactInputsMatchByPhoneOrEmail(
+  a: ContactInput,
+  b: ContactInput
+): boolean {
+  const emailA = a.email.trim().toLowerCase();
+  const emailB = b.email.trim().toLowerCase();
+  if (emailA && emailB && emailA === emailB) return true;
+
+  const phoneA = normalizeContactPhoneForLookup(a.phone);
+  const phoneB = normalizeContactPhoneForLookup(b.phone);
+  if (phoneA && phoneB && phoneA === phoneB) return true;
+
+  return false;
+}
+
+/** Split incoming contacts, skipping duplicates already in the queue. */
+export function splitIncomingContactsByQueueDuplicates(
+  incoming: ContactInput[],
+  existing: ContactInput[]
+): { accepted: ContactInput[]; skipped: ContactInput[] } {
+  const accepted: ContactInput[] = [];
+  const skipped: ContactInput[] = [];
+  const queue = [...existing];
+
+  for (const item of incoming) {
+    const isDuplicate = queue.some((existingItem) =>
+      contactInputsMatchByPhoneOrEmail(item, existingItem)
+    );
+    if (isDuplicate) {
+      skipped.push(item);
+    } else {
+      accepted.push(item);
+      queue.push(item);
+    }
+  }
+
+  return { accepted, skipped };
+}
+
 export function contactMatchesSearch(contact: Contact, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
