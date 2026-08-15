@@ -7,11 +7,12 @@ import {
   buildFaultFromSubmission,
   getSubmittedReports,
   isReportFormValid,
-  saveSubmittedReport,
+  trySaveSubmittedReport,
 } from "@/lib/report-storage";
 import type { Elevator, FaultType } from "@/lib/types";
 import ReportImagePicker from "@/components/ReportImagePicker";
 import {
+  CLIENT_PORTAL_FAULT_SUBMIT_ERROR,
   REPORT_MAINTENANCE_RESPONSIBILITY,
   REPORT_SAVED_HEADLINE,
   REPORT_SAVED_INFO,
@@ -48,6 +49,7 @@ export default function ClientAccessReportForm({
     useState<ReportImageAttachment | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [ticketNumber, setTicketNumber] = useState("");
 
   const selectedElevator = useMemo(
@@ -59,6 +61,7 @@ export default function ClientAccessReportForm({
   function resetForm() {
     setSubmitted(false);
     setTicketNumber("");
+    setSubmitError(null);
     setElevatorId(lockedElevatorId ?? elevators[0]?.id ?? "");
     setFaultType("");
     setDescription("");
@@ -66,12 +69,13 @@ export default function ClientAccessReportForm({
     setSubmitting(false);
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!isValid || !selectedElevator || submitting) return;
     if (!guardSensitiveAction()) return;
 
     setSubmitting(true);
+    setSubmitError(null);
 
     const existingCount = getSubmittedReports(buildingId).length;
     const fault = buildFaultFromSubmission(
@@ -86,28 +90,38 @@ export default function ClientAccessReportForm({
       existingCount
     );
 
-    saveSubmittedReport(fault, buildingId);
-    void saveClientPortalFault({
-      buildingId,
-      buildingName,
-      elevatorId: fault.elevatorId,
-      elevatorName: fault.elevatorName,
-      faultType: fault.type,
-      description: fault.description,
-      isDisabled: Boolean(fault.isDisabled),
-      status: fault.status,
-      ticketNumber: fault.ticketNumber,
-      imageData: fault.image?.dataUrl ?? null,
-    });
+    try {
+      const result = await saveClientPortalFault({
+        buildingId,
+        buildingName,
+        elevatorId: fault.elevatorId,
+        elevatorName: fault.elevatorName,
+        faultType: fault.type,
+        description: fault.description,
+        isDisabled: Boolean(fault.isDisabled),
+        status: fault.status,
+        ticketNumber: fault.ticketNumber,
+        imageData: fault.image?.dataUrl ?? null,
+      });
 
-    setTimeout(() => {
-      const savedTicket = fault.ticketNumber ?? "";
+      if (!result.ok) {
+        setSubmitError(CLIENT_PORTAL_FAULT_SUBMIT_ERROR);
+        return;
+      }
+
+      trySaveSubmittedReport(fault, buildingId);
+
+      const savedTicket =
+        result.fault.ticket_number ?? fault.ticketNumber ?? "";
       setTicketNumber(savedTicket);
       setSubmitted(true);
-      setSubmitting(false);
       onSubmitted?.();
       onSubmitSuccess?.(savedTicket);
-    }, 300);
+    } catch {
+      setSubmitError(CLIENT_PORTAL_FAULT_SUBMIT_ERROR);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   if (submitted) {
@@ -129,7 +143,7 @@ export default function ClientAccessReportForm({
 
   return (
     <form
-      onSubmit={handleSubmit}
+      onSubmit={(e) => void handleSubmit(e)}
       className="bg-white rounded-2xl border border-gray-200 p-4 space-y-4"
     >
       <div>
@@ -138,7 +152,9 @@ export default function ClientAccessReportForm({
           value={elevatorId}
           onChange={(e) => setElevatorId(e.target.value)}
           className="form-input mt-1"
-          disabled={Boolean(lockedElevatorId) || elevators.length <= 1}
+          disabled={
+            submitting || Boolean(lockedElevatorId) || elevators.length <= 1
+          }
           required
         >
           {elevators.map((elevator) => (
@@ -155,6 +171,7 @@ export default function ClientAccessReportForm({
           value={faultType}
           onChange={(e) => setFaultType(e.target.value)}
           className="form-input mt-1"
+          disabled={submitting}
           required
         >
           <option value="">בחרו סוג תקלה</option>
@@ -173,6 +190,7 @@ export default function ClientAccessReportForm({
           onChange={(e) => setDescription(e.target.value)}
           className="form-input mt-1 min-h-[6rem]"
           placeholder="תארו את התקלה בקצרה"
+          disabled={submitting}
           required
         />
       </div>
@@ -185,6 +203,15 @@ export default function ClientAccessReportForm({
       )}
 
       <p className="text-xs text-gray-text">{REPORT_MAINTENANCE_RESPONSIBILITY}</p>
+
+      {submitError && (
+        <p
+          className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2"
+          role="alert"
+        >
+          {submitError}
+        </p>
+      )}
 
       <button
         type="submit"

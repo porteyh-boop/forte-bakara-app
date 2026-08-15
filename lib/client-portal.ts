@@ -2,7 +2,9 @@ import { isClosedFault, isOpenFault } from "./fault-lifecycle";
 import { getEffectiveElevators } from "./elevator-status";
 import { logClientActivity } from "./client-permissions";
 import {
+  isPilotCloudConfigured,
   savePilotFault,
+  type PilotCloudFault,
   type SavePilotFaultInput,
 } from "./pilot-cloud";
 import { safePercent } from "./utils";
@@ -72,12 +74,25 @@ export async function logClientPortalActivity(
   return logClientActivity(clientUserId, actionType, actionDetails ?? null);
 }
 
+export type SaveClientPortalFaultResult =
+  | { ok: true; fault: PilotCloudFault }
+  | { ok: false; reason: "supabase_unconfigured" | "insert_failed" };
+
 export async function saveClientPortalFault(
   input: SavePilotFaultInput
-): Promise<boolean> {
+): Promise<SaveClientPortalFaultResult> {
+  if (!isPilotCloudConfigured()) {
+    return { ok: false, reason: "supabase_unconfigured" };
+  }
+
   const saved = await savePilotFault({
     ...input,
     faultSource: CLIENT_PORTAL_FAULT_SOURCE,
   });
-  return Boolean(saved);
+
+  if (!saved) {
+    return { ok: false, reason: "insert_failed" };
+  }
+
+  return { ok: true, fault: saved };
 }

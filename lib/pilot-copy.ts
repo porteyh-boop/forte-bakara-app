@@ -11,6 +11,9 @@ export const REPORT_SAVED_INFO =
 export const REPORT_MAINTENANCE_RESPONSIBILITY =
   "האחריות לדיווח התקלה לגורם התחזוקה הינה בהתאם לנוהלי הבניין.";
 
+export const CLIENT_PORTAL_FAULT_SUBMIT_ERROR =
+  "לא הצלחנו לשלוח את הדיווח. הפרטים נשמרו במסך וניתן לנסות שוב.";
+
 export const REPORT_PAGE_SUBTITLE =
   "מלאו את פרטי התקלה — הדיווח יישמר במערכת לצורכי תיעוד, מעקב ובקרת שירות.";
 

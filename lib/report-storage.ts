@@ -114,6 +114,16 @@ export function saveSubmittedReport(fault: Fault, buildingId: string): void {
   notifyFaultsUpdated(buildingId);
 }
 
+/** Best-effort local cache — never throws; cloud save must not depend on this. */
+export function trySaveSubmittedReport(fault: Fault, buildingId: string): boolean {
+  try {
+    saveSubmittedReport(fault, buildingId);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function applyFaultClosures(
   faults: Fault[],
   buildingId: string,

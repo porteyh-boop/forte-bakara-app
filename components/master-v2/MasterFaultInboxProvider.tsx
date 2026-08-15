@@ -16,10 +16,12 @@ import MasterFaultInboxReentryDialog from "@/components/master-v2/MasterFaultInb
 import { ensureMasterV2SessionsValid } from "@/lib/master-v2-auth";
 import {
   dismissMasterFaultInboxPopup,
-  isMasterFaultInboxPopupDismissed,
+  findNewMasterFaultInboxItems,
   isMasterFaultInboxUnread,
   listMasterFaultInboxItems,
   markMasterFaultInboxRead,
+  pickFirstLoadMasterFaultInboxPopupItem,
+  pickMasterFaultInboxPopupItem,
   type MasterFaultInboxItem,
 } from "@/lib/master-fault-inbox";
 import { buildMasterProjectV2FaultPath } from "@/lib/master-project-v2-routes";
@@ -46,22 +48,13 @@ export function useMasterFaultInbox(): MasterFaultInboxContextValue | null {
   return useContext(MasterFaultInboxContext);
 }
 
-function pickReentryItem(items: MasterFaultInboxItem[]): MasterFaultInboxItem | null {
-  const unread = items.filter(isMasterFaultInboxUnread);
-  for (const item of unread) {
-    if (!isMasterFaultInboxPopupDismissed(item.fault_id)) {
-      return item;
-    }
-  }
-  return null;
-}
-
 export function MasterFaultInboxProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [items, setItems] = useState<MasterFaultInboxItem[]>([]);
   const [panelOpen, setPanelOpen] = useState(false);
   const [reentryItem, setReentryItem] = useState<MasterFaultInboxItem | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const itemsRef = useRef<MasterFaultInboxItem[]>([]);
   const previousUnreadCountRef = useRef<number | null>(null);
   const initialLoadDoneRef = useRef(false);
 
@@ -73,12 +66,14 @@ export function MasterFaultInboxProvider({ children }: { children: ReactNode }) 
 
   const refresh = useCallback(async () => {
     if (!isMasterAuthenticated() || !isPilotCloudConfigured()) {
+      itemsRef.current = [];
       setItems([]);
       return;
     }
 
     const sessionOk = await ensureMasterV2SessionsValid();
     if (!sessionOk) {
+      itemsRef.current = [];
       setItems([]);
       return;
     }
@@ -86,11 +81,23 @@ export function MasterFaultInboxProvider({ children }: { children: ReactNode }) 
     const result = await listMasterFaultInboxItems();
     if (result.error) return;
 
+    const previousItems = itemsRef.current;
+    const isFirstLoad = !initialLoadDoneRef.current;
+    const midSessionNewItems = isFirstLoad
+      ? []
+      : findNewMasterFaultInboxItems(previousItems, result.items);
+    const midSessionPopupItem = pickMasterFaultInboxPopupItem(midSessionNewItems);
+
+    itemsRef.current = result.items;
     setItems(result.items);
 
     const nextUnread = result.items.filter(isMasterFaultInboxUnread).length;
 
-    if (initialLoadDoneRef.current && previousUnreadCountRef.current != null) {
+    if (isFirstLoad) {
+      setReentryItem(pickFirstLoadMasterFaultInboxPopupItem(result.items));
+    } else if (midSessionPopupItem) {
+      setReentryItem((current) => current ?? midSessionPopupItem);
+    } else if (previousUnreadCountRef.current != null) {
       const delta = nextUnread - previousUnreadCountRef.current;
       if (delta > 0) {
         setToastMessage(
@@ -102,12 +109,7 @@ export function MasterFaultInboxProvider({ children }: { children: ReactNode }) 
     }
 
     previousUnreadCountRef.current = nextUnread;
-
-    const isFirstLoad = !initialLoadDoneRef.current;
     initialLoadDoneRef.current = true;
-    if (isFirstLoad) {
-      setReentryItem(pickReentryItem(result.items));
-    }
   }, []);
 
   const openFault = useCallback(
@@ -120,13 +122,15 @@ export function MasterFaultInboxProvider({ children }: { children: ReactNode }) 
 
       await markMasterFaultInboxRead({ inboxId: item.id, faultId });
 
-      setItems((current) =>
-        current.map((row) =>
+      setItems((current) => {
+        const updated = current.map((row) =>
           row.id === item.id
             ? { ...row, read_at: row.read_at ?? new Date().toISOString() }
             : row
-        )
-      );
+        );
+        itemsRef.current = updated;
+        return updated;
+      });
       previousUnreadCountRef.current = Math.max(
         0,
         (previousUnreadCountRef.current ?? unreadCount) - 1
@@ -186,7 +190,7 @@ export function MasterFaultInboxProvider({ children }: { children: ReactNode }) 
     <MasterFaultInboxContext.Provider value={value}>
       {children}
 
-      {toastMessage && (
+      {toastMessage && !reentryItem && (
         <div className={FORTE_V2_ROOT_CLASS}>
           <div className="fv2-fault-inbox-toast" role="status">
             <p className="text-sm font-medium text-forte-text">{toastMessage}</p>

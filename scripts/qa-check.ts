@@ -355,9 +355,13 @@ import {
 } from "../lib/professional-rules";
 import { DEFAULT_ELEVATOR_COMPANIES } from "../lib/elevator-companies";
 import {
+  findNewMasterFaultInboxItems,
   isMasterFaultInboxUnread,
   mapMasterFaultInboxRow,
+  pickFirstLoadMasterFaultInboxPopupItem,
+  pickMasterFaultInboxPopupItem,
   summarizeMasterFaultInboxDescription,
+  type MasterFaultInboxItem,
 } from "../lib/master-fault-inbox";
 import { buildMasterProjectV2FaultPath } from "../lib/master-project-v2-routes";
 import type { FeedbackSubmissionInput } from "../lib/types";
@@ -3656,15 +3660,76 @@ assert(
   "פורטל לקוח: דיווח עם מקור Client Portal"
 );
 
+const clientPortalLibSource = fs.readFileSync(
+  path.join(process.cwd(), "lib/client-portal.ts"),
+  "utf8"
+);
+const reportStorageSource = fs.readFileSync(
+  path.join(process.cwd(), "lib/report-storage.ts"),
+  "utf8"
+);
+const faultNotificationClientSource = fs.readFileSync(
+  path.join(process.cwd(), "lib/fault-notification-client.ts"),
+  "utf8"
+);
+const clientPortalPilotCloudSource = fs.readFileSync(
+  path.join(process.cwd(), "lib/pilot-cloud.ts"),
+  "utf8"
+);
+
+assert(
+  clientPortalReportSource.includes("await saveClientPortalFault") &&
+    !clientPortalReportSource.includes("void saveClientPortalFault") &&
+    clientPortalReportSource.includes("trySaveSubmittedReport") &&
+    clientPortalReportSource.includes("finally") &&
+    clientPortalReportSource.includes("setSubmitting(false)") &&
+    !clientPortalReportSource.includes("setTimeout(() =>") &&
+    clientPortalReportSource.includes("CLIENT_PORTAL_FAULT_SUBMIT_ERROR") &&
+    clientPortalReportSource.includes("if (!result.ok)") &&
+    clientPortalReportSource.match(/setSubmitted\(true\)/) &&
+    clientPortalReportSource.indexOf("setSubmitted(true)") >
+      clientPortalReportSource.indexOf("await saveClientPortalFault"),
+  "פורטל לקוח: submit ממתין ל-cloud save — success רק אחרי INSERT"
+);
+assert(
+  clientPortalReportSource.includes("disabled={!isValid || submitting}") &&
+    clientPortalReportSource.includes("if (!isValid || !selectedElevator || submitting) return"),
+  "פורטל לקוח: double-click — submitting guard + כפתור disabled"
+);
+assert(
+  clientPortalLibSource.includes("SaveClientPortalFaultResult") &&
+    clientPortalLibSource.includes('ok: true; fault: PilotCloudFault') &&
+    clientPortalLibSource.includes('ok: false; reason:') &&
+    clientPortalLibSource.includes("isPilotCloudConfigured"),
+  "פורטל לקוח: saveClientPortalFault מחזיר success/failure מפורש"
+);
+assert(
+  reportStorageSource.includes("trySaveSubmittedReport") &&
+    reportStorageSource.includes("} catch {") &&
+    reportStorageSource.indexOf("trySaveSubmittedReport") >
+      reportStorageSource.indexOf("saveSubmittedReport"),
+  "פורטל לקוח: localStorage save מבודד — trySaveSubmittedReport לא זורק"
+);
+assert(
+  clientPortalReportSource.includes("trySaveSubmittedReport(fault, buildingId)") &&
+    clientPortalReportSource.indexOf("trySaveSubmittedReport(fault") >
+      clientPortalReportSource.indexOf("await saveClientPortalFault"),
+  "פורטל לקוח: localStorage רק אחרי cloud success"
+);
+assert(
+  clientPortalPilotCloudSource.includes("dispatchFaultNotification") &&
+    clientPortalPilotCloudSource.indexOf("dispatchFaultNotification") >
+      clientPortalPilotCloudSource.indexOf("if (error)") &&
+    faultNotificationClientSource.includes("Never throws") &&
+    faultNotificationClientSource.includes('void fetch("/api/fault-notify"'),
+  "פורטל לקוח: Telegram fire-and-forget — לא חוסם fault save"
+);
+
 assert(
   fs.existsSync(path.join(process.cwd(), "components/ClientPortalInstallPrompt.tsx")),
   "פורטל לקוח: רכיב הוסף למסך הבית קיים"
 );
 
-const clientPortalPilotCloudSource = fs.readFileSync(
-  path.join(process.cwd(), "lib/pilot-cloud.ts"),
-  "utf8"
-);
 assert(
   clientPortalPilotCloudSource.includes("fault_source") &&
     clientPortalPilotCloudSource.includes("faultSource"),
@@ -5641,6 +5706,31 @@ assert(
   "Master Fault Inbox: polling 30s + refresh on focus"
 );
 assert(
+  masterFaultInboxProviderSource.includes("findNewMasterFaultInboxItems") &&
+    masterFaultInboxProviderSource.includes("pickMasterFaultInboxPopupItem") &&
+    masterFaultInboxProviderSource.includes("pickFirstLoadMasterFaultInboxPopupItem") &&
+    masterFaultInboxProviderSource.includes("midSessionPopupItem") &&
+    masterFaultInboxProviderSource.includes("current ?? midSessionPopupItem") &&
+    masterFaultInboxProviderSource.includes("toastMessage && !reentryItem"),
+  "Master Fault Inbox: mid-session popup לפי item חדש + ללא toast כפול"
+);
+assert(
+  masterFaultInboxProviderSource.includes("function handleDismissReentry") &&
+    masterFaultInboxProviderSource.includes("dismissMasterFaultInboxPopup(reentryItem.fault_id)") &&
+    masterFaultInboxProviderSource.includes("setReentryItem(null)") &&
+    !/function handleDismissReentry[\s\S]*?markMasterFaultInboxRead/.test(
+      masterFaultInboxProviderSource
+    ),
+  "Master Fault Inbox: אחר כך — dismiss בלבד, ללא mark-read"
+);
+assert(
+  masterFaultInboxClientSource.includes("findNewMasterFaultInboxItems") &&
+    masterFaultInboxClientSource.includes("pickMasterFaultInboxPopupItem") &&
+    masterFaultInboxClientSource.includes("knownInboxIds") &&
+    masterFaultInboxClientSource.includes("knownFaultIds"),
+  "Master Fault Inbox: זיהוי item חדש לפי inbox id + fault_id"
+);
+assert(
   masterFaultInboxClientSource.includes("read_at == null") &&
     masterFaultInboxClientSource.includes("MASTER_FAULT_INBOX_POPUP_DISMISS_PREFIX"),
   "Master Fault Inbox: unread ב-DB + sessionStorage ל-popup בלבד"
@@ -5660,6 +5750,96 @@ const sampleInboxRow = mapMasterFaultInboxRow({
   created_at: "2026-08-15T10:00:00.000Z",
   read_at: null,
 });
+
+function sampleInboxItem(
+  overrides: Partial<MasterFaultInboxItem> & Pick<MasterFaultInboxItem, "id" | "fault_id">
+): MasterFaultInboxItem {
+  return {
+    building_id: "sl48",
+    building_name: "עדי מעליות",
+    elevator_name: "מעלית 1",
+    fault_type: "רעש חריג",
+    description: "תיאור בדיקה",
+    status: "פתוחה",
+    ticket_number: "FB-TEST",
+    fault_created_at: "2026-08-15T10:00:00.000Z",
+    created_at: "2026-08-15T10:00:00.000Z",
+    read_at: null,
+    ...overrides,
+  };
+}
+
+const previousInboxSnapshot = [
+  sampleInboxItem({ id: "inbox-a", fault_id: "fault-a", created_at: "2026-08-15T09:00:00.000Z" }),
+];
+const nextWithOneNew = [
+  ...previousInboxSnapshot,
+  sampleInboxItem({
+    id: "inbox-b",
+    fault_id: "fault-b",
+    created_at: "2026-08-15T10:00:00.000Z",
+    fault_created_at: "2026-08-15T10:00:00.000Z",
+  }),
+];
+const nextWithTwoNew = [
+  ...previousInboxSnapshot,
+  sampleInboxItem({
+    id: "inbox-b",
+    fault_id: "fault-b",
+    created_at: "2026-08-15T10:00:00.000Z",
+  }),
+  sampleInboxItem({
+    id: "inbox-c",
+    fault_id: "fault-c",
+    created_at: "2026-08-15T11:00:00.000Z",
+    fault_created_at: "2026-08-15T11:00:00.000Z",
+  }),
+];
+const nextReadOnlyChange = [
+  sampleInboxItem({
+    id: "inbox-a",
+    fault_id: "fault-a",
+    read_at: "2026-08-15T10:30:00.000Z",
+  }),
+];
+const nextSwapUnreadSameCount = [
+  sampleInboxItem({
+    id: "inbox-a",
+    fault_id: "fault-a",
+    read_at: "2026-08-15T10:30:00.000Z",
+  }),
+  sampleInboxItem({
+    id: "inbox-d",
+    fault_id: "fault-d",
+    created_at: "2026-08-15T10:31:00.000Z",
+  }),
+];
+
+assert(
+  findNewMasterFaultInboxItems(previousInboxSnapshot, nextWithOneNew).length === 1 &&
+    findNewMasterFaultInboxItems(previousInboxSnapshot, nextWithOneNew)[0]?.fault_id ===
+      "fault-b",
+  "Master Fault Inbox: mid-session — fault חדש לפי fault_id"
+);
+assert(
+  pickMasterFaultInboxPopupItem(findNewMasterFaultInboxItems(previousInboxSnapshot, nextWithTwoNew))
+    ?.fault_id === "fault-c",
+  "Master Fault Inbox: שני faults חדשים — modal ל-latest בלבד"
+);
+assert(
+  findNewMasterFaultInboxItems(previousInboxSnapshot, nextReadOnlyChange).length === 0,
+  "Master Fault Inbox: read בלבד — אין item חדש, אין popup שגוי"
+);
+assert(
+  findNewMasterFaultInboxItems(previousInboxSnapshot, nextSwapUnreadSameCount).length === 1 &&
+    findNewMasterFaultInboxItems(previousInboxSnapshot, nextSwapUnreadSameCount)[0]?.fault_id ===
+      "fault-d",
+  "Master Fault Inbox: unreadCount זהה — fault חדש עדיין מזוהה"
+);
+assert(
+  Boolean(pickFirstLoadMasterFaultInboxPopupItem(nextWithOneNew)),
+  "Master Fault Inbox: first load + unread — popup candidate"
+);
 
 assert(Boolean(sampleInboxRow), "Master Fault Inbox: map row");
 assert(

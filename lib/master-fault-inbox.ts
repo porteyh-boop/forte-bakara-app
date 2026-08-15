@@ -162,3 +162,52 @@ export function dismissMasterFaultInboxPopup(faultId: string): void {
     /* ignore */
   }
 }
+
+function inboxItemSortTime(item: MasterFaultInboxItem): number {
+  const iso = item.fault_created_at || item.created_at;
+  return new Date(iso).getTime();
+}
+
+/** Inbox rows that were not present in the previous snapshot (by inbox id or fault_id). */
+export function findNewMasterFaultInboxItems(
+  previousItems: MasterFaultInboxItem[],
+  nextItems: MasterFaultInboxItem[]
+): MasterFaultInboxItem[] {
+  const knownInboxIds = new Set(previousItems.map((item) => item.id));
+  const knownFaultIds = new Set(previousItems.map((item) => item.fault_id));
+
+  return nextItems.filter(
+    (item) =>
+      !knownInboxIds.has(item.id) && !knownFaultIds.has(item.fault_id)
+  );
+}
+
+/** Latest unread inbox row eligible for popup (not session-dismissed). */
+export function pickMasterFaultInboxPopupItem(
+  candidates: MasterFaultInboxItem[]
+): MasterFaultInboxItem | null {
+  const eligible = candidates
+    .filter(isMasterFaultInboxUnread)
+    .filter((item) => !isMasterFaultInboxPopupDismissed(item.fault_id));
+
+  if (eligible.length === 0) return null;
+
+  return [...eligible].sort(
+    (a, b) => inboxItemSortTime(b) - inboxItemSortTime(a)
+  )[0];
+}
+
+/** First-load re-entry: earliest eligible unread in list order. */
+export function pickFirstLoadMasterFaultInboxPopupItem(
+  items: MasterFaultInboxItem[]
+): MasterFaultInboxItem | null {
+  for (const item of items) {
+    if (
+      isMasterFaultInboxUnread(item) &&
+      !isMasterFaultInboxPopupDismissed(item.fault_id)
+    ) {
+      return item;
+    }
+  }
+  return null;
+}
