@@ -6,6 +6,12 @@ import {
   MasterProjectV2SecondaryButton,
   MasterProjectV2StatusBanner,
 } from "@/components/master-v2/project-v2/MasterProjectV2Workspace";
+import {
+  confirmDocumentVisibilityChange,
+  ProjectDocumentVisibilityBadge,
+  ProjectDocumentVisibilityToggle,
+  ProjectDocumentVisibilityUploadField,
+} from "@/components/master-v2/project-v2/ProjectDocumentVisibility";
 import { listAllDocumentInspectorMeta } from "@/lib/document-inspector-meta";
 import {
   createDocument,
@@ -14,9 +20,13 @@ import {
   deleteDocumentCenterStorageFile,
   getAllDocuments,
   getDocumentTypeLabel,
+  getDocumentUploadVisibilityHint,
+  getDocumentVisibilityChangeMessage,
+  updateDocumentVisibility,
   uploadDocumentCenterFile,
   validateCreateDocumentInput,
   type DocumentRecord,
+  type DocumentVisibility,
 } from "@/lib/document-center";
 import {
   buildProjectV2AdditionalInspectionUploadTags,
@@ -70,6 +80,8 @@ export default function ProjectDocumentsPanel({
   const [uploadOpen, setUploadOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [docTitle, setDocTitle] = useState("");
+  const [documentVisibility, setDocumentVisibility] =
+    useState<DocumentVisibility>(DEFAULT_DOCUMENT_VISIBILITY);
   const [creating, setCreating] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [actionId, setActionId] = useState<string | null>(null);
@@ -174,7 +186,7 @@ export default function ProjectDocumentsPanel({
       mimeType: uploaded.contentType,
       fileSizeBytes: selectedFile.size,
       tags: uploadTags,
-      visibility: DEFAULT_DOCUMENT_VISIBILITY,
+      visibility: documentVisibility,
     };
 
     const validationError = validateCreateDocumentInput(input);
@@ -198,9 +210,42 @@ export default function ProjectDocumentsPanel({
 
     setSelectedFile(null);
     setDocTitle("");
+    setDocumentVisibility(DEFAULT_DOCUMENT_VISIBILITY);
     setUploadOpen(false);
-    setMessage("המסמך נשמר.");
+    const uploadHint = getDocumentUploadVisibilityHint(created.visibility);
+    setMessage(
+      uploadHint ? `המסמך נשמר. ${uploadHint}` : "המסמך נשמר."
+    );
     await refresh();
+  }
+
+  async function handleVisibilityChange(
+    document: DocumentRecord,
+    nextVisibility: DocumentVisibility
+  ) {
+    if (document.visibility === nextVisibility) return;
+    if (!guardSensitiveAction()) return;
+
+    const confirmed = await confirmDocumentVisibilityChange(nextVisibility);
+    if (!confirmed) return;
+
+    setActionId(document.id);
+    setMessage(null);
+    setError(null);
+
+    const { document: updated, error: updateError } =
+      await updateDocumentVisibility(document.id, nextVisibility);
+    setActionId(null);
+
+    if (!updated || updateError) {
+      setError(updateError ?? "עדכון ההרשאה נכשל.");
+      return;
+    }
+
+    setAllDocuments((current) =>
+      current.map((row) => (row.id === updated.id ? updated : row))
+    );
+    setMessage(getDocumentVisibilityChangeMessage(nextVisibility));
   }
 
   async function handleDelete(documentId: string) {
@@ -226,6 +271,7 @@ export default function ProjectDocumentsPanel({
     setUploadOpen(false);
     setSelectedFile(null);
     setDocTitle("");
+    setDocumentVisibility(DEFAULT_DOCUMENT_VISIBILITY);
     setUploadProgress(null);
   }
 
@@ -276,6 +322,7 @@ export default function ProjectDocumentsPanel({
               <tr>
                 <th className="px-3 py-2 font-medium">שם</th>
                 <th className="px-3 py-2 font-medium">סוג</th>
+                <th className="px-3 py-2 font-medium">הרשאה</th>
                 <th className="px-3 py-2 font-medium">תאריך</th>
                 <th className="px-3 py-2 font-medium w-28">פעולות</th>
               </tr>
@@ -288,6 +335,20 @@ export default function ProjectDocumentsPanel({
                   </td>
                   <td className="px-3 py-2 text-forte-text-secondary">
                     {getDocumentTypeLabel(document.document_type)}
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="flex flex-col items-start gap-1">
+                      <ProjectDocumentVisibilityBadge
+                        visibility={document.visibility}
+                      />
+                      <ProjectDocumentVisibilityToggle
+                        document={document}
+                        disabled={actionId === document.id}
+                        onToggle={(doc, next) =>
+                          void handleVisibilityChange(doc, next)
+                        }
+                      />
+                    </div>
                   </td>
                   <td className="px-3 py-2 text-forte-text-secondary whitespace-nowrap">
                     {formatDocumentDate(document.created_at)}
@@ -373,6 +434,10 @@ export default function ProjectDocumentsPanel({
                 placeholder="שם המסמך"
               />
             </label>
+            <ProjectDocumentVisibilityUploadField
+              value={documentVisibility}
+              onChange={setDocumentVisibility}
+            />
             {uploadProgress != null && uploadProgress < 100 && (
               <p className="text-[11px] text-forte-text-secondary">
                 מעלה... {uploadProgress}%

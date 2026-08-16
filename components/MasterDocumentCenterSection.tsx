@@ -16,7 +16,9 @@ import {
   getAllDocuments,
   getDocumentLegacyFilterTags,
   getDocumentTypeLabel,
-  getDocumentVisibilityLabel,
+  getDocumentVisibilityBadgeLabel,
+  getDocumentVisibilityChangeMessage,
+  getDocumentUploadVisibilityHint,
   updateDocumentVisibility,
   isDocumentCenterConfigured,
   normalizePredefinedDocumentTags,
@@ -479,7 +481,10 @@ export default function MasterDocumentCenterSection({
     setSelectedFile(null);
     setDocumentType("other");
     setDocumentVisibility(DEFAULT_DOCUMENT_VISIBILITY);
-    setMessage("המסמך נשמר במאגר.");
+    const uploadHint = getDocumentUploadVisibilityHint(documentVisibility);
+    setMessage(
+      uploadHint ? `המסמך נשמר במאגר. ${uploadHint}` : "המסמך נשמר במאגר."
+    );
     if (compactUpload) setUploadDialogOpen(false);
     const refreshed = await refresh();
     if (refreshed.error) {
@@ -494,7 +499,10 @@ export default function MasterDocumentCenterSection({
     if (document.visibility === nextVisibility) return;
 
     if (nextVisibility === "client") {
-      const confirmed = window.confirm("האם לאפשר ללקוח לצפות במסמך זה?");
+      const confirmed = window.confirm("האם לפרסם את המסמך ללקוח בפורטל?");
+      if (!confirmed) return;
+    } else {
+      const confirmed = window.confirm("האם להפוך את המסמך לפנימי?");
       if (!confirmed) return;
     }
 
@@ -515,11 +523,7 @@ export default function MasterDocumentCenterSection({
     setDocuments((current) =>
       current.map((row) => (row.id === updated.id ? updated : row))
     );
-    setMessage(
-      nextVisibility === "client"
-        ? `המסמך "${updated.title}" גלוי כעת ללקוח.`
-        : `המסמך "${updated.title}" הוגדר כפנימי בלבד.`
-    );
+    setMessage(getDocumentVisibilityChangeMessage(nextVisibility));
   }
 
   async function handleDelete(documentId: string) {
@@ -633,9 +637,7 @@ export default function MasterDocumentCenterSection({
             />
           ) : (
             <div className="sm:col-span-2 lg:col-span-3 xl:col-span-4 rounded-xl border border-gray-100 bg-gray-50 p-3 space-y-2">
-              <p className="text-xs font-semibold text-navy">
-                האם לאפשר צפייה ללקוח?
-              </p>
+              <p className="text-xs font-semibold text-navy">הרשאת מסמך</p>
               <div className="flex flex-wrap gap-4 text-sm text-navy">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -645,7 +647,7 @@ export default function MasterDocumentCenterSection({
                     checked={documentVisibility === "internal"}
                     onChange={() => setDocumentVisibility("internal")}
                   />
-                  <span>פנימי בלבד</span>
+                  <span>פנימי</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -659,7 +661,7 @@ export default function MasterDocumentCenterSection({
                 </label>
               </div>
               <p className="text-[11px] text-gray-text">
-                ברירת מחדל: פנימי בלבד. ההחלטה לכל מסמך בנפרד.
+                ברירת מחדל: פנימי. ההחלטה לכל מסמך בנפרד.
               </p>
             </div>
           )}
@@ -929,7 +931,7 @@ export default function MasterDocumentCenterSection({
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <span className={visibilityBadgeClass(document.visibility)}>
-                      {getDocumentVisibilityLabel(document.visibility)}
+                      {getDocumentVisibilityBadgeLabel(document.visibility)}
                     </span>
                     <span className="text-xs font-semibold rounded-full px-2.5 py-1 border bg-gray-50 text-gray-text border-gray-200">
                       {formatDocumentDate(document.created_at)}
@@ -985,7 +987,7 @@ export default function MasterDocumentCenterSection({
                   >
                     {document.visibility === "client"
                       ? "הפוך לפנימי"
-                      : "שנה הרשאה — גלוי ללקוח"}
+                      : "פרסם ללקוח"}
                   </button>
                   <button
                     type="button"

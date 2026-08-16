@@ -384,6 +384,28 @@ export function getDocumentVisibilityLabel(
   return visibility === "client" ? "גלוי ללקוח" : "פנימי בלבד";
 }
 
+export function getDocumentVisibilityBadgeLabel(
+  visibility: DocumentVisibility
+): string {
+  return visibility === "client" ? "👁 גלוי ללקוח" : "🔒 פנימי";
+}
+
+export function getDocumentVisibilityChangeMessage(
+  nextVisibility: DocumentVisibility
+): string {
+  return nextVisibility === "client"
+    ? "המסמך גלוי כעת ללקוח בפורטל."
+    : "המסמך הוגדר כפנימי ואינו מוצג ללקוח.";
+}
+
+export function getDocumentUploadVisibilityHint(
+  visibility: DocumentVisibility
+): string | null {
+  return visibility === "internal"
+    ? "פנימי — המסמך אינו מוצג בפורטל הלקוח."
+    : null;
+}
+
 function mapDocumentRow(row: Record<string, unknown>): DocumentRecord {
   const rawTags = row.tags;
   const tags = Array.isArray(rawTags)

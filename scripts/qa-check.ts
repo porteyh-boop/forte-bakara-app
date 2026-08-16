@@ -4107,11 +4107,11 @@ assert(
 );
 const documentCenterSection = fs.readFileSync(documentCenterSectionPath, "utf8");
 assert(
-  documentCenterSection.includes("getDocumentVisibilityLabel") &&
+  documentCenterSection.includes("getDocumentVisibilityBadgeLabel") &&
     documentCenterSection.includes("updateDocumentVisibility") &&
     documentCenterSection.includes("handleVisibilityChange") &&
-    documentCenterSection.includes("האם לאפשר ללקוח לצפות במסמך זה?") &&
-    documentCenterSection.includes("שנה הרשאה"),
+    documentCenterSection.includes("האם לפרסם את המסמך ללקוח בפורטל?") &&
+    documentCenterSection.includes("פרסם ללקוח"),
   "Document Center: שינוי הרשאה למסמך קיים במאסטר"
 );
 
@@ -4138,6 +4138,40 @@ assert(
     !documentCenterLib.includes("Tesseract") &&
     !documentCenterLib.includes("sendEmail"),
   "Document Center: lib CRUD/חיפוש ללא AI/OCR/Email"
+);
+
+const projectDocumentsPanelPath = path.join(
+  process.cwd(),
+  "components/master-v2/project-v2/ProjectDocumentsPanel.tsx"
+);
+assert(fs.existsSync(projectDocumentsPanelPath), "Project V2: ProjectDocumentsPanel קיים");
+const projectDocumentsPanel = fs.readFileSync(projectDocumentsPanelPath, "utf8");
+assert(
+  projectDocumentsPanel.includes("updateDocumentVisibility") &&
+    projectDocumentsPanel.includes("ProjectDocumentVisibilityBadge") &&
+    projectDocumentsPanel.includes("ProjectDocumentVisibilityUploadField") &&
+    projectDocumentsPanel.includes("DEFAULT_DOCUMENT_VISIBILITY"),
+  "Project V2: הרשאת מסמך ב-ProjectDocumentsPanel"
+);
+
+const projectDocumentVisibilityPath = path.join(
+  process.cwd(),
+  "components/master-v2/project-v2/ProjectDocumentVisibility.tsx"
+);
+assert(fs.existsSync(projectDocumentVisibilityPath), "Project V2: ProjectDocumentVisibility קיים");
+const projectDocumentVisibility = fs.readFileSync(projectDocumentVisibilityPath, "utf8");
+assert(
+  projectDocumentVisibility.includes("פרסם ללקוח") &&
+    projectDocumentVisibility.includes("הפוך לפנימי") &&
+    projectDocumentVisibility.includes("הרשאת מסמך"),
+  "Project V2: כפתורי והעלאת הרשאת מסמך"
+);
+
+assert(
+  documentCenterLib.includes("getDocumentVisibilityBadgeLabel") &&
+    documentCenterLib.includes("getDocumentVisibilityChangeMessage") &&
+    documentCenterLib.includes('DEFAULT_DOCUMENT_VISIBILITY: DocumentVisibility = "internal"'),
+  "Document Center: תוויות והודעות הרשאה"
 );
 
 const sampleDocument: DocumentRecord = {
@@ -4506,8 +4540,8 @@ assert(
     documentCenterSection.includes('mode="select"') &&
     documentCenterSection.includes("selectedBuildingHit") &&
     documentCenterSection.includes("resolveElevatorOptions") &&
-    documentCenterSection.includes("האם לאפשר צפייה ללקוח") &&
-    documentCenterSection.includes("getDocumentVisibilityLabel"),
+    documentCenterSection.includes("הרשאת מסמך") &&
+    documentCenterSection.includes("getDocumentVisibilityBadgeLabel"),
   "Document Center: Master UI — העלאה, חיפוש ופתיחה"
 );
 
