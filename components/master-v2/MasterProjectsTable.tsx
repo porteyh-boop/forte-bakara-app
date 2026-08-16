@@ -11,6 +11,7 @@ import {
   ForteV2StatusBadge,
   ForteV2TableCard,
 } from "@/components/master-v2/project-v2/MasterProjectV2Workspace";
+import { isProjectCompletedStage } from "@/lib/project-workflow";
 
 interface MasterProjectsTableProps {
   rows: MasterProjectTableRow[];
@@ -21,7 +22,7 @@ interface MasterProjectsTableProps {
 }
 
 function projectStageTone(value: string): "blue" | "neutral" {
-  if (value === "—" || value === "פרויקט סגור") return "neutral";
+  if (value === "—" || isProjectCompletedStage(value)) return "neutral";
   return "blue";
 }
 
@@ -127,8 +128,34 @@ export default function MasterProjectsTable({
                   {row.projectStage}
                 </ForteV2StatusBadge>
               </td>
-              <td className="font-semibold text-forte-primary">
-                {row.progress == null ? "—" : `${row.progress}%`}
+              <td>
+                <div className="min-w-[8rem] space-y-1">
+                  <div className="text-xs font-semibold text-forte-primary whitespace-nowrap">
+                    {row.progress == null ? "—" : `${row.progress}%`}
+                    {row.projectStage && row.projectStage !== "—" && (
+                      <span className="text-forte-text-secondary font-normal">
+                        {" "}
+                        — {row.projectStage}
+                      </span>
+                    )}
+                  </div>
+                  {row.progress != null && (
+                    <div
+                      className="h-1.5 rounded-full bg-forte-border/60 overflow-hidden"
+                      role="progressbar"
+                      aria-valuenow={row.progress}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                    >
+                      <div
+                        className="h-full bg-forte-primary"
+                        style={{
+                          width: `${Math.min(100, Math.max(0, row.progress))}%`,
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
               </td>
               <td className="text-forte-text-secondary whitespace-nowrap text-xs">
                 {formatMasterProjectDate(row.updatedAt)}

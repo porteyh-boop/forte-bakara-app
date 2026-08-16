@@ -107,6 +107,7 @@ function resolveDetails(
       city: demo.city ?? "—",
       elevatorCount: resolveElevatorCount(buildingId, cloudElevatorCount),
       projectStage: getProjectStage(buildingId),
+      projectProgress: "—",
       address: "—",
       managementCompany: "—",
       elevatorCompany: "—",

@@ -1,5 +1,4 @@
-import { PROJECT_STAGE_OPTIONS } from "@/lib/buildings-cloud";
-import { getProjectStage } from "@/lib/get-project-stage";
+import { getProjectProgress, getProjectStage } from "@/lib/get-project-stage";
 import type { MasterBuildingEntry } from "@/lib/master-buildings-list";
 import {
   getProjectTypeLabel,
@@ -41,13 +40,22 @@ export function resolveProjectStageValue(entry: MasterBuildingEntry): string {
   return getProjectStage(row.building_id, {
     storedStage: row.project_stage,
     liveStartedAt: row.live_started_at,
+    projectType: normalizeProjectType(row.project_type),
+    workflowState: row.project_workflow_state,
+    storedProgress: row.project_progress,
   });
 }
 
 export function resolveProjectProgress(entry: MasterBuildingEntry): number | null {
-  const value = entry.cloudRow?.project_progress;
-  if (value == null) return null;
-  return value;
+  const row = entry.cloudRow;
+  if (!row) return null;
+  return getProjectProgress({
+    storedStage: row.project_stage,
+    liveStartedAt: row.live_started_at,
+    projectType: normalizeProjectType(row.project_type),
+    workflowState: row.project_workflow_state,
+    storedProgress: row.project_progress,
+  });
 }
 
 export function resolveProjectUpdatedAt(

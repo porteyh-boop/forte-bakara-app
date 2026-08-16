@@ -1,6 +1,11 @@
 import type { ProjectTypeId } from "./project-type-config";
 import { DEFAULT_PROJECT_TYPE, normalizeProjectType } from "./project-type-config";
 import {
+  parseProjectWorkflowState,
+  serializeProjectWorkflowState,
+  type ProjectWorkflowState,
+} from "./project-workflow";
+import {
   getPilotSupabaseClient,
   resetPilotCloudDataByBuilding,
 } from "./pilot-cloud";
@@ -47,8 +52,9 @@ export interface CloudBuildingRow {
   is_active: boolean;
   created_at: string;
   live_started_at?: string | null;
-  project_stage: ProjectStage | null;
+  project_stage: string | null;
   project_progress: number | null;
+  project_workflow_state: ProjectWorkflowState | null;
   project_start_date: string | null;
   project_delivery_date: string | null;
   project_notes: string | null;
@@ -80,7 +86,9 @@ export interface SaveBuildingInput {
   contactPhone?: string;
   floorsCount?: number | null;
   isActive?: boolean;
-  projectStage?: ProjectStage | null;
+  projectStage?: string | null;
+  projectProgress?: number | null;
+  projectWorkflowState?: ProjectWorkflowState | null;
   projectStartDate?: string | null;
   projectDeliveryDate?: string | null;
   projectNotes?: string | null;
@@ -152,12 +160,8 @@ export function mapCloudBuildingRow(
   raw: Record<string, unknown>
 ): CloudBuildingRow {
   const projectStageRaw =
-    raw.project_stage != null ? String(raw.project_stage) : null;
-  const projectStage = PROJECT_STAGE_OPTIONS.includes(
-    projectStageRaw as ProjectStage
-  )
-    ? (projectStageRaw as ProjectStage)
-    : null;
+    raw.project_stage != null ? String(raw.project_stage).trim() : null;
+  const projectStage = projectStageRaw || null;
 
   const projectProgressRaw = raw.project_progress;
   const projectProgress =
@@ -194,6 +198,7 @@ export function mapCloudBuildingRow(
       raw.live_started_at != null ? String(raw.live_started_at) : null,
     project_stage: projectStage,
     project_progress: projectProgress,
+    project_workflow_state: parseProjectWorkflowState(raw.project_workflow_state),
     project_start_date:
       raw.project_start_date != null ? String(raw.project_start_date) : null,
     project_delivery_date:
@@ -368,6 +373,14 @@ export async function updateCloudBuilding(
   if (input.floorsCount !== undefined) patch.floors_count = input.floorsCount;
   if (input.isActive !== undefined) patch.is_active = input.isActive;
   if (input.projectStage !== undefined) patch.project_stage = input.projectStage;
+  if (input.projectProgress !== undefined) {
+    patch.project_progress = input.projectProgress;
+  }
+  if (input.projectWorkflowState !== undefined) {
+    patch.project_workflow_state = input.projectWorkflowState
+      ? serializeProjectWorkflowState(input.projectWorkflowState)
+      : null;
+  }
   if (input.projectStartDate !== undefined) {
     patch.project_start_date = input.projectStartDate || null;
   }

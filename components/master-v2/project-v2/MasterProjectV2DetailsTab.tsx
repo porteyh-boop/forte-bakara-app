@@ -16,7 +16,8 @@ import {
   MasterProjectV2SecondaryButton,
   MasterProjectV2StatusBanner,
 } from "@/components/master-v2/project-v2/MasterProjectV2Workspace";
-import { getProjectStage } from "@/lib/get-project-stage";
+import { getProjectProgress, getProjectStage } from "@/lib/get-project-stage";
+import { isProjectCompletedStage } from "@/lib/project-workflow";
 import {
   buildSaveBuildingPayload,
   masterBuildingContactPatchFromDirectoryContact,
@@ -24,11 +25,9 @@ import {
   type MasterBuildingFormState,
 } from "@/lib/master-building-form";
 import {
-  PROJECT_STAGE_OPTIONS,
   findCloudBuildingWithProjectNumberConflict,
   updateCloudBuilding,
   type CloudBuildingRow,
-  type ProjectStage,
 } from "@/lib/buildings-cloud";
 import {
   isValidProjectNumberFormat,
@@ -40,6 +39,7 @@ import {
 import { getProjectTypeLabel, getProjectNumberLabel, normalizeProjectType } from "@/lib/project-type-config";
 import { MASTER_PROJECTS_V2_LIST_PATH } from "@/lib/master-project-v2-routes";
 import ProjectDocumentsPanel from "@/components/master-v2/project-v2/ProjectDocumentsPanel";
+import ProjectWorkflowProgress from "@/components/master-v2/project-v2/ProjectWorkflowProgress";
 import { deleteBuildingProject } from "@/lib/buildings-delete-cloud";
 import { isContactsConfigured } from "@/lib/contacts-cloud";
 import { isPilotCloudConfigured } from "@/lib/pilot-cloud";
@@ -54,6 +54,7 @@ export interface MasterProjectV2Details {
   city: string;
   elevatorCount: string;
   projectStage: string;
+  projectProgress: string;
   address: string;
   managementCompany: string;
   elevatorCompany: string;
@@ -65,7 +66,6 @@ export interface MasterProjectV2Details {
 }
 
 interface ProjectExtrasState {
-  projectStage: ProjectStage | "";
   maintenanceCompany: string;
   certifiedInspector: string;
   projectStartDate: string;
@@ -171,7 +171,6 @@ export default function MasterProjectV2DetailsTab({
       projectNumber: trimmedProjectNumber || null,
       maintenanceCompany: projectExtras.maintenanceCompany,
       certifiedInspector: projectExtras.certifiedInspector,
-      projectStage: projectExtras.projectStage || null,
       projectStartDate: projectExtras.projectStartDate || null,
       projectDeliveryDate: projectExtras.projectDeliveryDate || null,
       projectNotes: projectExtras.projectNotes,
@@ -187,7 +186,7 @@ export default function MasterProjectV2DetailsTab({
     setEditing(false);
     onSaved?.(updated);
 
-    if (updated.project_stage === "פרויקט סגור") {
+    if (isProjectCompletedStage(updated.project_stage)) {
       router.push(MASTER_PROJECTS_V2_LIST_PATH);
     }
   }
@@ -287,26 +286,6 @@ export default function MasterProjectV2DetailsTab({
             </label>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-forte-border/60">
-            <label className="block space-y-1">
-              <span className="text-xs text-forte-text-secondary">שלב הפרויקט</span>
-              <select
-                value={projectExtras.projectStage}
-                onChange={(e) =>
-                  setProjectExtras((current) => ({
-                    ...current,
-                    projectStage: e.target.value as ProjectStage | "",
-                  }))
-                }
-                className="form-input text-sm py-2"
-              >
-                <option value="">—</option>
-                {PROJECT_STAGE_OPTIONS.map((stage) => (
-                  <option key={stage} value={stage}>
-                    {stage}
-                  </option>
-                ))}
-              </select>
-            </label>
             <label className="block space-y-1">
               <span className="text-xs text-forte-text-secondary">חברת תחזוקה</span>
               <input
@@ -509,6 +488,10 @@ export default function MasterProjectV2DetailsTab({
         />
       </ForteV2Panel>
 
+      {cloudRow && (
+        <ProjectWorkflowProgress cloudRow={cloudRow} onSaved={onSaved} />
+      )}
+
       <ProjectDocumentsPanel buildingId={details.buildingId} section="details" />
     </ForteV2TabShell>
   );
@@ -524,6 +507,7 @@ function detailFieldsForProjectType(projectType: ReturnType<typeof normalizeProj
     { label: "עיר", key: "city" as const },
     { label: "מספר מעליות", key: "elevatorCount" as const },
     { label: "שלב הפרויקט", key: "projectStage" as const },
+    { label: "התקדמות", key: "projectProgress" as const },
     { label: "כתובת", key: "address" as const },
     { label: "חברת ניהול", key: "managementCompany" as const },
     { label: "יצרן מעליות", key: "elevatorCompany" as const },
@@ -555,7 +539,6 @@ function emptyFormFromDetails(details: MasterProjectV2Details): MasterBuildingFo
 function projectExtrasFromRow(row: CloudBuildingRow | null): ProjectExtrasState {
   if (!row) {
     return {
-      projectStage: "",
       maintenanceCompany: "",
       certifiedInspector: "",
       projectStartDate: "",
@@ -564,7 +547,6 @@ function projectExtrasFromRow(row: CloudBuildingRow | null): ProjectExtrasState 
     };
   }
   return {
-    projectStage: row.project_stage ?? "",
     maintenanceCompany: row.maintenance_company ?? "",
     certifiedInspector: row.certified_inspector ?? "",
     projectStartDate: row.project_start_date ?? "",
@@ -575,7 +557,6 @@ function projectExtrasFromRow(row: CloudBuildingRow | null): ProjectExtrasState 
 
 function projectExtrasFromDetails(details: MasterProjectV2Details): ProjectExtrasState {
   return {
-    projectStage: "",
     maintenanceCompany:
       details.maintenanceCompany === "—" ? "" : details.maintenanceCompany,
     certifiedInspector:
@@ -593,6 +574,11 @@ function formatDateDisplay(value: string | null | undefined): string {
   return value;
 }
 
+function formatProgressDisplay(value: number | null | undefined): string {
+  if (value == null) return "—";
+  return `${value}%`;
+}
+
 export function emptyMasterProjectV2Details(buildingId: string): MasterProjectV2Details {
   return {
     buildingId: buildingId || "—",
@@ -603,6 +589,7 @@ export function emptyMasterProjectV2Details(buildingId: string): MasterProjectV2
     city: "—",
     elevatorCount: "—",
     projectStage: getProjectStage(buildingId),
+    projectProgress: "—",
     address: "—",
     managementCompany: "—",
     elevatorCompany: "—",
@@ -633,7 +620,19 @@ export function detailsFromCloudRow(
     projectStage: getProjectStage(row.building_id, {
       storedStage: row.project_stage,
       liveStartedAt: row.live_started_at,
+      projectType: normalizeProjectType(row.project_type),
+      workflowState: row.project_workflow_state,
+      storedProgress: row.project_progress,
     }),
+    projectProgress: formatProgressDisplay(
+      getProjectProgress({
+        storedStage: row.project_stage,
+        liveStartedAt: row.live_started_at,
+        projectType: normalizeProjectType(row.project_type),
+        workflowState: row.project_workflow_state,
+        storedProgress: row.project_progress,
+      })
+    ),
     address: row.address?.trim() || "—",
     managementCompany: row.management_company?.trim() || "—",
     elevatorCompany: row.elevator_company?.trim() || "—",

@@ -21,7 +21,7 @@ import {
 } from "@/components/master-v2/project-v2/MasterProjectV2Workspace";
 import type { MasterBuildingEntry } from "@/lib/master-buildings-list";
 import type { BuildingDossier } from "@/lib/master-building-dossier";
-import { PROJECT_STAGE_OPTIONS } from "@/lib/buildings-cloud";
+import { getProjectStageFilterOptions, projectStagesMatchFilter } from "@/lib/project-workflow";
 import { MASTER_PROJECT_V2_NEW_PATH } from "@/lib/master-project-v2-routes";
 
 interface MasterProjectsViewProps {
@@ -33,7 +33,7 @@ interface MasterProjectsViewProps {
 }
 
 const STAGE_OPTIONS = ["הכל", "שימוש אמיתי", "פיילוט", "דמו", "מדיווחים"];
-const STATUS_OPTIONS = ["הכל", ...PROJECT_STAGE_OPTIONS];
+const STATUS_OPTIONS = ["הכל", ...getProjectStageFilterOptions()];
 
 export default function MasterProjectsView({
   entries,
@@ -91,7 +91,9 @@ export default function MasterProjectsView({
       if (clientFilter !== "הכל" && row.client !== clientFilter) return false;
       if (cityFilter !== "הכל" && row.city !== cityFilter) return false;
       if (stageFilter !== "הכל" && row.stage !== stageFilter) return false;
-      if (statusFilter !== "הכל" && row.projectStage !== statusFilter) return false;
+      if (statusFilter !== "הכל" && !projectStagesMatchFilter(statusFilter, row.projectStage)) {
+        return false;
+      }
       if (yearFilter !== "הכל") {
         const year = projectUpdatedYear(row.updatedAt);
         if (!year || String(year) !== yearFilter) return false;

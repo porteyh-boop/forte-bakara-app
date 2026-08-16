@@ -387,6 +387,16 @@ import {
   resolveAllowedProjectV2Tab,
 } from "../lib/project-type-config";
 import { validateNewProjectForm } from "../lib/project-v2-create";
+import {
+  buildWorkflowBuildingPatch,
+  completeWorkflowStep,
+  computeWorkflowProgress,
+  getProjectStageFilterOptions,
+  getProjectWorkflow,
+  isProjectCompletedStage,
+  projectStagesMatchFilter,
+  uncompleteWorkflowStep,
+} from "../lib/project-workflow";
 import type { FeedbackSubmissionInput } from "../lib/types";
 
 let passed = 0;
@@ -6261,6 +6271,119 @@ assert(
   buildMasterProjectV2FaultPath("bld-001", "fault-uuid").includes("faultId=fault-uuid") &&
     buildMasterProjectV2FaultPath("bld-001", "fault-uuid").includes("tab=faults"),
   "Master Fault Inbox: buildMasterProjectV2FaultPath"
+);
+
+const homeInspectionSteps = getProjectWorkflow("home_inspection");
+const standardSteps = getProjectWorkflow("standard");
+const fixedDate = "2026-08-16T12:00:00.000Z";
+
+assert(
+  homeInspectionSteps.length === 8 &&
+    standardSteps.length === 9 &&
+    homeInspectionSteps[0]?.progress === 10 &&
+    homeInspectionSteps[2]?.progress === 35 &&
+    standardSteps[2]?.progress === 30 &&
+    standardSteps[5]?.progress === 65,
+  "Project Workflow: הגדרות שלבים לפי project_type"
+);
+
+let homeState = completeWorkflowStep(homeInspectionSteps, null, "quote", fixedDate);
+assert(
+  computeWorkflowProgress(homeInspectionSteps, homeState) === 10,
+  "Project Workflow: home_inspection — הצעת מחיר → 10%"
+);
+homeState = completeWorkflowStep(homeInspectionSteps, homeState, "negotiation", fixedDate);
+assert(
+  computeWorkflowProgress(homeInspectionSteps, homeState) === 20,
+  "Project Workflow: home_inspection — משא ומתן → 20%"
+);
+homeState = completeWorkflowStep(homeInspectionSteps, homeState, "approval", fixedDate);
+const homePatch = buildWorkflowBuildingPatch(homeInspectionSteps, homeState);
+assert(
+  homePatch.projectProgress === 35 &&
+    homePatch.projectStage === "קבלת חומר מהלקוח" &&
+    homePatch.projectWorkflowState.completedSteps.approval === fixedDate,
+  "Project Workflow: home_inspection — אישור הצעה → 35% + שלב נוכחי"
+);
+
+homeState = completeWorkflowStep(homeInspectionSteps, homeState, "completed", fixedDate);
+const homeCompletePatch = buildWorkflowBuildingPatch(homeInspectionSteps, homeState);
+assert(
+  homeCompletePatch.projectProgress === 100 &&
+    homeCompletePatch.projectStage === "הושלם",
+  "Project Workflow: home_inspection — הושלם → 100%"
+);
+
+const resetHomeState = uncompleteWorkflowStep(homeInspectionSteps, homeState, "negotiation");
+assert(
+  !resetHomeState.completedSteps.negotiation &&
+    !resetHomeState.completedSteps.approval &&
+    !resetHomeState.completedSteps.completed &&
+    resetHomeState.completedSteps.quote === fixedDate,
+  "Project Workflow: home_inspection — ביטול שלב מאפס שלבים מאוחרים"
+);
+
+let standardState = completeWorkflowStep(standardSteps, null, "quote", fixedDate);
+standardState = completeWorkflowStep(standardSteps, standardState, "work_open", fixedDate);
+const standardPatch = buildWorkflowBuildingPatch(standardSteps, standardState);
+assert(
+  standardPatch.projectProgress === 40 &&
+    standardPatch.projectStage === "איסוף חומר",
+  "Project Workflow: standard — פתיחת עבודה → 40%"
+);
+
+const projectWorkflowSource = fs.readFileSync(
+  path.join(process.cwd(), "lib/project-workflow.ts"),
+  "utf8"
+);
+const workflowProgressSource = fs.readFileSync(
+  path.join(process.cwd(), "components/master-v2/project-v2/ProjectWorkflowProgress.tsx"),
+  "utf8"
+);
+const workflowMigrationSource = fs.readFileSync(
+  path.join(process.cwd(), "supabase/migrations/032_project_workflow_state.sql"),
+  "utf8"
+);
+assert(
+  projectWorkflowSource.includes("PROJECT_WORKFLOWS") &&
+    projectWorkflowSource.includes("home_inspection") &&
+    projectWorkflowSource.includes("standard") &&
+    workflowProgressSource.includes("התקדמות הפרויקט") &&
+    workflowProgressSource.includes("PROJECT_WORKFLOW_UNCHECK_CONFIRM_MESSAGE") &&
+    detailsTabSource.includes("ProjectWorkflowProgress") &&
+    masterProjectsTableSource.includes('role="progressbar"'),
+  "Project Workflow: config מרכזי + UI + confirm ביטול"
+);
+assert(
+  workflowMigrationSource.includes("project_workflow_state") &&
+    workflowMigrationSource.includes("buildings_project_stage_check"),
+  "Project Workflow: migration 032 — עמודה + הסרת CHECK"
+);
+
+assert(
+  getProjectStageFilterOptions().includes("קבלת חומר מהלקוח") &&
+    getProjectStageFilterOptions().includes("פתיחת עבודה") &&
+    getProjectStageFilterOptions().includes("פרויקט סגור") &&
+    getProjectStageFilterOptions().includes("הושלם"),
+  "Project Workflow UX: מסנן שלבים — workflow + legacy"
+);
+assert(
+  projectStagesMatchFilter("פרויקט סגור", "הושלם") &&
+    projectStagesMatchFilter("הושלם", "פרויקט סגור") &&
+    !projectStagesMatchFilter("ביצוע", "ביצוע עבודה מקצועית"),
+  "Project Workflow UX: סיום שקול + אי-התאמה לשלבים שונים"
+);
+assert(
+  isProjectCompletedStage("הושלם") &&
+    isProjectCompletedStage("פרויקט סגור") &&
+    !isProjectCompletedStage("ביצוע"),
+  "Project Workflow UX: isProjectCompletedStage"
+);
+assert(
+  masterProjectsViewSource.includes("getProjectStageFilterOptions") &&
+    masterProjectsViewSource.includes("projectStagesMatchFilter") &&
+    masterProjectsTableSource.includes("isProjectCompletedStage"),
+  "Project Workflow UX: MasterProjectsView/Table מחוברים ל-source מרכזי"
 );
 
 console.log(`\n=== סיכום: ${passed} עברו, ${failed} נכשלו ===`);

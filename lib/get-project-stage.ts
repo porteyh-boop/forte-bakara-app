@@ -1,8 +1,16 @@
-import type { ProjectStage } from "@/lib/buildings-cloud";
+import {
+  resolveProjectWorkflowProgress,
+  resolveProjectWorkflowStageLabel,
+  isProjectCompletedStage,
+} from "@/lib/project-workflow";
+import { normalizeProjectType } from "@/lib/project-type-config";
 
 export interface ProjectStageContext {
-  storedStage?: ProjectStage | null;
+  storedStage?: string | null;
   liveStartedAt?: string | null;
+  projectType?: ReturnType<typeof normalizeProjectType>;
+  workflowState?: import("@/lib/project-workflow").ProjectWorkflowState | null;
+  storedProgress?: number | null;
 }
 
 /**
@@ -12,7 +20,18 @@ export function getProjectStage(
   _buildingId: string,
   context?: ProjectStageContext
 ): string {
-  if (context?.storedStage === "פרויקט סגור") {
+  const projectType = context?.projectType ?? "standard";
+  const legacyStage = getLegacyProjectStage(context);
+
+  return resolveProjectWorkflowStageLabel(
+    projectType,
+    context?.workflowState,
+    legacyStage
+  );
+}
+
+export function getLegacyProjectStage(context?: ProjectStageContext): string {
+  if (context?.storedStage && isProjectCompletedStage(context.storedStage)) {
     return context.storedStage;
   }
 
@@ -31,4 +50,13 @@ export function getProjectStage(
   }
 
   return "לא נקבע";
+}
+
+export function getProjectProgress(context?: ProjectStageContext): number | null {
+  const projectType = context?.projectType ?? "standard";
+  return resolveProjectWorkflowProgress(
+    projectType,
+    context?.workflowState,
+    context?.storedProgress ?? null
+  );
 }
