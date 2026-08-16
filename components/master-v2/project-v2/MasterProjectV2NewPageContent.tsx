@@ -162,7 +162,9 @@ export default function MasterProjectV2NewPageContent() {
       return;
     }
 
-    router.push(buildMasterProjectV2Path(result.building.building_id));
+    window.location.assign(
+      buildMasterProjectV2Path(result.building.building_id)
+    );
   }
 
   function handleLogout() {

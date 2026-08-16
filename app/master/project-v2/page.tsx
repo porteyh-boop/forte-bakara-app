@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import MasterProjectV2PageContent from "@/components/master-v2/project-v2/MasterProjectV2PageContent";
+import MasterProjectV2PageKeyed from "@/app/master/project-v2/MasterProjectV2PageKeyed";
 
 export default function MasterProjectV2Page() {
   return (
@@ -10,7 +10,7 @@ export default function MasterProjectV2Page() {
         </div>
       }
     >
-      <MasterProjectV2PageContent />
+      <MasterProjectV2PageKeyed />
     </Suspense>
   );
 }

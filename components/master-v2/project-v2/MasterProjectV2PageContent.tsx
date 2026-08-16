@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import MasterCodeGate from "@/components/master-v2/MasterCodeGate";
 import MasterShellLayout from "@/components/master-v2/MasterShellLayout";
 import MasterProjectV2AiTab from "@/components/master-v2/project-v2/MasterProjectV2AiTab";
@@ -140,7 +140,7 @@ export default function MasterProjectV2PageContent() {
   const tabParam = searchParams.get("tab");
   const faultIdParam = (searchParams.get("faultId") ?? "").trim();
 
-  const [authed, setAuthed] = useState(false);
+  const [authed, setAuthed] = useState(() => isMasterAuthenticated());
   const [activeTab, setActiveTab] = useState<ProjectV2Tab>(() =>
     resolveInitialTab(tabParam, faultIdParam, DEFAULT_PROJECT_TYPE)
   );
@@ -149,11 +149,23 @@ export default function MasterProjectV2PageContent() {
   );
   const [cloudRow, setCloudRow] = useState<CloudBuildingRow | null>(null);
   const [loading, setLoading] = useState(false);
+  const loadRequestRef = useRef(0);
+
+  useEffect(() => {
+    setCloudRow(null);
+    setDetails(emptyMasterProjectV2Details(buildingId || "—"));
+    setActiveTab(resolveInitialTab(tabParam, faultIdParam, DEFAULT_PROJECT_TYPE));
+    setLoading(Boolean(buildingId));
+  }, [buildingId]);
 
   const loadProject = useCallback(async () => {
+    const requestId = ++loadRequestRef.current;
+
     if (!buildingId) {
+      if (requestId !== loadRequestRef.current) return;
       setDetails(emptyMasterProjectV2Details("—"));
       setCloudRow(null);
+      setLoading(false);
       return;
     }
 
@@ -166,6 +178,7 @@ export default function MasterProjectV2PageContent() {
         getAllCloudBuildingsWithMeta(),
         getAllCloudElevators(),
       ]);
+      if (requestId !== loadRequestRef.current) return;
       row =
         buildingsResult.rows.find((item) => item.building_id === buildingId) ??
         null;
@@ -174,14 +187,12 @@ export default function MasterProjectV2PageContent() {
       ).length;
     }
 
+    if (requestId !== loadRequestRef.current) return;
+
     setCloudRow(row);
     setDetails(resolveDetails(buildingId, row, cloudElevatorCount));
     setLoading(false);
   }, [buildingId]);
-
-  useEffect(() => {
-    setAuthed(isMasterAuthenticated());
-  }, []);
 
   useEffect(() => {
     if (!authed) return;
