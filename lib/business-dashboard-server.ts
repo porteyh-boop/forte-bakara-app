@@ -1,5 +1,4 @@
-import { BUILDINGS_TABLE, normalizeBuildingId } from "@/lib/buildings-cloud";
-import { getAllDemoBuildingIds } from "@/lib/buildings";
+import { BUILDINGS_TABLE } from "@/lib/buildings-cloud";
 import {
   mapBuildingIncomeType,
   type BusinessBuildingRecord,
@@ -104,14 +103,9 @@ export async function loadBusinessDashboardData(): Promise<{
     };
   }
 
-  const demoBuildingIds = new Set(
-    getAllDemoBuildingIds().map((id) => normalizeBuildingId(id))
-  );
-
   const buildings = (buildingsResult.data ?? [])
     .map((row) => mapBuildingRow(row as Record<string, unknown>))
-    .filter((row): row is BusinessBuildingRecord => row != null)
-    .filter((row) => !demoBuildingIds.has(normalizeBuildingId(row.buildingId)));
+    .filter((row): row is BusinessBuildingRecord => row != null);
 
   const payments = (paymentsResult.data ?? [])
     .map((row) => mapPaymentRow(row as Record<string, unknown>))

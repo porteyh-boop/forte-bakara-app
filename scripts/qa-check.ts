@@ -6686,8 +6686,55 @@ assert(
 );
 assert(
   businessDashboardServerSource.includes('.eq("is_active", true)') &&
-    businessDashboardServerSource.includes("getAllDemoBuildingIds"),
-  "Business Dashboard: רק פעילים בענן וללא demo/mock"
+    !businessDashboardServerSource.includes("getAllDemoBuildingIds"),
+  "Business Dashboard: רק פעילים בענן — ללא סינון demo על cloud פעיל"
+);
+
+const mn64AugustDashboard = buildBusinessDashboard({
+  buildings: [
+    {
+      buildingId: "mn64",
+      name: "מבצע נחשון 64",
+      projectNumber: "826101",
+      contactName: null,
+      managementCompany: null,
+      orderAmount: 6500,
+      orderDate: "2026-06-01",
+      incomeType: "שדרוג / מודרניזציה",
+      nextPaymentDate: null,
+    },
+  ],
+  payments: [{ buildingId: "mn64", amount: 3500, paymentDate: "2026-07-01" }],
+  period: qaAugustPeriod,
+  today: qaToday,
+});
+
+const mn64QuarterDashboard = buildBusinessDashboard({
+  buildings: [
+    {
+      buildingId: "mn64",
+      name: "מבצע נחשון 64",
+      projectNumber: "826101",
+      contactName: null,
+      managementCompany: null,
+      orderAmount: 6500,
+      orderDate: "2026-06-01",
+      incomeType: "שדרוג / מודרניזציה",
+      nextPaymentDate: null,
+    },
+  ],
+  payments: [{ buildingId: "mn64", amount: 3500, paymentDate: "2026-07-01" }],
+  period: resolveBusinessPeriodRange("quarter", qaToday),
+  today: qaToday,
+});
+
+assert(
+  mn64AugustDashboard.rows[0]?.orderAmount === 6500 &&
+    mn64AugustDashboard.rows[0]?.paidTotal === 3500 &&
+    mn64AugustDashboard.rows[0]?.balance === 3000 &&
+    mn64AugustDashboard.metrics.totalReceivedInPeriod === 0 &&
+    mn64QuarterDashboard.metrics.totalReceivedInPeriod === 3500,
+  "Business Dashboard: mn64 cloud פעיל — שורה תמידית + KPI לפי תקופה"
 );
 assert(
   buildMasterProjectV2Path("biz-1") ===
