@@ -16,6 +16,7 @@ import {
 interface MasterClientPermissionsModalProps {
   clientUserId: string;
   clientName: string;
+  buildingId?: string;
   open: boolean;
   /** When true (Master V2), use secured Master APIs instead of direct Supabase. */
   useMasterApi?: boolean;
@@ -26,6 +27,7 @@ interface MasterClientPermissionsModalProps {
 export default function MasterClientPermissionsModal({
   clientUserId,
   clientName,
+  buildingId,
   open,
   useMasterApi = false,
   onClose,
@@ -66,7 +68,11 @@ export default function MasterClientPermissionsModal({
     setSaving(true);
     setError(null);
     const saved = useMasterApi
-      ? await saveMasterClientPermissions(clientUserId, flags)
+      ? await saveMasterClientPermissions(
+          clientUserId,
+          flags,
+          buildingId?.trim() ?? ""
+        )
       : Boolean(await saveClientPermissions(clientUserId, flags));
     setSaving(false);
 

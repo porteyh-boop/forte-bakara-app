@@ -5,7 +5,9 @@ import {
   serviceUnavailableResponse,
 } from "@/lib/forte-master-api-auth";
 import {
+  BUILDING_FORBIDDEN_ERROR,
   deactivateClientAccessServer,
+  parseBuildingIdFilter,
   parseClientUserId,
   parseUpdateClientAccessScopeInput,
   parseUpdateClientUserProfileInput,
@@ -27,6 +29,10 @@ function originForbiddenResponse(): NextResponse {
 
 function notFoundResponse(): NextResponse {
   return NextResponse.json({ error: "not_found" }, { status: 404 });
+}
+
+function buildingForbiddenResponse(): NextResponse {
+  return NextResponse.json({ error: "building_forbidden" }, { status: 403 });
 }
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
@@ -52,7 +58,15 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const action = typeof body?.action === "string" ? body.action : "";
 
     if (action === "deactivate") {
-      const result = await deactivateClientAccessServer(userId);
+      const buildingId = parseBuildingIdFilter(body?.buildingId);
+      if (!buildingId) {
+        return NextResponse.json({ error: "invalid_building_id" }, { status: 400 });
+      }
+
+      const result = await deactivateClientAccessServer(userId, buildingId);
+      if (result.error === BUILDING_FORBIDDEN_ERROR) {
+        return buildingForbiddenResponse();
+      }
       if (result.error === "not_found") return notFoundResponse();
       if (!result.ok) {
         return NextResponse.json(
@@ -64,7 +78,15 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     if (action === "reactivate") {
-      const result = await reactivateClientAccessServer(userId);
+      const buildingId = parseBuildingIdFilter(body?.buildingId);
+      if (!buildingId) {
+        return NextResponse.json({ error: "invalid_building_id" }, { status: 400 });
+      }
+
+      const result = await reactivateClientAccessServer(userId, buildingId);
+      if (result.error === BUILDING_FORBIDDEN_ERROR) {
+        return buildingForbiddenResponse();
+      }
       if (result.error === "not_found") return notFoundResponse();
       if (!result.ok) {
         return NextResponse.json(
@@ -85,6 +107,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       }
 
       const result = await updateClientAccessScopeServer(scopeInput);
+      if (result.error === BUILDING_FORBIDDEN_ERROR) {
+        return buildingForbiddenResponse();
+      }
       if (result.error === "not_found") return notFoundResponse();
       if (!result.session) {
         const status = result.error === "invalid_elevator" ? 400 : 502;
@@ -97,6 +122,11 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     if (action === "update_profile") {
+      const buildingId = parseBuildingIdFilter(body?.buildingId);
+      if (!buildingId) {
+        return NextResponse.json({ error: "invalid_building_id" }, { status: 400 });
+      }
+
       const profileInput = parseUpdateClientUserProfileInput({
         ...body,
         userId,
@@ -105,7 +135,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         return NextResponse.json({ error: "invalid_input" }, { status: 400 });
       }
 
-      const result = await updateClientUserProfileServer(profileInput);
+      const result = await updateClientUserProfileServer(profileInput, buildingId);
+      if (result.error === BUILDING_FORBIDDEN_ERROR) {
+        return buildingForbiddenResponse();
+      }
       if (result.error === "not_found") return notFoundResponse();
       if (!result.user) {
         return NextResponse.json(

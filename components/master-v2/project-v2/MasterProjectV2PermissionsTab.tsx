@@ -111,11 +111,7 @@ export default function MasterProjectV2PermissionsTab({
     return map;
   }, [elevatorOptions]);
 
-  const visibleRecords = useMemo(
-    () =>
-      records.filter((item) => item.access.building_id === buildingId),
-    [records, buildingId]
-  );
+  const visibleRecords = records;
 
   const loadElevators = useCallback(async () => {
     if (cloudReady) {
@@ -152,14 +148,11 @@ export default function MasterProjectV2PermissionsTab({
     }
 
     setLoading(true);
-    const rows = await listMasterClientAccessRecords();
+    const rows = await listMasterClientAccessRecords(buildingId);
     setRecords(rows);
 
-    const buildingRows = rows.filter(
-      (item) => item.access.building_id === buildingId
-    );
     const permissionEntries = await Promise.all(
-      buildingRows.map(async (item) => {
+      rows.map(async (item) => {
         const flags = await getMasterClientPermissionsOrDefaults(item.user.id);
         return [item.user.id, flags] as const;
       })
@@ -202,7 +195,7 @@ export default function MasterProjectV2PermissionsTab({
 
   async function handleDeactivate(userId: string) {
     setActionId(userId);
-    const ok = await deactivateMasterClientAccess(userId);
+    const ok = await deactivateMasterClientAccess(userId, buildingId);
     setActionId(null);
     setMessage(ok ? "הגישה הושבתה" : "השבתת הגישה נכשלה");
     if (ok) await refresh();
@@ -210,7 +203,7 @@ export default function MasterProjectV2PermissionsTab({
 
   async function handleReactivate(userId: string) {
     setActionId(userId);
-    const ok = await reactivateMasterClientAccess(userId);
+    const ok = await reactivateMasterClientAccess(userId, buildingId);
     setActionId(null);
     setMessage(ok ? "הגישה הופעלה מחדש" : "הפעלה מחדש נכשלה");
     if (ok) await refresh();
@@ -378,6 +371,7 @@ export default function MasterProjectV2PermissionsTab({
         <MasterClientPermissionsModal
           clientUserId={permissionsClient.id}
           clientName={permissionsClient.name}
+          buildingId={buildingId}
           open={Boolean(permissionsClient)}
           useMasterApi
           onClose={() => setPermissionsClient(null)}

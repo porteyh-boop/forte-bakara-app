@@ -187,7 +187,11 @@ export default function MasterProjectV2NewClientAccessDialog({
       return;
     }
 
-    const savedPermissions = await saveMasterClientPermissions(created.user.id, permissions);
+    const savedPermissions = await saveMasterClientPermissions(
+      created.user.id,
+      permissions,
+      buildingId
+    );
     setCreating(false);
 
     if (!savedPermissions) {

@@ -110,16 +110,19 @@ export async function createMasterClientUserAccess(
 }
 
 export async function deactivateMasterClientAccess(
-  userId: string
+  userId: string,
+  buildingId: string
 ): Promise<boolean> {
-  if (!isMasterClientAccessConfigured() || !userId.trim()) return false;
+  if (!isMasterClientAccessConfigured() || !userId.trim() || !buildingId.trim()) {
+    return false;
+  }
 
   try {
     const response = await masterApiFetch(
       `${MASTER_CLIENT_ACCESS_API}/${encodeURIComponent(userId)}`,
       {
         method: "PATCH",
-        body: JSON.stringify({ action: "deactivate" }),
+        body: JSON.stringify({ action: "deactivate", buildingId }),
       }
     );
 
@@ -140,16 +143,19 @@ export async function deactivateMasterClientAccess(
 }
 
 export async function reactivateMasterClientAccess(
-  userId: string
+  userId: string,
+  buildingId: string
 ): Promise<boolean> {
-  if (!isMasterClientAccessConfigured() || !userId.trim()) return false;
+  if (!isMasterClientAccessConfigured() || !userId.trim() || !buildingId.trim()) {
+    return false;
+  }
 
   try {
     const response = await masterApiFetch(
       `${MASTER_CLIENT_ACCESS_API}/${encodeURIComponent(userId)}`,
       {
         method: "PATCH",
-        body: JSON.stringify({ action: "reactivate" }),
+        body: JSON.stringify({ action: "reactivate", buildingId }),
       }
     );
 
@@ -237,14 +243,21 @@ export async function getMasterClientPermissionsOrDefaults(
 
 export async function saveMasterClientPermissions(
   clientUserId: string,
-  flags: ClientPermissionFlags
+  flags: ClientPermissionFlags,
+  buildingId: string
 ): Promise<boolean> {
-  if (!isMasterClientAccessConfigured() || !clientUserId.trim()) return false;
+  if (
+    !isMasterClientAccessConfigured() ||
+    !clientUserId.trim() ||
+    !buildingId.trim()
+  ) {
+    return false;
+  }
 
   try {
     const response = await masterApiFetch(MASTER_CLIENT_PERMISSIONS_API, {
       method: "PATCH",
-      body: JSON.stringify({ clientUserId, flags }),
+      body: JSON.stringify({ clientUserId, buildingId, flags }),
     });
 
     const payload = await parseMasterApiJson<{ record?: unknown; error?: string }>(

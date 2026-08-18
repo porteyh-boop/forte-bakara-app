@@ -5,7 +5,9 @@ import {
   serviceUnavailableResponse,
 } from "@/lib/forte-master-api-auth";
 import {
+  BUILDING_FORBIDDEN_ERROR,
   getClientPermissionsServer,
+  parseBuildingIdFilter,
   parseClientPermissionFlags,
   parseClientUserId,
   saveClientPermissionsServer,
@@ -20,6 +22,10 @@ function originForbiddenResponse(): NextResponse {
 
 function notFoundResponse(): NextResponse {
   return NextResponse.json({ error: "not_found" }, { status: 404 });
+}
+
+function buildingForbiddenResponse(): NextResponse {
+  return NextResponse.json({ error: "building_forbidden" }, { status: 403 });
 }
 
 export async function GET(request: NextRequest) {
@@ -67,13 +73,21 @@ export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
     const clientUserId = parseClientUserId(body?.clientUserId);
+    const buildingId = parseBuildingIdFilter(body?.buildingId);
     const flags = parseClientPermissionFlags(body?.flags);
 
-    if (!clientUserId || !flags) {
+    if (!clientUserId || !buildingId || !flags) {
       return NextResponse.json({ error: "invalid_input" }, { status: 400 });
     }
 
-    const result = await saveClientPermissionsServer(clientUserId, flags);
+    const result = await saveClientPermissionsServer(
+      clientUserId,
+      flags,
+      buildingId
+    );
+    if (result.error === BUILDING_FORBIDDEN_ERROR) {
+      return buildingForbiddenResponse();
+    }
     if (result.error === "not_found") return notFoundResponse();
     if (!result.record) {
       return NextResponse.json(

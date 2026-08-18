@@ -106,6 +106,34 @@ export function parseBuildingIdFilter(value: unknown): string | null {
   return trimmed || null;
 }
 
+export const BUILDING_FORBIDDEN_ERROR = "building_forbidden";
+
+type ClientAccessBuildingVerifyResult =
+  | { ok: true; session: ClientAccessSession }
+  | {
+      ok: false;
+      error: "not_found" | typeof BUILDING_FORBIDDEN_ERROR | "invalid_input";
+    };
+
+export async function verifyClientAccessBuildingServer(
+  userId: string,
+  expectedBuildingId: string
+): Promise<ClientAccessBuildingVerifyResult> {
+  const trimmedId = userId.trim();
+  const expected = expectedBuildingId.trim().toLowerCase();
+  if (!trimmedId || !expected) {
+    return { ok: false, error: "invalid_input" };
+  }
+
+  const session = await getClientUserAccessByIdServer(trimmedId);
+  if (!session) return { ok: false, error: "not_found" };
+  if (session.access.building_id !== expected) {
+    return { ok: false, error: BUILDING_FORBIDDEN_ERROR };
+  }
+
+  return { ok: true, session };
+}
+
 export function parseCreateClientUserAccessInput(
   value: unknown
 ): CreateClientUserAccessInput | null {
@@ -404,7 +432,8 @@ export async function getClientUserAccessByIdServer(
 }
 
 export async function deactivateClientAccessServer(
-  userId: string
+  userId: string,
+  buildingId: string
 ): Promise<{ ok: boolean; error: string | null }> {
   if (!isSupabaseServiceConfigured()) {
     return { ok: false, error: "supabase_service_unconfigured" };
@@ -415,8 +444,10 @@ export async function deactivateClientAccessServer(
     return { ok: false, error: "invalid_user_id" };
   }
 
-  const existing = await getClientUserAccessByIdServer(userId);
-  if (!existing) return { ok: false, error: "not_found" };
+  const verified = await verifyClientAccessBuildingServer(userId, buildingId);
+  if (!verified.ok) {
+    return { ok: false, error: verified.error };
+  }
 
   const { error } = await client
     .from(CLIENT_USERS_TABLE)
@@ -428,7 +459,8 @@ export async function deactivateClientAccessServer(
 }
 
 export async function reactivateClientAccessServer(
-  userId: string
+  userId: string,
+  buildingId: string
 ): Promise<{ ok: boolean; error: string | null }> {
   if (!isSupabaseServiceConfigured()) {
     return { ok: false, error: "supabase_service_unconfigured" };
@@ -439,8 +471,10 @@ export async function reactivateClientAccessServer(
     return { ok: false, error: "invalid_user_id" };
   }
 
-  const existing = await getClientUserAccessByIdServer(userId);
-  if (!existing) return { ok: false, error: "not_found" };
+  const verified = await verifyClientAccessBuildingServer(userId, buildingId);
+  if (!verified.ok) {
+    return { ok: false, error: verified.error };
+  }
 
   const { error } = await client
     .from(CLIENT_USERS_TABLE)
@@ -452,7 +486,8 @@ export async function reactivateClientAccessServer(
 }
 
 export async function updateClientUserProfileServer(
-  input: UpdateClientUserProfileInput
+  input: UpdateClientUserProfileInput,
+  buildingId: string
 ): Promise<{ user: ClientUserRecord | null; error: string | null }> {
   if (!isSupabaseServiceConfigured()) {
     return { user: null, error: "supabase_service_unconfigured" };
@@ -466,8 +501,10 @@ export async function updateClientUserProfileServer(
     return { user: null, error: "invalid_input" };
   }
 
-  const existing = await getClientUserAccessByIdServer(userId);
-  if (!existing) return { user: null, error: "not_found" };
+  const verified = await verifyClientAccessBuildingServer(userId, buildingId);
+  if (!verified.ok) {
+    return { user: null, error: verified.error };
+  }
 
   const clientType =
     input.clientType && isStoredClientType(input.clientType)
@@ -509,8 +546,13 @@ export async function updateClientAccessScopeServer(
     return { session: null, error: "invalid_user_id" };
   }
 
-  const existing = await getClientUserAccessByIdServer(input.userId);
-  if (!existing) return { session: null, error: "not_found" };
+  const verified = await verifyClientAccessBuildingServer(
+    input.userId,
+    input.buildingId
+  );
+  if (!verified.ok) {
+    return { session: null, error: verified.error };
+  }
 
   const scope = normalizeAccessLevel(input.accessLevel, input.elevatorId);
   if (scope.accessLevel === "elevator" && !scope.elevatorId) {
@@ -627,7 +669,8 @@ async function logClientActivityServer(
 
 export async function saveClientPermissionsServer(
   clientUserId: string,
-  flags: ClientPermissionFlags
+  flags: ClientPermissionFlags,
+  buildingId: string
 ): Promise<{ record: ClientPermissionRecord | null; error: string | null }> {
   if (!isSupabaseServiceConfigured()) {
     return { record: null, error: "supabase_service_unconfigured" };
@@ -638,8 +681,13 @@ export async function saveClientPermissionsServer(
     return { record: null, error: "invalid_user_id" };
   }
 
-  const userExists = await getClientUserAccessByIdServer(clientUserId);
-  if (!userExists) return { record: null, error: "not_found" };
+  const verified = await verifyClientAccessBuildingServer(
+    clientUserId,
+    buildingId
+  );
+  if (!verified.ok) {
+    return { record: null, error: verified.error };
+  }
 
   const { data: existingRow } = await client
     .from(CLIENT_PERMISSIONS_TABLE)
