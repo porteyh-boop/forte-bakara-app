@@ -1,3 +1,5 @@
+import type { IncomeType } from "./project-financial";
+import { orderFieldsFromBuildingRow, roundMoney } from "./project-financial";
 import type { ProjectTypeId } from "./project-type-config";
 import { DEFAULT_PROJECT_TYPE, normalizeProjectType } from "./project-type-config";
 import {
@@ -59,6 +61,11 @@ export interface CloudBuildingRow {
   project_delivery_date: string | null;
   project_notes: string | null;
   project_type: ProjectTypeId;
+  order_amount: number | null;
+  order_date: string | null;
+  income_type: IncomeType | null;
+  payment_terms: string | null;
+  next_payment_date: string | null;
 }
 
 export interface CloudElevatorRow {
@@ -94,6 +101,11 @@ export interface SaveBuildingInput {
   projectNotes?: string | null;
   projectNumber?: string | null;
   projectType?: ProjectTypeId;
+  orderAmount?: number | null;
+  orderDate?: string | null;
+  incomeType?: IncomeType | null;
+  paymentTerms?: string | null;
+  nextPaymentDate?: string | null;
 }
 
 export interface SaveElevatorInput {
@@ -172,6 +184,8 @@ export function mapCloudBuildingRow(
       ? projectProgressRaw
       : null;
 
+  const orderFields = orderFieldsFromBuildingRow(raw);
+
   return {
     id: String(raw.id ?? ""),
     building_id: String(raw.building_id ?? ""),
@@ -208,6 +222,11 @@ export function mapCloudBuildingRow(
     project_notes:
       raw.project_notes != null ? String(raw.project_notes) : null,
     project_type: normalizeProjectType(raw.project_type),
+    order_amount: orderFields.orderAmount,
+    order_date: orderFields.orderDate,
+    income_type: orderFields.incomeType,
+    payment_terms: orderFields.paymentTerms,
+    next_payment_date: orderFields.nextPaymentDate,
   };
 }
 
@@ -401,6 +420,22 @@ export async function updateCloudBuilding(
   }
   if (input.projectType !== undefined) {
     patch.project_type = input.projectType;
+  }
+  if (input.orderAmount !== undefined) {
+    patch.order_amount =
+      input.orderAmount != null ? roundMoney(input.orderAmount) : null;
+  }
+  if (input.orderDate !== undefined) {
+    patch.order_date = input.orderDate || null;
+  }
+  if (input.incomeType !== undefined) {
+    patch.income_type = input.incomeType || null;
+  }
+  if (input.paymentTerms !== undefined) {
+    patch.payment_terms = input.paymentTerms?.trim() || null;
+  }
+  if (input.nextPaymentDate !== undefined) {
+    patch.next_payment_date = input.nextPaymentDate || null;
   }
 
   const { data, error } = await client

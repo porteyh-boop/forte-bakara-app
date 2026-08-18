@@ -39,6 +39,7 @@ import {
 import { getProjectTypeLabel, getProjectNumberLabel, normalizeProjectType } from "@/lib/project-type-config";
 import { MASTER_PROJECTS_V2_LIST_PATH } from "@/lib/master-project-v2-routes";
 import ProjectDocumentsPanel from "@/components/master-v2/project-v2/ProjectDocumentsPanel";
+import ProjectFinancialCard from "@/components/master-v2/project-v2/ProjectFinancialCard";
 import ProjectWorkflowProgress from "@/components/master-v2/project-v2/ProjectWorkflowProgress";
 import { deleteBuildingProject } from "@/lib/buildings-delete-cloud";
 import { isContactsConfigured } from "@/lib/contacts-cloud";
@@ -487,6 +488,10 @@ export default function MasterProjectV2DetailsTab({
           }))}
         />
       </ForteV2Panel>
+
+      {cloudRow && (
+        <ProjectFinancialCard cloudRow={cloudRow} onSaved={onSaved} />
+      )}
 
       {cloudRow && (
         <ProjectWorkflowProgress cloudRow={cloudRow} onSaved={onSaved} />

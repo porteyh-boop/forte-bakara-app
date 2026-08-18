@@ -397,6 +397,7 @@ import {
   projectStagesMatchFilter,
   uncompleteWorkflowStep,
 } from "../lib/project-workflow";
+import { computeProjectFinancialSummary } from "../lib/project-financial";
 import type { FeedbackSubmissionInput } from "../lib/types";
 
 let passed = 0;
@@ -6384,6 +6385,128 @@ assert(
     masterProjectsViewSource.includes("projectStagesMatchFilter") &&
     masterProjectsTableSource.includes("isProjectCompletedStage"),
   "Project Workflow UX: MasterProjectsView/Table מחוברים ל-source מרכזי"
+);
+
+const overdueDate = "2020-01-01";
+const futureDate = "2099-12-31";
+
+assert(
+  computeProjectFinancialSummary(null, [], futureDate).collectionStatus ===
+    "לא הוגדר" &&
+    computeProjectFinancialSummary(null, [], futureDate).balance === null,
+  "Project Financial: ללא סכום הזמנה — לא הוגדר"
+);
+assert(
+  computeProjectFinancialSummary(10000, [], futureDate).collectionStatus ===
+    "טרם שולם" &&
+    computeProjectFinancialSummary(10000, [], futureDate).balance === 10000,
+  "Project Financial: הזמנה ללא תשלום — טרם שולם"
+);
+assert(
+  computeProjectFinancialSummary(10000, [4000], futureDate).collectionStatus ===
+    "שולם חלקית" &&
+    computeProjectFinancialSummary(10000, [4000], futureDate).balance === 6000,
+  "Project Financial: תשלום חלקי"
+);
+assert(
+  computeProjectFinancialSummary(10000, [6000, 4000], futureDate)
+    .collectionStatus === "שולם במלואו" &&
+    computeProjectFinancialSummary(10000, [6000, 4000], futureDate).balance === 0,
+  "Project Financial: מספר תשלומים — שולם במלואו"
+);
+assert(
+  computeProjectFinancialSummary(10000, [10000], futureDate).collectionStatus ===
+    "שולם במלואו",
+  "Project Financial: תשלום מלא"
+);
+assert(
+  computeProjectFinancialSummary(10000, [2000], overdueDate).collectionStatus ===
+    "באיחור",
+  "Project Financial: באיחור גובר על שולם חלקית"
+);
+assert(
+  computeProjectFinancialSummary(10000, [10500], futureDate).balance === 0 &&
+    computeProjectFinancialSummary(10000, [10500], futureDate).creditBalance ===
+      500 &&
+    computeProjectFinancialSummary(10000, [10500], futureDate).collectionStatus ===
+      "שולם במלואו",
+  "Project Financial: תשלום מעל סכום ההזמנה — יתרת זכות"
+);
+assert(
+  computeProjectFinancialSummary(10000, [12000, 3000], futureDate).paidTotal ===
+    15000 &&
+    computeProjectFinancialSummary(10000, [12000, 3000], futureDate)
+      .creditBalance === 5000,
+  "Project Financial: מספר תשלומים מעל סכום ההזמנה"
+);
+
+const projectFinancialSource = fs.readFileSync(
+  path.join(process.cwd(), "lib/project-financial.ts"),
+  "utf8"
+);
+const projectPaymentsServerSource = fs.readFileSync(
+  path.join(process.cwd(), "lib/project-payments-server.ts"),
+  "utf8"
+);
+const projectPaymentsCloudSource = fs.readFileSync(
+  path.join(process.cwd(), "lib/project-payments-cloud.ts"),
+  "utf8"
+);
+const projectFinancialCardSource = fs.readFileSync(
+  path.join(process.cwd(), "components/master-v2/project-v2/ProjectFinancialCard.tsx"),
+  "utf8"
+);
+const financialMigrationSource = fs.readFileSync(
+  path.join(process.cwd(), "supabase/migrations/033_project_financial.sql"),
+  "utf8"
+);
+const projectPaymentsApiSource = fs.readFileSync(
+  path.join(process.cwd(), "app/forte/api/project-payments/route.ts"),
+  "utf8"
+);
+const projectPaymentsIdApiSource = fs.readFileSync(
+  path.join(process.cwd(), "app/forte/api/project-payments/[paymentId]/route.ts"),
+  "utf8"
+);
+
+assert(
+  projectFinancialSource.includes("computeProjectFinancialSummary") &&
+    projectFinancialSource.includes("creditBalance") &&
+    projectFinancialSource.includes("באיחור"),
+  "Project Financial: lib חישובים מרכזי"
+);
+assert(
+  financialMigrationSource.includes("order_amount") &&
+    financialMigrationSource.includes("project_payments") &&
+    financialMigrationSource.includes("on delete cascade"),
+  "Project Financial: migration 033 — buildings + project_payments"
+);
+assert(
+  projectPaymentsServerSource.includes("listProjectPaymentsForBuilding") &&
+    projectPaymentsServerSource.includes("createProjectPaymentForBuilding") &&
+    projectPaymentsServerSource.includes("updateProjectPaymentById") &&
+    projectPaymentsServerSource.includes("deleteProjectPaymentById"),
+  "Project Financial: server CRUD לתשלומים"
+);
+assert(
+  projectPaymentsCloudSource.includes("/forte/api/project-payments") &&
+    projectPaymentsApiSource.includes("requireMasterApiSession") &&
+    projectPaymentsIdApiSource.includes("DELETE"),
+  "Project Financial: API + Master session"
+);
+assert(
+  detailsTabSource.includes("ProjectFinancialCard") &&
+    projectFinancialCardSource.includes("כספי") &&
+    projectFinancialCardSource.includes("הוסף תשלום") &&
+    projectFinancialCardSource.includes("היסטוריית תשלומים") &&
+    projectFinancialCardSource.includes("window.confirm") === false &&
+    projectFinancialCardSource.includes("מחיקת תשלום"),
+  "Project Financial: UI כרטיס כספי + היסטוריה + מחיקה עם אישור"
+);
+assert(
+  buildingsCloudSource.includes("order_amount") &&
+    buildingsCloudSource.includes("orderAmount"),
+  "Project Financial: buildings-cloud מחובר לשדות הזמנה"
 );
 
 console.log(`\n=== סיכום: ${passed} עברו, ${failed} נכשלו ===`);
