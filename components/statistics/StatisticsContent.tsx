@@ -25,12 +25,19 @@ export interface StatisticsContentProps {
   buildingId: string;
   buildingName: string;
   filterRows?: (rows: StatisticsFaultRow[]) => StatisticsFaultRow[];
+  loadRows?: (
+    buildingId: string
+  ) => Promise<
+    | { ok: true; rows: StatisticsFaultRow[] }
+    | { ok: false; reason: "not_configured" | "missing_building" | "fetch_failed" }
+  >;
 }
 
 export default function StatisticsContent({
   buildingId,
   buildingName,
   filterRows,
+  loadRows,
 }: StatisticsContentProps) {
   const [period, setPeriod] = useState<StatisticsPeriod>("30d");
   const [rows, setRows] = useState<StatisticsFaultRow[] | null>(null);
@@ -40,7 +47,7 @@ export default function StatisticsContent({
   useEffect(() => {
     let cancelled = false;
 
-    async function loadRows() {
+    async function fetchStatisticsData() {
       const trimmedBuildingId = buildingId.trim();
       if (!trimmedBuildingId) {
         setRows(null);
@@ -52,7 +59,9 @@ export default function StatisticsContent({
       setLoading(true);
       setError(null);
 
-      const result = await fetchStatisticsFaultRows(trimmedBuildingId);
+      const result = loadRows
+        ? await loadRows(trimmedBuildingId)
+        : await fetchStatisticsFaultRows(trimmedBuildingId);
       if (cancelled) return;
 
       if (!result.ok) {
@@ -72,12 +81,12 @@ export default function StatisticsContent({
       setLoading(false);
     }
 
-    void loadRows();
+    void fetchStatisticsData();
 
     return () => {
       cancelled = true;
     };
-  }, [buildingId, filterRows]);
+  }, [buildingId, filterRows, loadRows]);
 
   const snapshot = useMemo(() => {
     if (!rows) return null;

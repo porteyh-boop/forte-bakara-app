@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import ClientPermissionsFieldList from "@/components/ClientPermissionsFieldList";
 import {
   buildClientAccessUrl,
-  createClientUserAccess,
   findClientAccessForContact,
   type ClientAccessLevel,
   type ClientAccessSession,
@@ -12,10 +11,13 @@ import {
 } from "@/lib/client-access";
 import {
   DEFAULT_NEW_CLIENT_ACCESS_PERMISSIONS,
-  saveClientPermissions,
   type ClientPermissionFlags,
   type ClientPermissionKey,
 } from "@/lib/client-permissions";
+import {
+  createMasterClientUserAccess,
+  saveMasterClientPermissions,
+} from "@/lib/master-client-access-api";
 import type { ProjectContactWithDetails } from "@/lib/contacts";
 
 type CreateStep = "pick" | "configure" | "success";
@@ -166,7 +168,7 @@ export default function MasterProjectV2NewClientAccessDialog({
     setCreating(true);
     setError(null);
 
-    const created = await createClientUserAccess({
+    const created = await createMasterClientUserAccess({
       name,
       phone: phone || undefined,
       email: email || undefined,
@@ -185,7 +187,7 @@ export default function MasterProjectV2NewClientAccessDialog({
       return;
     }
 
-    const savedPermissions = await saveClientPermissions(created.user.id, permissions);
+    const savedPermissions = await saveMasterClientPermissions(created.user.id, permissions);
     setCreating(false);
 
     if (!savedPermissions) {

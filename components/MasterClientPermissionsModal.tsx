@@ -8,11 +8,17 @@ import {
   type ClientPermissionFlags,
   type ClientPermissionKey,
 } from "@/lib/client-permissions";
+import {
+  getMasterClientPermissionsOrDefaults,
+  saveMasterClientPermissions,
+} from "@/lib/master-client-access-api";
 
 interface MasterClientPermissionsModalProps {
   clientUserId: string;
   clientName: string;
   open: boolean;
+  /** When true (Master V2), use secured Master APIs instead of direct Supabase. */
+  useMasterApi?: boolean;
   onClose: () => void;
   onSaved: () => void;
 }
@@ -21,6 +27,7 @@ export default function MasterClientPermissionsModal({
   clientUserId,
   clientName,
   open,
+  useMasterApi = false,
   onClose,
   onSaved,
 }: MasterClientPermissionsModalProps) {
@@ -36,7 +43,11 @@ export default function MasterClientPermissionsModal({
     setLoading(true);
     setError(null);
 
-    void getClientPermissionsOrDefaults(clientUserId).then((defaults) => {
+    const loadPermissions = useMasterApi
+      ? getMasterClientPermissionsOrDefaults
+      : getClientPermissionsOrDefaults;
+
+    void loadPermissions(clientUserId).then((defaults) => {
       if (cancelled) return;
       setFlags(defaults);
       setLoading(false);
@@ -45,7 +56,7 @@ export default function MasterClientPermissionsModal({
     return () => {
       cancelled = true;
     };
-  }, [open, clientUserId]);
+  }, [open, clientUserId, useMasterApi]);
 
   if (!open) return null;
 
@@ -54,7 +65,9 @@ export default function MasterClientPermissionsModal({
 
     setSaving(true);
     setError(null);
-    const saved = await saveClientPermissions(clientUserId, flags);
+    const saved = useMasterApi
+      ? await saveMasterClientPermissions(clientUserId, flags)
+      : Boolean(await saveClientPermissions(clientUserId, flags));
     setSaving(false);
 
     if (!saved) {

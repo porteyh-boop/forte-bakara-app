@@ -11,104 +11,96 @@ import HistoryList from "@/components/HistoryList";
 import InfoCard from "@/components/InfoCard";
 import PageHeader from "@/components/PageHeader";
 import SectionTitle from "@/components/SectionTitle";
-import { isAfterLiveStart } from "@/lib/building-live";
-import { normalizeBuildingId } from "@/lib/buildings-cloud";
 import {
-  getClientAccessByToken,
   getClientAccessGateMessage,
-  resolveClientAccessGate,
   resolveClientWelcomeMessage,
-  scopeElevatorsForClientAccess,
-  scopeFaultsForClientAccess,
   type ClientAccessSession,
 } from "@/lib/client-access";
 import {
-  computePortalDataLastUpdated,
   formatClientPortalLastUpdated,
 } from "@/lib/client-profile";
 import {
   CLIENT_PORTAL_BUILDING_NOT_FOUND_MESSAGE,
   CLIENT_PORTAL_BUILDING_NOT_FOUND_TITLE,
-  getDemoFaultsForPortalBuilding,
-  resolveClientPortalBuilding,
   type ClientPortalBuildingResolve,
 } from "@/lib/client-portal-building";
-import {
-  getClientPermissionsOrDefaults,
-  type ClientPermissionFlags,
-} from "@/lib/client-permissions";
+import type { ClientPermissionFlags } from "@/lib/client-permissions";
 import {
   CLIENT_PORTAL_ACTIVITY,
   computeClientPortalStats,
-  logClientPortalActivity,
 } from "@/lib/client-portal";
-import { getAllDocuments, formatDocumentDate, filterClientVisibleDocuments } from "@/lib/document-center";
+import {
+  fetchClientPortalBootstrap,
+  logClientPortalActivityApi,
+} from "@/lib/client-portal-api-client";
+import type { ClientPortalBootstrapDto } from "@/lib/client-portal-dto";
+import { formatDocumentDate } from "@/lib/document-center";
 import { isClosedFault, isOpenFault } from "@/lib/fault-lifecycle";
 import { getAllElevatorFaultCounts } from "@/lib/elevator-stats";
 import { getEffectiveElevators } from "@/lib/elevator-status";
-import {
-  getAllPilotFaults,
-  getPilotFaultsForBuilding,
-  type PilotCloudFault,
-} from "@/lib/pilot-cloud";
-import type { Elevator, Fault, FaultStatus, FaultType } from "@/lib/types";
+import type { Elevator, Fault } from "@/lib/types";
 
 type ClientTab = "home" | "history" | "documents" | "statistics";
 
 const PORTAL_ACCESS_DENIED_MESSAGE = "אין לך הרשאה לגשת לפורטל.";
 const LOGOUT_MESSAGE = "יצאתם מהפורטל.";
 
-function mapPilotFaultToClientFault(fault: PilotCloudFault): Fault {
+function buildBuildingResolveFromBootstrap(
+  data: ClientPortalBootstrapDto
+): ClientPortalBuildingResolve {
   return {
-    id: fault.id,
-    elevatorId: fault.elevator_id,
-    elevatorName: fault.elevator_name,
-    type: fault.fault_type as FaultType,
-    description: fault.description,
-    status: fault.status as FaultStatus,
-    priority: "רגילה",
-    reportedAt: fault.created_at,
-    resolvedAt: fault.closed_at ?? undefined,
-    ticketNumber: fault.ticket_number ?? undefined,
-    isDisabled: fault.is_disabled,
+    requestedBuildingId: data.building.id,
+    loadedBuildingId: data.building.id,
+    buildingName: data.building.name,
+    source: "cloud",
+    liveStartedAt: data.building.liveStartedAt,
+    ctx: {
+      id: data.building.id,
+      building: {
+        buildingCode: data.building.buildingCode,
+        name: data.building.name,
+        address: "",
+        city: "",
+        elevatorCount: data.elevators.length,
+        elevatorCompany: "",
+        contactPerson: "",
+        phone: "",
+        managementCompany: "",
+        units: 0,
+      },
+      elevators: data.elevators,
+      faults: data.faults,
+      activeFaultDowntime: {},
+    },
   };
 }
 
-function mergePortalFaults(
-  buildingId: string,
-  buildingName: string,
-  cloudFaults: PilotCloudFault[]
-): PilotCloudFault[] {
-  const merged = [...cloudFaults];
-  const seen = new Set(merged.map((fault) => fault.id));
-  const demoFaults = getDemoFaultsForPortalBuilding(buildingId);
-
-  for (const fault of demoFaults) {
-    if (seen.has(fault.id)) continue;
-    merged.push({
-      id: fault.id,
-      building_id: buildingId,
-      building_name: buildingName,
-      elevator_id: fault.elevatorId,
-      elevator_name: fault.elevatorName,
-      fault_type: fault.type,
-      description: fault.description,
-      is_disabled: fault.isDisabled ?? false,
-      status: fault.status,
-      ticket_number: fault.ticketNumber ?? null,
-      image_data: null,
-      image_url: null,
-      created_at: fault.reportedAt,
-      closed_at: fault.resolvedAt ?? null,
-      source_device_id: null,
-      fault_source: null,
-      treatment_note: null,
-      closure_note: null,
-      treatment_started_at: null,
-    });
-  }
-
-  return merged;
+function buildSessionFromBootstrap(
+  token: string,
+  data: ClientPortalBootstrapDto
+): ClientAccessSession {
+  return {
+    user: {
+      id: data.user.id,
+      name: data.user.name,
+      phone: null,
+      email: null,
+      client_type: data.user.clientType,
+      welcome_message: data.user.welcomeMessage,
+      access_token: token,
+      is_active: true,
+      expires_at: null,
+      created_at: "",
+    },
+    access: {
+      id: "",
+      client_user_id: data.user.id,
+      building_id: data.building.id,
+      elevator_id: data.access.elevatorId,
+      access_level: data.access.accessLevel,
+      created_at: "",
+    },
+  };
 }
 
 interface ClientAccessPageContentProps {
@@ -161,125 +153,47 @@ export default function ClientAccessPageContent({
     setRequestedBuildingId(null);
     setDataLastUpdated(null);
 
-    const loadedSession = await getClientAccessByToken(token);
-    const gate = resolveClientAccessGate(loadedSession);
+    const result = await fetchClientPortalBootstrap(token);
 
-    if (gate !== "ok" || !loadedSession) {
+    if (!result.ok) {
       setSession(null);
       setPermissions(null);
-      setGateMessage(getClientAccessGateMessage(gate));
       setElevators([]);
       setFaults([]);
       setDocuments([]);
+      if (result.gate === "access_denied") {
+        setGateMessage(result.message ?? PORTAL_ACCESS_DENIED_MESSAGE);
+      } else if (result.gate === "building_not_found") {
+        setGateMessage(null);
+        setBuildingNotFound(true);
+      } else {
+        setGateMessage(
+          result.message ??
+            getClientAccessGateMessage(
+              result.gate === "expired"
+                ? "expired"
+                : result.gate === "deactivated"
+                  ? "deactivated"
+                  : "invalid"
+            )
+        );
+      }
       setLoading(false);
       return;
     }
 
-    const loadedPermissions = await getClientPermissionsOrDefaults(
-      loadedSession.user.id
-    );
-
-    if (!loadedPermissions.can_view_building_dashboard) {
-      setSession(loadedSession);
-      setPermissions(loadedPermissions);
-      setGateMessage(PORTAL_ACCESS_DENIED_MESSAGE);
-      setElevators([]);
-      setFaults([]);
-      setDocuments([]);
-      setLoading(false);
-      return;
-    }
-
-    const accessBuildingId = loadedSession.access.building_id;
-    setRequestedBuildingId(accessBuildingId);
-
-    const resolved = await resolveClientPortalBuilding(accessBuildingId);
-    if (!resolved) {
-      setSession(loadedSession);
-      setPermissions(loadedPermissions);
-      setGateMessage(null);
-      setBuildingNotFound(true);
-      setElevators([]);
-      setFaults([]);
-      setDocuments([]);
-      setLoading(false);
-      return;
-    }
-
+    const data = result.data;
+    const loadedSession = buildSessionFromBootstrap(token, data);
     setSession(loadedSession);
-    setPermissions(loadedPermissions);
+    setPermissions(data.permissions);
     setGateMessage(null);
-    setBuildingResolve(resolved);
-
-    const { access_level, elevator_id } = loadedSession.access;
-    const normalizedBuildingId = normalizeBuildingId(accessBuildingId);
-
-    const scopedElevators = scopeElevatorsForClientAccess(
-      resolved.ctx.elevators,
-      loadedSession.access
-    );
-
-    const cloudFaults =
-      (await getPilotFaultsForBuilding(normalizedBuildingId)) ??
-      (await getAllPilotFaults()).filter(
-        (fault) => normalizeBuildingId(fault.building_id) === normalizedBuildingId
-      );
-
-    const mergedFaults = mergePortalFaults(
-      normalizedBuildingId,
-      resolved.buildingName,
-      cloudFaults
-    );
-    const liveStartedAt = resolved.liveStartedAt;
-    const liveFiltered = liveStartedAt
-      ? mergedFaults.filter((fault) =>
-          isAfterLiveStart(fault.created_at, liveStartedAt)
-        )
-      : mergedFaults;
-    const scopedFaults = scopeFaultsForClientAccess(
-      liveFiltered,
-      loadedSession.access
-    ).map(mapPilotFaultToClientFault);
-
-    setElevators(scopedElevators);
-    setFaults(scopedFaults);
-    setScopeLabel(
-      access_level === "elevator" && elevator_id
-        ? scopedElevators[0]?.name ?? elevator_id
-        : "כל הבניין"
-    );
-
-    if (loadedPermissions.can_view_documents) {
-      const { documents: allDocuments } = await getAllDocuments();
-      const scopedDocuments = filterClientVisibleDocuments(allDocuments)
-        .filter(
-          (doc) => normalizeBuildingId(doc.building_id) === normalizedBuildingId
-        )
-        .map((doc) => ({
-          id: doc.id,
-          title: doc.title,
-          document_type: doc.document_type,
-          file_url: doc.file_url,
-          created_at: doc.created_at,
-        }));
-      setDocuments(scopedDocuments);
-      setDataLastUpdated(
-        computePortalDataLastUpdated([
-          ...scopedFaults.flatMap((fault) => [fault.reportedAt, fault.resolvedAt]),
-          ...scopedDocuments.map((doc) => doc.created_at),
-          new Date().toISOString(),
-        ])
-      );
-    } else {
-      setDocuments([]);
-      setDataLastUpdated(
-        computePortalDataLastUpdated([
-          ...scopedFaults.flatMap((fault) => [fault.reportedAt, fault.resolvedAt]),
-          new Date().toISOString(),
-        ])
-      );
-    }
-
+    setRequestedBuildingId(data.building.id);
+    setBuildingResolve(buildBuildingResolveFromBootstrap(data));
+    setElevators(data.elevators);
+    setFaults(data.faults);
+    setScopeLabel(data.scopeLabel);
+    setDocuments(data.documents);
+    setDataLastUpdated(data.dataLastUpdated);
     setLoading(false);
   }, [token]);
 
@@ -291,15 +205,14 @@ export default function ClientAccessPageContent({
     if (!session || !permissions?.can_view_building_dashboard) return;
     if (loginLoggedRef.current) return;
     loginLoggedRef.current = true;
-    void logClientPortalActivity(
-      session.user.id,
-      CLIENT_PORTAL_ACTIVITY.LOGIN,
-      JSON.stringify({
+    void logClientPortalActivityApi(token, {
+      actionType: CLIENT_PORTAL_ACTIVITY.LOGIN,
+      actionDetails: JSON.stringify({
         building_id: session.access.building_id,
         loaded_building_id: buildingResolve?.loadedBuildingId ?? null,
-      })
-    );
-  }, [session, permissions, buildingResolve]);
+      }),
+    });
+  }, [session, permissions, buildingResolve, token]);
 
   useEffect(() => {
     if (!session || tab !== "history" || !permissions?.can_view_fault_history) {
@@ -307,12 +220,11 @@ export default function ClientAccessPageContent({
     }
     if (faultsViewLoggedRef.current) return;
     faultsViewLoggedRef.current = true;
-    void logClientPortalActivity(
-      session.user.id,
-      CLIENT_PORTAL_ACTIVITY.VIEW_FAULTS,
-      JSON.stringify({ view: "history" })
-    );
-  }, [session, tab, permissions]);
+    void logClientPortalActivityApi(token, {
+      actionType: CLIENT_PORTAL_ACTIVITY.VIEW_FAULTS,
+      actionDetails: JSON.stringify({ view: "history" }),
+    });
+  }, [session, tab, permissions, token]);
 
   useEffect(() => {
     if (!session || tab !== "documents" || !permissions?.can_view_documents) {
@@ -320,12 +232,11 @@ export default function ClientAccessPageContent({
     }
     if (documentsViewLoggedRef.current) return;
     documentsViewLoggedRef.current = true;
-    void logClientPortalActivity(
-      session.user.id,
-      CLIENT_PORTAL_ACTIVITY.VIEW_DOCUMENTS,
-      JSON.stringify({ count: documents.length })
-    );
-  }, [session, tab, permissions, documents.length]);
+    void logClientPortalActivityApi(token, {
+      actionType: CLIENT_PORTAL_ACTIVITY.VIEW_DOCUMENTS,
+      actionDetails: JSON.stringify({ count: documents.length }),
+    });
+  }, [session, tab, permissions, documents.length, token]);
 
   const stats = useMemo(
     () => computeClientPortalStats(elevators, faults),
@@ -336,12 +247,13 @@ export default function ClientAccessPageContent({
     if (!session || !permissions?.can_view_availability) return;
     if (availabilityViewLoggedRef.current) return;
     availabilityViewLoggedRef.current = true;
-    void logClientPortalActivity(
-      session.user.id,
-      CLIENT_PORTAL_ACTIVITY.VIEW_AVAILABILITY,
-      JSON.stringify({ availability: stats.monthlyAvailabilityPercent })
-    );
-  }, [session, permissions, stats.monthlyAvailabilityPercent]);
+    void logClientPortalActivityApi(token, {
+      actionType: CLIENT_PORTAL_ACTIVITY.VIEW_AVAILABILITY,
+      actionDetails: JSON.stringify({
+        availability: stats.monthlyAvailabilityPercent,
+      }),
+    });
+  }, [session, permissions, stats.monthlyAvailabilityPercent, token]);
 
   const effectiveElevators = useMemo(
     () => getEffectiveElevators(elevators, faults.filter((f) => !isClosedFault(f))),
@@ -408,7 +320,9 @@ export default function ClientAccessPageContent({
 
   function handleLogout() {
     if (!session) return;
-    void logClientPortalActivity(session.user.id, CLIENT_PORTAL_ACTIVITY.LOGOUT);
+    void logClientPortalActivityApi(token, {
+      actionType: CLIENT_PORTAL_ACTIVITY.LOGOUT,
+    });
     setGateMessage(LOGOUT_MESSAGE);
     setSession(null);
     setShowReportForm(false);
@@ -419,20 +333,21 @@ export default function ClientAccessPageContent({
   function handleOpenReportForm() {
     if (!session) return;
     setShowReportForm(true);
-    void logClientPortalActivity(
-      session.user.id,
-      CLIENT_PORTAL_ACTIVITY.OPEN_FAULT,
-      JSON.stringify({ action: "open_form" })
-    );
+    void logClientPortalActivityApi(token, {
+      actionType: CLIENT_PORTAL_ACTIVITY.OPEN_FAULT,
+      actionDetails: JSON.stringify({ action: "open_form" }),
+    });
   }
 
   function handleReportSubmitted(ticketNumber: string) {
     if (!session) return;
-    void logClientPortalActivity(
-      session.user.id,
-      CLIENT_PORTAL_ACTIVITY.OPEN_FAULT,
-      JSON.stringify({ action: "submit", ticket_number: ticketNumber })
-    );
+    void logClientPortalActivityApi(token, {
+      actionType: CLIENT_PORTAL_ACTIVITY.OPEN_FAULT,
+      actionDetails: JSON.stringify({
+        action: "submit",
+        ticket_number: ticketNumber,
+      }),
+    });
     setShowReportForm(false);
     setRefreshKey((value) => value + 1);
   }
@@ -444,13 +359,12 @@ export default function ClientAccessPageContent({
 
   function handleFeedbackSubmitted() {
     if (!session) return;
-    void logClientPortalActivity(
-      session.user.id,
-      CLIENT_PORTAL_ACTIVITY.SUBMIT_FEEDBACK,
-      JSON.stringify({
+    void logClientPortalActivityApi(token, {
+      actionType: CLIENT_PORTAL_ACTIVITY.SUBMIT_FEEDBACK,
+      actionDetails: JSON.stringify({
         building_id: buildingResolve?.loadedBuildingId ?? null,
-      })
-    );
+      }),
+    });
     setShowFeedbackForm(false);
     setFeedbackSubmitted(true);
   }
@@ -550,6 +464,7 @@ export default function ClientAccessPageContent({
               <section className="order-1 md:order-2 space-y-3 md:max-w-2xl">
                 <SectionTitle title="דיווח תקלה" />
                 <ClientAccessReportForm
+                  token={token}
                   buildingId={buildingResolve.loadedBuildingId}
                   buildingName={buildingResolve.buildingName}
                   elevators={effectiveElevators}
@@ -587,6 +502,7 @@ export default function ClientAccessPageContent({
               <section className="order-1 md:order-2 space-y-3 md:max-w-2xl">
                 <SectionTitle title="שליחת משוב" />
                 <FeedbackForm
+                  portalToken={token}
                   buildingId={buildingResolve.loadedBuildingId}
                   buildingName={buildingResolve.buildingName}
                   buildingCode={buildingResolve.ctx.building.buildingCode}
@@ -762,6 +678,7 @@ export default function ClientAccessPageContent({
 
         {tab === "statistics" && permissions.can_view_statistics && (
           <ClientPortalStatisticsSection
+            portalToken={token}
             buildingId={buildingResolve.loadedBuildingId}
             buildingName={buildingResolve.buildingName}
             access={session.access}

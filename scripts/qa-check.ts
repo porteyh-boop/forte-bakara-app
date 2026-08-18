@@ -3782,15 +3782,16 @@ assert(
     clientPortalPageSource.includes("אין לך הרשאה לגשת לפורטל") &&
     clientPortalPageSource.includes("דווח תקלה") &&
     clientPortalPageSource.includes("ClientPortalInstallPrompt") &&
-    clientPortalPageSource.includes("getClientPermissionsOrDefaults") &&
-    clientPortalPageSource.includes("resolveClientPortalBuilding") &&
+    clientPortalPageSource.includes("fetchClientPortalBootstrap") &&
     clientPortalPageSource.includes("CLIENT_PORTAL_BUILDING_NOT_FOUND_TITLE") &&
     clientPortalPageSource.includes("resolveClientWelcomeMessage") &&
     clientPortalPageSource.includes("formatClientPortalLastUpdated") &&
     clientPortalPageSource.includes("עודכן לאחרונה") &&
     !clientPortalPageSource.includes("getBuildingDataset") &&
+    !clientPortalPageSource.includes("getClientAccessByToken") &&
+    !clientPortalPageSource.includes("resolveClientPortalBuilding") &&
     !clientPortalPageSource.includes("שלום {session.user.name}"),
-  "פורטל לקוח: UI עם אכיפת הרשאות, ללא getBuildingDataset"
+  "פורטל לקוח: UI עם אכיפת הרשאות, bootstrap דרך server API"
 );
 
 assert(
@@ -3826,9 +3827,10 @@ const clientPortalReportSource = fs.readFileSync(
   "utf8"
 );
 assert(
-  clientPortalReportSource.includes("saveClientPortalFault") &&
-    clientPortalReportSource.includes("allowImageUpload"),
-  "פורטל לקוח: דיווח עם מקור Client Portal"
+  clientPortalReportSource.includes("submitClientPortalFault") &&
+    clientPortalReportSource.includes("allowImageUpload") &&
+    clientPortalReportSource.includes("token: string"),
+  "פורטל לקוח: דיווח עם server API + token"
 );
 
 const clientPortalLibSource = fs.readFileSync(
@@ -3847,10 +3849,14 @@ const clientPortalPilotCloudSource = fs.readFileSync(
   path.join(process.cwd(), "lib/pilot-cloud.ts"),
   "utf8"
 );
+const clientPortalServerSource = fs.readFileSync(
+  path.join(process.cwd(), "lib/client-portal-server.ts"),
+  "utf8"
+);
 
 assert(
-  clientPortalReportSource.includes("await saveClientPortalFault") &&
-    !clientPortalReportSource.includes("void saveClientPortalFault") &&
+  clientPortalReportSource.includes("await submitClientPortalFault") &&
+    !clientPortalReportSource.includes("void submitClientPortalFault") &&
     clientPortalReportSource.includes("trySaveSubmittedReport") &&
     clientPortalReportSource.includes("finally") &&
     clientPortalReportSource.includes("setSubmitting(false)") &&
@@ -3859,8 +3865,8 @@ assert(
     clientPortalReportSource.includes("if (!result.ok)") &&
     clientPortalReportSource.match(/setSubmitted\(true\)/) &&
     clientPortalReportSource.indexOf("setSubmitted(true)") >
-      clientPortalReportSource.indexOf("await saveClientPortalFault"),
-  "פורטל לקוח: submit ממתין ל-cloud save — success רק אחרי INSERT"
+      clientPortalReportSource.indexOf("await submitClientPortalFault"),
+  "פורטל לקוח: submit ממתין ל-server API — success רק אחרי INSERT"
 );
 assert(
   clientPortalReportSource.includes("disabled={!isValid || submitting}") &&
@@ -3872,7 +3878,13 @@ assert(
     clientPortalLibSource.includes('ok: true; fault: PilotCloudFault') &&
     clientPortalLibSource.includes('ok: false; reason:') &&
     clientPortalLibSource.includes("isPilotCloudConfigured"),
-  "פורטל לקוח: saveClientPortalFault מחזיר success/failure מפורש"
+  "פורטל לקוח: saveClientPortalFault (legacy lib) — נשמר ל-Master/legacy"
+);
+assert(
+  fs.existsSync(path.join(process.cwd(), "lib/client-portal-api-client.ts")) &&
+    fs.existsSync(path.join(process.cwd(), "lib/client-portal-server.ts")) &&
+    fs.existsSync(path.join(process.cwd(), "lib/client-portal-api-auth.ts")),
+  "פורטל לקוח: שכבת server API + auth קיימת"
 );
 assert(
   reportStorageSource.includes("trySaveSubmittedReport") &&
@@ -3884,13 +3896,12 @@ assert(
 assert(
   clientPortalReportSource.includes("trySaveSubmittedReport(fault, buildingId)") &&
     clientPortalReportSource.indexOf("trySaveSubmittedReport(fault") >
-      clientPortalReportSource.indexOf("await saveClientPortalFault"),
-  "פורטל לקוח: localStorage רק אחרי cloud success"
+      clientPortalReportSource.indexOf("await submitClientPortalFault"),
+  "פורטל לקוח: localStorage רק אחרי server success"
 );
 assert(
-  clientPortalPilotCloudSource.includes("dispatchFaultNotification") &&
-    clientPortalPilotCloudSource.indexOf("dispatchFaultNotification") >
-      clientPortalPilotCloudSource.indexOf("if (error)") &&
+  clientPortalServerSource.includes("dispatchFaultCreatedNotificationServer") &&
+    clientPortalServerSource.includes("void dispatchFaultCreatedNotificationServer") &&
     faultNotificationClientSource.includes("Never throws") &&
     faultNotificationClientSource.includes('void fetch("/api/fault-notify"'),
   "פורטל לקוח: Telegram fire-and-forget — לא חוסם fault save"
@@ -5354,7 +5365,8 @@ for (const file of clientPagesForInspector) {
   if (
     file === clientAccessPortalPage &&
     content.includes("can_view_documents") &&
-    content.includes("getAllDocuments")
+    (content.includes("getAllDocuments") ||
+      content.includes("fetchClientPortalBootstrap"))
   ) {
     continue;
   }
@@ -5372,9 +5384,10 @@ assert(
 
 const clientAccessPortalContent = fs.readFileSync(clientAccessPortalPage, "utf8");
 assert(
-  clientAccessPortalContent.includes("filterClientVisibleDocuments") &&
-    clientAccessPortalContent.includes("can_view_documents"),
-  "Document Center: פורטל לקוח מציג מסמכים client בלבד"
+  clientAccessPortalContent.includes("fetchClientPortalBootstrap") &&
+    clientAccessPortalContent.includes("can_view_documents") &&
+    clientPortalServerSource.includes('.eq("visibility", "client")'),
+  "Document Center: פורטל לקוח מציג מסמכים client בלבד (server-side filter)"
 );
 
 const documentInspectorMetaMigration = path.join(
@@ -6905,6 +6918,38 @@ assert(
     validateCustomBusinessPeriod("2026-08-20", "2026-08-01") != null,
   "Business Dashboard: custom range validation ללא איפוס dashboard"
 );
+
+console.log("\n=== Client Portal Security QA (Phase 1) ===");
+const securityQa = spawnSync("npx", ["tsx", "scripts/qa-client-portal-security.ts"], {
+  stdio: "inherit",
+  shell: true,
+  cwd: process.cwd(),
+});
+if (securityQa.status !== 0) {
+  failed += 1;
+  console.error("Client Portal Security QA נכשל");
+} else {
+  passed += 1;
+  console.log("Client Portal Security QA עבר");
+}
+
+console.log("\n=== Master V2 Client Access Security QA (Phase 1.5B-1) ===");
+const masterClientSecurityQa = spawnSync(
+  "npx",
+  ["tsx", "scripts/qa-master-client-access-security.ts"],
+  {
+    stdio: "inherit",
+    shell: true,
+    cwd: process.cwd(),
+  }
+);
+if (masterClientSecurityQa.status !== 0) {
+  failed += 1;
+  console.error("Master V2 Client Access Security QA נכשל");
+} else {
+  passed += 1;
+  console.log("Master V2 Client Access Security QA עבר");
+}
 
 console.log(`\n=== סיכום: ${passed} עברו, ${failed} נכשלו ===`);
 console.log(`=== מיתוג: ${brandFiles.length} קבצים נסרקו ===\n`);

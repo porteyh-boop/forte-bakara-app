@@ -5,8 +5,12 @@ import { useAppVersion } from "@/components/AppVersionProvider";
 import { useBuilding } from "@/components/BuildingProvider";
 import {
   isFeedbackFormValid,
+  saveFeedback,
+  notifyFeedbackUpdated,
+  buildFeedbackFromInput,
   saveFeedbackAndNotify,
 } from "@/lib/feedback-storage";
+import { submitClientPortalFeedback } from "@/lib/client-portal-api-client";
 import {
   FEEDBACK_RATINGS,
   FEEDBACK_SENDER_ROLES,
@@ -25,6 +29,8 @@ interface FeedbackFormProps {
   buildingId?: string;
   buildingName?: string;
   buildingCode?: string;
+  /** Client portal token — when set, feedback is submitted via server API. */
+  portalToken?: string;
 }
 
 function RadioGroup<T extends string | number>({
@@ -76,6 +82,7 @@ export default function FeedbackForm({
   buildingId: buildingIdProp,
   buildingName: buildingNameProp,
   buildingCode: buildingCodeProp,
+  portalToken,
 }: FeedbackFormProps) {
   const { guardSensitiveAction } = useAppVersion();
   const buildingFromContext = useBuilding();
@@ -107,7 +114,7 @@ export default function FeedbackForm({
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
 
@@ -129,6 +136,29 @@ export default function FeedbackForm({
     if (!guardSensitiveAction()) return;
 
     setSubmitting(true);
+
+    if (portalToken) {
+      const apiResult = await submitClientPortalFeedback(portalToken, {
+        senderName: input.senderName,
+        senderRole: input.senderRole,
+        rating: input.rating,
+        wouldUseRegularly: input.wouldUseRegularly,
+        unclearOrMissing: input.unclearOrMissing,
+        expectedFeature: input.expectedFeature,
+        wouldRecommend: input.wouldRecommend,
+        buildingId,
+      });
+      setSubmitting(false);
+      if (!apiResult.ok) {
+        setError("לא ניתן לשמור את המשוב. נסו שוב.");
+        return;
+      }
+      saveFeedback(buildFeedbackFromInput(input, buildingId, buildingName));
+      notifyFeedbackUpdated(buildingId);
+      onSubmitted();
+      return;
+    }
+
     const saved = saveFeedbackAndNotify(input, buildingId, buildingName);
     setSubmitting(false);
 

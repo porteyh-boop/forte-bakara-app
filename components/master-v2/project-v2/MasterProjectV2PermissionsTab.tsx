@@ -16,19 +16,18 @@ import {
 import {
   buildClientAccessUrl,
   CLIENT_ACCESS_STATUS_LABELS,
-  deactivateClientAccess,
   formatClientAccessExpiry,
-  getAllClientUserAccessRecords,
   getClientAccessDisplayStatus,
-  isClientAccessCloudConfigured,
-  reactivateClientAccess,
   type ClientUserAccessListItem,
 } from "@/lib/client-access";
+import { formatClientPermissionsSummary, type ClientPermissionFlags } from "@/lib/client-permissions";
 import {
-  formatClientPermissionsSummary,
-  getClientPermissionsOrDefaults,
-  type ClientPermissionFlags,
-} from "@/lib/client-permissions";
+  deactivateMasterClientAccess,
+  getMasterClientPermissionsOrDefaults,
+  isMasterClientAccessConfigured,
+  listMasterClientAccessRecords,
+  reactivateMasterClientAccess,
+} from "@/lib/master-client-access-api";
 import { getAllCloudElevators } from "@/lib/buildings-cloud";
 import { getBuildingDataset } from "@/lib/buildings";
 import {
@@ -80,7 +79,7 @@ function resolveContactMeta(
 export default function MasterProjectV2PermissionsTab({
   buildingId,
 }: MasterProjectV2PermissionsTabProps) {
-  const cloudReady = isClientAccessCloudConfigured();
+  const cloudReady = isMasterClientAccessConfigured();
   const contactsConfigured = isProjectContactsConfigured();
 
   const [records, setRecords] = useState<ClientUserAccessListItem[]>([]);
@@ -153,7 +152,7 @@ export default function MasterProjectV2PermissionsTab({
     }
 
     setLoading(true);
-    const rows = await getAllClientUserAccessRecords();
+    const rows = await listMasterClientAccessRecords();
     setRecords(rows);
 
     const buildingRows = rows.filter(
@@ -161,7 +160,7 @@ export default function MasterProjectV2PermissionsTab({
     );
     const permissionEntries = await Promise.all(
       buildingRows.map(async (item) => {
-        const flags = await getClientPermissionsOrDefaults(item.user.id);
+        const flags = await getMasterClientPermissionsOrDefaults(item.user.id);
         return [item.user.id, flags] as const;
       })
     );
@@ -203,7 +202,7 @@ export default function MasterProjectV2PermissionsTab({
 
   async function handleDeactivate(userId: string) {
     setActionId(userId);
-    const ok = await deactivateClientAccess(userId);
+    const ok = await deactivateMasterClientAccess(userId);
     setActionId(null);
     setMessage(ok ? "הגישה הושבתה" : "השבתת הגישה נכשלה");
     if (ok) await refresh();
@@ -211,7 +210,7 @@ export default function MasterProjectV2PermissionsTab({
 
   async function handleReactivate(userId: string) {
     setActionId(userId);
-    const ok = await reactivateClientAccess(userId);
+    const ok = await reactivateMasterClientAccess(userId);
     setActionId(null);
     setMessage(ok ? "הגישה הופעלה מחדש" : "הפעלה מחדש נכשלה");
     if (ok) await refresh();
@@ -380,6 +379,7 @@ export default function MasterProjectV2PermissionsTab({
           clientUserId={permissionsClient.id}
           clientName={permissionsClient.name}
           open={Boolean(permissionsClient)}
+          useMasterApi
           onClose={() => setPermissionsClient(null)}
           onSaved={() => {
             setMessage("ההרשאות נשמרו");

@@ -17,10 +17,11 @@ import {
   REPORT_SAVED_HEADLINE,
   REPORT_SAVED_INFO,
 } from "@/lib/pilot-copy";
-import { saveClientPortalFault } from "@/lib/client-portal";
+import { submitClientPortalFault } from "@/lib/client-portal-api-client";
 import type { ReportImageAttachment } from "@/lib/report-image";
 
 interface ClientAccessReportFormProps {
+  token: string;
   buildingId: string;
   buildingName: string;
   elevators: Elevator[];
@@ -31,6 +32,7 @@ interface ClientAccessReportFormProps {
 }
 
 export default function ClientAccessReportForm({
+  token,
   buildingId,
   buildingName,
   elevators,
@@ -91,15 +93,12 @@ export default function ClientAccessReportForm({
     );
 
     try {
-      const result = await saveClientPortalFault({
+      const result = await submitClientPortalFault(token, {
         buildingId,
-        buildingName,
         elevatorId: fault.elevatorId,
-        elevatorName: fault.elevatorName,
         faultType: fault.type,
         description: fault.description,
         isDisabled: Boolean(fault.isDisabled),
-        status: fault.status,
         ticketNumber: fault.ticketNumber,
         imageData: fault.image?.dataUrl ?? null,
       });
@@ -112,7 +111,7 @@ export default function ClientAccessReportForm({
       trySaveSubmittedReport(fault, buildingId);
 
       const savedTicket =
-        result.fault.ticket_number ?? fault.ticketNumber ?? "";
+        result.fault.ticketNumber ?? fault.ticketNumber ?? "";
       setTicketNumber(savedTicket);
       setSubmitted(true);
       onSubmitted?.();

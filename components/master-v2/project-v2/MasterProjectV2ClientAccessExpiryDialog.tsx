@@ -1,10 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  updateClientAccessScope,
-  type ClientAccessLevel,
-} from "@/lib/client-access";
+import { type ClientAccessLevel } from "@/lib/client-access";
+import { updateMasterClientAccessScope } from "@/lib/master-client-access-api";
 
 interface MasterProjectV2ClientAccessExpiryDialogProps {
   open: boolean;
@@ -61,7 +59,7 @@ export default function MasterProjectV2ClientAccessExpiryDialog({
         ? new Date(`${expiresAt}T23:59:59`).toISOString()
         : null;
 
-    const updated = await updateClientAccessScope({
+    const updated = await updateMasterClientAccessScope({
       userId: clientUserId,
       buildingId,
       accessLevel,
