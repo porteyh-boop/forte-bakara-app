@@ -1,10 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { buildClientPortalManifestPath } from "@/lib/client-portal-manifest";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+}
+
+interface ClientPortalInstallPromptProps {
+  token: string;
 }
 
 function isIosDevice(): boolean {
@@ -21,11 +26,20 @@ function isStandaloneDisplay(): boolean {
   );
 }
 
-export default function ClientPortalInstallPrompt() {
+function readActiveManifestHref(): string | null {
+  if (typeof document === "undefined") return null;
+  return document.querySelector('link[rel="manifest"]')?.getAttribute("href") ?? null;
+}
+
+export default function ClientPortalInstallPrompt({
+  token,
+}: ClientPortalInstallPromptProps) {
+  const expectedManifestPath = buildClientPortalManifestPath(token);
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
   const [showIosHint, setShowIosHint] = useState(false);
   const [installed, setInstalled] = useState(false);
+  const [manifestReady, setManifestReady] = useState(false);
 
   useEffect(() => {
     if (isStandaloneDisplay()) {
@@ -33,21 +47,35 @@ export default function ClientPortalInstallPrompt() {
       return;
     }
 
+    function syncManifestReady() {
+      setManifestReady(readActiveManifestHref() === expectedManifestPath);
+    }
+
+    syncManifestReady();
+
     function handleBeforeInstall(event: Event) {
+      syncManifestReady();
+      if (readActiveManifestHref() !== expectedManifestPath) {
+        return;
+      }
       event.preventDefault();
       setDeferredPrompt(event as BeforeInstallPromptEvent);
     }
 
+    const observer = new MutationObserver(syncManifestReady);
+    observer.observe(document.head, { childList: true, subtree: true });
+
     window.addEventListener("beforeinstallprompt", handleBeforeInstall);
     return () => {
+      observer.disconnect();
       window.removeEventListener("beforeinstallprompt", handleBeforeInstall);
     };
-  }, []);
+  }, [expectedManifestPath]);
 
   if (installed) return null;
 
   async function handleInstall() {
-    if (deferredPrompt) {
+    if (deferredPrompt && manifestReady) {
       await deferredPrompt.prompt();
       await deferredPrompt.userChoice;
       setDeferredPrompt(null);
@@ -59,7 +87,8 @@ export default function ClientPortalInstallPrompt() {
     }
   }
 
-  const canShowButton = Boolean(deferredPrompt) || isIosDevice();
+  const canShowAndroidInstall = Boolean(deferredPrompt) && manifestReady;
+  const canShowButton = canShowAndroidInstall || isIosDevice();
   if (!canShowButton) return null;
 
   return (
@@ -78,6 +107,7 @@ export default function ClientPortalInstallPrompt() {
       {showIosHint && (
         <p className="text-xs text-gray-text bg-gray-light rounded-lg px-3 py-2">
           ב-iPhone/iPad: לחצו על שיתוף (Share) ובחרו &quot;הוסף למסך הבית&quot;.
+          הקיצור ישמור את הקישור האישי שלכם לפורטל.
         </p>
       )}
     </div>

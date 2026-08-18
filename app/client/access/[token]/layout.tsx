@@ -1,15 +1,10 @@
 import type { Metadata, Viewport } from "next";
-import { BRAND_APP } from "@/lib/brand";
-
-export const metadata: Metadata = {
-  title: "פורטל לקוח",
-  robots: { index: false, follow: false },
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "black-translucent",
-    title: BRAND_APP,
-  },
-};
+import ClientPortalManifestBinder from "@/components/ClientPortalManifestBinder";
+import {
+  buildClientPortalAppleWebAppTitle,
+  buildClientPortalManifestPath,
+} from "@/lib/client-portal-manifest";
+import { resolveClientPortalManifestLabels } from "@/lib/client-portal-manifest-labels";
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -18,10 +13,41 @@ export const viewport: Viewport = {
   themeColor: "#0d1b3e",
 };
 
-export default function ClientAccessLayout({
-  children,
-}: {
+interface ClientAccessLayoutProps {
   children: React.ReactNode;
-}) {
-  return children;
+  params: Promise<{ token: string }>;
+}
+
+export async function generateMetadata({
+  params,
+}: Pick<ClientAccessLayoutProps, "params">): Promise<Metadata> {
+  const { token: rawToken } = await params;
+  const token = decodeURIComponent(rawToken);
+  const labels = await resolveClientPortalManifestLabels(token);
+
+  return {
+    title: "פורטל לקוח",
+    robots: { index: false, follow: false },
+    manifest: buildClientPortalManifestPath(token),
+    appleWebApp: {
+      capable: true,
+      statusBarStyle: "black-translucent",
+      title: buildClientPortalAppleWebAppTitle(labels),
+    },
+  };
+}
+
+export default async function ClientAccessLayout({
+  children,
+  params,
+}: ClientAccessLayoutProps) {
+  const { token: rawToken } = await params;
+  const token = decodeURIComponent(rawToken);
+
+  return (
+    <>
+      <ClientPortalManifestBinder token={token} />
+      {children}
+    </>
+  );
 }

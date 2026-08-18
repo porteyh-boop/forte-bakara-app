@@ -711,7 +711,7 @@ export default function ClientAccessPageContent({
             </div>
 
             <div className="order-5">
-              <ClientPortalInstallPrompt />
+              <ClientPortalInstallPrompt token={token} />
             </div>
           </section>
         )}

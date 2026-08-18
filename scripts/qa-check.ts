@@ -149,6 +149,11 @@ import {
   type ClientAccessSession,
 } from "../lib/client-access";
 import {
+  buildClientPortalManifestDocument,
+  buildClientPortalManifestIdentity,
+  buildClientPortalManifestPath,
+} from "../lib/client-portal-manifest";
+import {
   CLIENT_PERMISSION_KEYS,
   CLIENT_PERMISSION_LABELS,
   DEFAULT_CLIENT_PERMISSIONS,
@@ -3334,6 +3339,128 @@ assert(
     !clientAccessSource.includes("MasterPageContent") &&
     isClientAccessPath(buildClientAccessPath(sampleToken)),
   "גישת לקוח: אין חשיפה ל-Master"
+);
+
+const tokenA = generateAccessToken();
+const tokenB = generateAccessToken();
+const identityA = buildClientPortalManifestIdentity(tokenA);
+const identityB = buildClientPortalManifestIdentity(tokenB);
+const manifestA = buildClientPortalManifestDocument(tokenA, {
+  buildingName: "מגדל דוד 25",
+});
+const manifestB = buildClientPortalManifestDocument(tokenB, {
+  buildingName: "בניין ב",
+});
+const invalidManifest = buildClientPortalManifestDocument("invalid-token-xyz");
+
+assert(
+  identityA.start_url === buildClientAccessPath(tokenA) &&
+    identityB.start_url === buildClientAccessPath(tokenB) &&
+    identityA.start_url !== identityB.start_url,
+  "פורטל PWA: start_url ייחודי לכל token"
+);
+assert(
+  identityA.id === buildClientAccessPath(tokenA) &&
+    identityA.id !== identityB.id,
+  "פורטל PWA: id ייחודי לכל token"
+);
+assert(
+  identityA.scope === `${buildClientAccessPath(tokenA)}/` &&
+    identityB.scope === `${buildClientAccessPath(tokenB)}/`,
+  "פורטל PWA: scope מסתיים ב-/ לכל token"
+);
+const prefixCollisionShort = "aaaa1111bbbb";
+const prefixCollisionLong = "aaaa1111bbbbX";
+const narrowScope = `${buildClientAccessPath(prefixCollisionShort)}/`;
+const longTokenPath = buildClientAccessPath(prefixCollisionLong);
+assert(
+  !longTokenPath.startsWith(narrowScope),
+  "פורטל PWA: scope עם / בסוף מונע prefix collision בין tokens"
+);
+assert(
+  manifestA.start_url === identityA.start_url &&
+    manifestB.start_url === identityB.start_url &&
+    manifestA.display === "standalone" &&
+    manifestA.lang === "he" &&
+    manifestA.dir === "rtl",
+  "פורטל PWA: manifest כולל start_url, display, lang, dir"
+);
+assert(
+  buildClientPortalManifestPath(tokenA) ===
+    `${buildClientAccessPath(tokenA)}/manifest.webmanifest`,
+  "פורטל PWA: manifest path תקין"
+);
+assert(
+  String(manifestA.name).includes("מגדל דוד 25") &&
+    String(manifestB.name).includes("בניין ב") &&
+    !String(invalidManifest.name).includes("מגדל דוד 25") &&
+    !String(invalidManifest.name).includes("בניין ב"),
+  "פורטל PWA: שם בניין רק כשמועבר במפורש — לא ב-token לא תקין"
+);
+assert(
+  !clientAccessSource.includes("forte-selected-building") &&
+    !clientAccessSource.includes("DEFAULT_BUILDING_ID") &&
+    !clientAccessSource.includes("readPersistedBuildingId"),
+  "פורטל לקוח: אין תלות ב-localStorage של האפליקציה הראשית"
+);
+
+const clientPortalManifestRoute = path.join(
+  process.cwd(),
+  "app/client/access/[token]/manifest.webmanifest/route.ts"
+);
+const clientPortalLayout = path.join(
+  process.cwd(),
+  "app/client/access/[token]/layout.tsx"
+);
+const globalManifest = path.join(process.cwd(), "app/manifest.ts");
+const clientPortalManifestBinder = path.join(
+  process.cwd(),
+  "components/ClientPortalManifestBinder.tsx"
+);
+const clientPortalInstallPrompt = path.join(
+  process.cwd(),
+  "components/ClientPortalInstallPrompt.tsx"
+);
+
+assert(fs.existsSync(clientPortalManifestRoute), "פורטל PWA: manifest route קיים");
+const clientPortalManifestRouteSource = fs.readFileSync(
+  clientPortalManifestRoute,
+  "utf8"
+);
+assert(
+  clientPortalManifestRouteSource.includes("resolveClientPortalManifestLabels") &&
+    clientPortalManifestRouteSource.includes("buildClientPortalManifestDocument") &&
+    !clientPortalManifestRouteSource.includes("service_role"),
+  "פורטל PWA: manifest route מאובטח ולא משתמש ב-service_role"
+);
+
+const clientPortalLayoutSource = fs.readFileSync(clientPortalLayout, "utf8");
+assert(
+  clientPortalLayoutSource.includes("buildClientPortalManifestPath") &&
+    clientPortalLayoutSource.includes("ClientPortalManifestBinder") &&
+    clientPortalLayoutSource.includes("resolveClientPortalManifestLabels"),
+  "פורטל PWA: layout מחבר manifest ייחודי ל-token"
+);
+
+const globalManifestSource = fs.readFileSync(globalManifest, "utf8");
+assert(
+  globalManifestSource.includes('start_url: "/"'),
+  "פורטל PWA: manifest גלובלי נשאר עם start_url /"
+);
+
+const manifestBinderSource = fs.readFileSync(clientPortalManifestBinder, "utf8");
+assert(
+  manifestBinderSource.includes('link[rel="manifest"]') &&
+    manifestBinderSource.includes("buildClientPortalManifestPath"),
+  "פורטל PWA: binder מחליף manifest גלובלי"
+);
+
+const installPromptSource = fs.readFileSync(clientPortalInstallPrompt, "utf8");
+assert(
+  installPromptSource.includes("buildClientPortalManifestPath") &&
+    installPromptSource.includes("expectedManifestPath") &&
+    clientAccessSource.includes("<ClientPortalInstallPrompt token={token}"),
+  "פורטל PWA: install prompt משתמש ב-manifest של token"
 );
 
 const clientAccessLib = fs.readFileSync(
