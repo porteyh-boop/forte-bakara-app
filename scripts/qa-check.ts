@@ -398,6 +398,16 @@ import {
   uncompleteWorkflowStep,
 } from "../lib/project-workflow";
 import { computeProjectFinancialSummary } from "../lib/project-financial";
+import {
+  buildBusinessDashboard,
+  hasBusinessFinancialData,
+  resolveBusinessPeriodRange,
+  validateCustomBusinessPeriod,
+} from "../lib/business-dashboard";
+import {
+  buildMasterProjectV2Path,
+  MASTER_BUSINESS_PATH,
+} from "../lib/master-project-v2-routes";
 import type { FeedbackSubmissionInput } from "../lib/types";
 
 let passed = 0;
@@ -6507,6 +6517,219 @@ assert(
   buildingsCloudSource.includes("order_amount") &&
     buildingsCloudSource.includes("orderAmount"),
   "Project Financial: buildings-cloud מחובר לשדות הזמנה"
+);
+
+const businessDashboardSource = fs.readFileSync(
+  path.join(process.cwd(), "lib/business-dashboard.ts"),
+  "utf8"
+);
+const businessDashboardServerSource = fs.readFileSync(
+  path.join(process.cwd(), "lib/business-dashboard-server.ts"),
+  "utf8"
+);
+const businessDashboardCloudSource = fs.readFileSync(
+  path.join(process.cwd(), "lib/business-dashboard-cloud.ts"),
+  "utf8"
+);
+const businessDashboardApiSource = fs.readFileSync(
+  path.join(process.cwd(), "app/forte/api/business-dashboard/route.ts"),
+  "utf8"
+);
+const masterBusinessViewSource = fs.readFileSync(
+  path.join(process.cwd(), "components/master-v2/MasterBusinessView.tsx"),
+  "utf8"
+);
+
+const qaToday = new Date(2026, 7, 18);
+const qaAugustPeriod = resolveBusinessPeriodRange("month", qaToday);
+const qaJulyPeriod = resolveBusinessPeriodRange("prev_month", qaToday);
+
+const qaBuildings = [
+  {
+    buildingId: "biz-1",
+    name: "פרויקט א",
+    projectNumber: "1001",
+    contactName: "לקוח א",
+    managementCompany: null,
+    orderAmount: 10000,
+    orderDate: "2026-08-05",
+    incomeType: "ייעוץ" as const,
+    nextPaymentDate: "2026-08-25",
+  },
+  {
+    buildingId: "biz-2",
+    name: "פרויקט ב",
+    projectNumber: null,
+    contactName: null,
+    managementCompany: "חברת ניהול",
+    orderAmount: 8000,
+    orderDate: "2026-07-10",
+    incomeType: null,
+    nextPaymentDate: "2020-01-01",
+  },
+  {
+    buildingId: "biz-3",
+    name: "פרויקט ג",
+    projectNumber: null,
+    contactName: "לקוח ג",
+    managementCompany: null,
+    orderAmount: null,
+    orderDate: null,
+    incomeType: null,
+    nextPaymentDate: null,
+  },
+  {
+    buildingId: "biz-4",
+    name: "פרויקט ד",
+    projectNumber: null,
+    contactName: "לקוח ד",
+    managementCompany: null,
+    orderAmount: 6000,
+    orderDate: null,
+    incomeType: "בדיקה" as const,
+    nextPaymentDate: "2026-08-20",
+  },
+  {
+    buildingId: "biz-5",
+    name: "פרויקט ה",
+    projectNumber: null,
+    contactName: "לקוח ה",
+    managementCompany: null,
+    orderAmount: 5000,
+    orderDate: "2026-08-01",
+    incomeType: "מכרז" as const,
+    nextPaymentDate: "2026-08-15",
+  },
+];
+
+const qaPayments = [
+  { buildingId: "biz-1", amount: 3000, paymentDate: "2026-08-10" },
+  { buildingId: "biz-1", amount: 1000, paymentDate: "2026-06-01" },
+  { buildingId: "biz-2", amount: 1000, paymentDate: "2026-08-12" },
+  { buildingId: "biz-5", amount: 6000, paymentDate: "2026-08-03" },
+];
+
+const augustDashboard = buildBusinessDashboard({
+  buildings: qaBuildings,
+  payments: qaPayments,
+  period: qaAugustPeriod,
+  today: qaToday,
+});
+
+const julyDashboard = buildBusinessDashboard({
+  buildings: qaBuildings,
+  payments: qaPayments,
+  period: qaJulyPeriod,
+  today: qaToday,
+});
+
+assert(
+  augustDashboard.metrics.totalOrdersInPeriod === 15000 &&
+    julyDashboard.metrics.totalOrdersInPeriod === 8000,
+  "Business Dashboard: הזמנות לפי order_date בתקופה"
+);
+assert(
+  augustDashboard.metrics.totalReceivedInPeriod === 10000 &&
+    julyDashboard.metrics.totalReceivedInPeriod === 0,
+  "Business Dashboard: תשלומים לפי payment_date בתקופה"
+);
+assert(
+  augustDashboard.metrics.balanceDueToday === julyDashboard.metrics.balanceDueToday &&
+    augustDashboard.metrics.balanceDueToday === 19000,
+  "Business Dashboard: יתרה נוכחית אינה מושפעת ממסנן התקופה"
+);
+assert(
+  augustDashboard.metrics.overdueToday === julyDashboard.metrics.overdueToday &&
+    augustDashboard.metrics.overdueToday === 7000,
+  "Business Dashboard: באיחור אינו מושפע ממסנן התקופה"
+);
+assert(
+  augustDashboard.metrics.expectedIncomingInPeriod === 12000,
+  "Business Dashboard: צפוי להיכנס לפי next_payment_date"
+);
+assert(
+  augustDashboard.rows.find((row) => row.buildingId === "biz-3")?.collectionStatus ===
+    "לא הוגדר" &&
+    augustDashboard.rows.find((row) => row.buildingId === "biz-3")?.balance === null,
+  "Business Dashboard: פרויקט ללא order_amount"
+);
+assert(
+  augustDashboard.metrics.totalOrdersInPeriod === 15000 &&
+    !augustDashboard.incomeTypeSummary.some(
+      (row) => row.incomeTypeLabel === "בדיקה" && row.ordersInPeriod > 0
+    ),
+  "Business Dashboard: order_amount ללא order_date לא נספר בהזמנות בתקופה"
+);
+assert(
+  augustDashboard.rows.find((row) => row.buildingId === "biz-5")?.balance === 0 &&
+    augustDashboard.rows.find((row) => row.buildingId === "biz-5")?.creditBalance ===
+      1000,
+  "Business Dashboard: תשלום יתר — יתרה 0 ויתרת זכות"
+);
+assert(
+  augustDashboard.incomeTypeSummary.some(
+    (row) => row.incomeTypeLabel === "לא מוגדר" && row.receivedInPeriod === 1000
+  ),
+  "Business Dashboard: income_type null מסווג כלא מוגדר"
+);
+assert(
+  validateCustomBusinessPeriod("", "2026-08-01") != null &&
+    validateCustomBusinessPeriod("2026-08-10", "2026-08-01") != null &&
+    validateCustomBusinessPeriod("2026-08-01", "2026-08-10") === null,
+  "Business Dashboard: validation לתקופה מותאמת"
+);
+assert(
+  augustDashboard.projectsWithoutFinancialDataCount === 1 &&
+    hasBusinessFinancialData(0) === true &&
+    hasBusinessFinancialData(null) === false,
+  "Business Dashboard: פרויקט פעיל ללא נתונים כספיים + order_amount=0 נחשב מוגדר"
+);
+assert(
+  businessDashboardServerSource.includes('.eq("is_active", true)') &&
+    businessDashboardServerSource.includes("getAllDemoBuildingIds"),
+  "Business Dashboard: רק פעילים בענן וללא demo/mock"
+);
+assert(
+  buildMasterProjectV2Path("biz-1") ===
+    "/master/project-v2?buildingId=biz-1" &&
+    masterBusinessViewSource.includes("buildMasterProjectV2Path"),
+  "Business Dashboard: routing לפרויקט מטבלת הגבייה"
+);
+assert(
+  businessDashboardApiSource.includes("requireMasterApiSession") &&
+    businessDashboardServerSource.includes("getSupabaseServiceClient") &&
+    !businessDashboardCloudSource.includes("service_role"),
+  "Business Dashboard: API auth + service_role רק בשרת"
+);
+assert(
+  (businessDashboardServerSource.match(/\.from\(/g) ?? []).length === 2 &&
+    !businessDashboardServerSource.includes("for (const building") &&
+    businessDashboardServerSource.includes("Promise.all"),
+  "Business Dashboard: אין N+1 — שני queries קבועים"
+);
+assert(
+  MASTER_BUSINESS_PATH === "/master/business" &&
+    masterProjectV2RoutesSource.includes("MASTER_BUSINESS_PATH") &&
+    masterSidebarSource.includes('label: "עסקי"') &&
+    masterBusinessViewSource.includes('title="עסקי"') &&
+    fs.existsSync(path.join(process.cwd(), "app/master/business/page.tsx")),
+  "Business Dashboard: route + sidebar + UI"
+);
+assert(
+  businessDashboardSource.includes("buildBusinessDashboard") &&
+    businessDashboardSource.includes("computeProjectFinancialSummary") &&
+    masterBusinessViewSource.includes("צפוי להיכנס") &&
+    masterBusinessViewSource.includes("לוח תשלומים עתידי מפורט"),
+  "Business Dashboard: reuse ל-lib כספי + tooltip צפוי להיכנס"
+);
+assert(
+  masterBusinessViewSource.includes("validateCustomBusinessPeriod") &&
+    masterBusinessViewSource.includes("appliedRequest") &&
+    masterBusinessViewSource.includes("handleApplyCustomPeriod") &&
+    !masterBusinessViewSource.includes("setDashboard(null)") &&
+    validateCustomBusinessPeriod("2026-08-01", "2026-08-01") === null &&
+    validateCustomBusinessPeriod("2026-08-20", "2026-08-01") != null,
+  "Business Dashboard: custom range validation ללא איפוס dashboard"
 );
 
 console.log(`\n=== סיכום: ${passed} עברו, ${failed} נכשלו ===`);
