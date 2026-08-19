@@ -4,21 +4,18 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import InspectorFollowUpAlertBanner from "@/components/master-v2/project-v2/InspectorFollowUpAlertBanner";
 import {
-  listAllDocumentInspectorNotifications,
-} from "@/lib/document-inspector-notifications";
-import {
   computeInspectorFollowUpAlerts,
   dismissInspectorFollowUpPopup,
   isInspectorFollowUpPopupDismissed,
   type InspectorFollowUpLetterAlert,
 } from "@/lib/inspector-follow-up-letters";
-import { buildPreparedStagesByReportTrackingId } from "@/lib/inspector-follow-up-prepared-stages";
-import { getAllDocuments } from "@/lib/document-center";
 import {
-  getAllInspectorReports,
-  isInspectorReportTrackingConfigured,
-} from "@/lib/inspector-report-tracking";
+  buildPreparedStagesFromInspectorListResponse,
+  listMasterInspectorReports,
+  mapMasterInspectorReportListItemToRecord,
+} from "@/lib/master-inspector-reports-api";
 import { getAllCloudElevators } from "@/lib/buildings-cloud";
+import { isInspectorReportTrackingConfigured } from "@/lib/inspector-report-tracking";
 
 interface MasterProjectV2InspectorFollowUpPopupProps {
   buildingId: string;
@@ -65,11 +62,9 @@ export default function MasterProjectV2InspectorFollowUpPopup({
     let cancelled = false;
 
     void Promise.all([
-      getAllInspectorReports(),
-      listAllDocumentInspectorNotifications(),
+      listMasterInspectorReports(buildingId),
       getAllCloudElevators(),
-      getAllDocuments(),
-    ]).then(([reports, notifications, elevators, documentsResult]) => {
+    ]).then(([listResult, elevators]) => {
       if (cancelled) return;
 
       const elevatorNameById = new Map<string, string>();
@@ -79,12 +74,12 @@ export default function MasterProjectV2InspectorFollowUpPopup({
         }
       }
 
-      const buildingReports = reports.filter(
-        (report) => report.building_id === buildingId
+      const buildingReports = listResult.reports.map(
+        mapMasterInspectorReportListItemToRecord
       );
-      const preparedByDocumentId = buildPreparedStagesByReportTrackingId({
-        notifications,
-        savedLetters: documentsResult.documents,
+      const preparedByDocumentId = buildPreparedStagesFromInspectorListResponse({
+        notifications: listResult.notifications,
+        preparedLetterStages: listResult.preparedLetterStages,
       });
       const elevatorLabelByReportId: Record<string, string> = {};
       for (const report of buildingReports) {

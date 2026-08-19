@@ -18,14 +18,10 @@ import {
   formatNextInspectionDate,
   formatNextInspectionStatusLabel,
   getNextInspectionDisplayStatus,
-  listAllDocumentInspectorMeta,
-  type DocumentInspectorMetaRecord,
 } from "@/lib/document-inspector-meta";
 import {
   getInspectorNotificationSentLabel,
-  groupNotificationsByDocumentId,
   isInspectorLegacyNotificationType,
-  listAllDocumentInspectorNotifications,
   type DocumentInspectorNotificationRecord,
 } from "@/lib/document-inspector-notifications";
 import {
@@ -36,23 +32,29 @@ import {
   type InspectorFollowUpLetterAlert,
 } from "@/lib/inspector-follow-up-letters";
 import {
-  buildPreparedStagesByReportTrackingId,
   getPreparedStagesForReport,
   resolveInspectorReportTrackingId,
 } from "@/lib/inspector-follow-up-prepared-stages";
-import { listMasterDocumentsByBuilding } from "@/lib/master-documents-api";
+import {
+  buildPreparedStagesFromInspectorListResponse,
+  groupMasterInspectorNotificationsByDocumentId,
+  listMasterInspectorReports,
+  mapMasterInspectorReportListItemToRecord,
+} from "@/lib/master-inspector-reports-api";
+import type {
+  MasterInspectorNotificationDto,
+  MasterPreparedInspectorLetterStageDto,
+} from "@/lib/master-inspector-reports-server";
 import {
   closeInspectorReport,
   deleteInspectorReport,
   formatInspectorDeadline,
   formatInspectorReportDate,
-  getAllInspectorReports,
   getInspectorReportDocumentUrl,
   isInspectorReportTrackingConfigured,
   type InspectorReportRecord,
 } from "@/lib/inspector-report-tracking";
 import { isPilotCloudConfigured } from "@/lib/pilot-cloud";
-import type { DocumentRecord } from "@/lib/document-center";
 
 interface MasterProjectV2InspectionsTabProps {
   buildingId: string;
@@ -98,12 +100,8 @@ function pickActiveFollowUpReports(
 }
 
 function resolveNextInspectionDate(
-  report: InspectorReportRecord,
-  metaByDocumentId: Record<string, DocumentInspectorMetaRecord>
+  report: InspectorReportRecord
 ): string | null {
-  if (report.document_id && metaByDocumentId[report.document_id]) {
-    return metaByDocumentId[report.document_id].next_inspection_date;
-  }
   return report.next_inspection_date;
 }
 
@@ -114,13 +112,16 @@ export default function MasterProjectV2InspectionsTab({
   const cloudReady = isInspectorReportTrackingConfigured();
 
   const [reports, setReports] = useState<InspectorReportRecord[]>([]);
-  const [metaByDocumentId, setMetaByDocumentId] = useState<
-    Record<string, DocumentInspectorMetaRecord>
-  >({});
   const [notificationsByDocumentId, setNotificationsByDocumentId] = useState<
     Record<string, DocumentInspectorNotificationRecord[]>
   >({});
-  const [savedLetters, setSavedLetters] = useState<DocumentRecord[]>([]);
+  const [inspectorMetaDocumentIds, setInspectorMetaDocumentIds] = useState<
+    string[]
+  >([]);
+  const [inspectorFollowUpData, setInspectorFollowUpData] = useState<{
+    notifications: MasterInspectorNotificationDto[];
+    preparedLetterStages: MasterPreparedInspectorLetterStageDto[];
+  }>({ notifications: [], preparedLetterStages: [] });
   const [elevatorOptions, setElevatorOptions] = useState<ElevatorOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionId, setActionId] = useState<string | null>(null);
@@ -147,33 +148,26 @@ export default function MasterProjectV2InspectionsTab({
   const refresh = useCallback(async () => {
     if (!cloudReady) {
       setReports([]);
-      setMetaByDocumentId({});
       setNotificationsByDocumentId({});
+      setInspectorMetaDocumentIds([]);
+      setInspectorFollowUpData({ notifications: [], preparedLetterStages: [] });
       setLoading(false);
       return;
     }
 
     setLoading(true);
-    const [reportRows, metaRows, notificationRows, savedLetterDocuments] =
-      await Promise.all([
-      getAllInspectorReports(),
-      listAllDocumentInspectorMeta(),
-      listAllDocumentInspectorNotifications(),
-      listMasterDocumentsByBuilding(buildingId),
-    ]);
+    const listResult = await listMasterInspectorReports(buildingId);
 
-    const metaMap: Record<string, DocumentInspectorMetaRecord> = {};
-    for (const row of metaRows) {
-      metaMap[row.document_id] = row;
-    }
-
-    setMetaByDocumentId(metaMap);
+    setInspectorMetaDocumentIds(listResult.inspectorMetaDocumentIds);
+    setInspectorFollowUpData({
+      notifications: listResult.notifications,
+      preparedLetterStages: listResult.preparedLetterStages,
+    });
     setNotificationsByDocumentId(
-      groupNotificationsByDocumentId(notificationRows)
+      groupMasterInspectorNotificationsByDocumentId(listResult.notifications)
     );
-    setSavedLetters(savedLetterDocuments);
     setReports(
-      reportRows.filter((report) => report.building_id === buildingId)
+      listResult.reports.map(mapMasterInspectorReportListItemToRecord)
     );
     setLoading(false);
   }, [buildingId, cloudReady]);
@@ -195,12 +189,8 @@ export default function MasterProjectV2InspectionsTab({
   }, [elevatorOptions]);
 
   const preparedByReportTrackingId = useMemo(
-    () =>
-      buildPreparedStagesByReportTrackingId({
-        notifications: Object.values(notificationsByDocumentId).flat(),
-        savedLetters,
-      }),
-    [notificationsByDocumentId, savedLetters]
+    () => buildPreparedStagesFromInspectorListResponse(inspectorFollowUpData),
+    [inspectorFollowUpData]
   );
 
   const elevatorLabelByReportId = useMemo(() => {
@@ -327,7 +317,7 @@ export default function MasterProjectV2InspectionsTab({
     label: string,
     report: InspectorReportRecord
   ) {
-    const nextDate = resolveNextInspectionDate(report, metaByDocumentId);
+    const nextDate = resolveNextInspectionDate(report);
     const nextStatus = getNextInspectionDisplayStatus(nextDate);
 
     return (
@@ -469,10 +459,7 @@ export default function MasterProjectV2InspectionsTab({
           <div className="space-y-3">
             {sortedReports.map((report) => {
               const documentUrl = getInspectorReportDocumentUrl(report);
-              const nextDate = resolveNextInspectionDate(
-                report,
-                metaByDocumentId
-              );
+              const nextDate = resolveNextInspectionDate(report);
               const nextStatus = getNextInspectionDisplayStatus(nextDate);
               const documentId = resolveInspectorReportTrackingId(report);
               const prepared = getPreparedStagesForReport(
@@ -643,6 +630,7 @@ export default function MasterProjectV2InspectionsTab({
         emptyMessage="אין מסמכי בדיקה נוספים. ניתן להעלות אישור בודק, התכתבות וכו׳."
         additionalInspectionOnly
         compact
+        inspectorMetaDocumentIds={inspectorMetaDocumentIds}
       />
 
       <MasterProjectV2InspectorReportDialog

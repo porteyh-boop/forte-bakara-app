@@ -603,8 +603,8 @@ async function main(): Promise<void> {
   );
 
   assert(
-    inspectionsSource.includes("listMasterDocumentsByBuilding(buildingId)"),
-    "InspectionsTab: uses master-documents-api list"
+    inspectionsSource.includes("listMasterInspectorReports(buildingId)"),
+    "InspectionsTab: uses master-inspector-reports-api list"
   );
 
   assert(

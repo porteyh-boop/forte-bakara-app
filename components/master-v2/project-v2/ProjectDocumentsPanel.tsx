@@ -12,7 +12,7 @@ import {
   ProjectDocumentVisibilityToggle,
   ProjectDocumentVisibilityUploadField,
 } from "@/components/master-v2/project-v2/ProjectDocumentVisibility";
-import { listAllDocumentInspectorMeta } from "@/lib/document-inspector-meta";
+import { listMasterInspectorReports } from "@/lib/master-inspector-reports-api";
 import {
   DEFAULT_DOCUMENT_VISIBILITY,
   getDocumentTypeLabel,
@@ -54,6 +54,8 @@ interface ProjectDocumentsPanelProps {
   additionalInspectionOnly?: boolean;
   uploadButtonLabel?: string;
   emptyMessage?: string;
+  /** Scoped inspector meta document ids — avoids global meta reads in V2. */
+  inspectorMetaDocumentIds?: readonly string[];
 }
 
 export default function ProjectDocumentsPanel({
@@ -64,6 +66,7 @@ export default function ProjectDocumentsPanel({
   additionalInspectionOnly = false,
   uploadButtonLabel,
   emptyMessage,
+  inspectorMetaDocumentIds: inspectorMetaDocumentIdsProp,
 }: ProjectDocumentsPanelProps) {
   const { guardSensitiveAction } = useAppVersion();
   const cloudReady = isPilotCloudConfigured();
@@ -95,16 +98,27 @@ export default function ProjectDocumentsPanel({
 
     setLoading(true);
     setError(null);
-    const [listDocuments, inspectorMeta] = await Promise.all([
-      listMasterDocumentsByBuilding(buildingId),
-      listAllDocumentInspectorMeta(),
-    ]);
+    const listDocuments = await listMasterDocumentsByBuilding(buildingId);
+
+    let metaIds: string[] = [];
+    if (inspectorMetaDocumentIdsProp !== undefined) {
+      metaIds = [...inspectorMetaDocumentIdsProp];
+    } else if (section === "inspections" || additionalInspectionOnly) {
+      const inspectorList = await listMasterInspectorReports(buildingId);
+      metaIds = inspectorList.inspectorMetaDocumentIds;
+    }
+
     setLoading(false);
 
-    const metaIds = new Set(inspectorMeta.map((row) => row.document_id));
-    setInspectorMetaIds(metaIds);
+    setInspectorMetaIds(new Set(metaIds));
     setAllDocuments(listDocuments);
-  }, [buildingId, cloudReady]);
+  }, [
+    buildingId,
+    cloudReady,
+    section,
+    additionalInspectionOnly,
+    inspectorMetaDocumentIdsProp,
+  ]);
 
   useEffect(() => {
     void refresh();

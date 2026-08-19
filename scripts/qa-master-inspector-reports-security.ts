@@ -1,5 +1,5 @@
 /**
- * Security Phase 1.5B-3D-A — Master V2 inspector report secure create QA.
+ * Security Phase 1.5B-3D-A/3D-B — Master V2 inspector report secure create + read QA.
  * Run: npx tsx scripts/qa-master-inspector-reports-security.ts
  */
 import fs from "fs";
@@ -34,13 +34,17 @@ import {
   validateInspectorReportFile,
 } from "../lib/inspector-report-tracking";
 import {
+  listMasterInspectorReportsByBuildingServer,
   validateMasterInspectorReportCreateMetadata,
 } from "../lib/master-inspector-reports-server";
 import {
   createMasterSessionToken,
   FORTE_MASTER_SESSION_COOKIE,
 } from "../lib/forte-master-api-auth";
-import { POST as createInspectorReportPOST } from "../app/forte/api/master-inspector-reports/route";
+import {
+  GET as listInspectorReportsGET,
+  POST as createInspectorReportPOST,
+} from "../app/forte/api/master-inspector-reports/route";
 
 let passed = 0;
 let failed = 0;
@@ -127,7 +131,9 @@ const FORBIDDEN_RESPONSE_FIELDS = [
 ] as const;
 
 async function main(): Promise<void> {
-  console.log("\n=== Master V2 Inspector Reports Security QA (Phase 1.5B-3D-A) ===\n");
+  console.log(
+    "\n=== Master V2 Inspector Reports Security QA (Phase 1.5B-3D-A/3D-B) ===\n"
+  );
 
   console.log("--- Static wiring ---");
 
@@ -197,6 +203,81 @@ async function main(): Promise<void> {
       routeSource.includes("isAllowedForteApiOrigin") &&
       routeSource.includes("forbidden_field"),
     "master-inspector-reports route: auth + origin + forbidden fields"
+  );
+  assert(
+    routeSource.includes("export async function GET") &&
+      routeSource.includes("listMasterInspectorReportsByBuildingServer"),
+    "master-inspector-reports route: GET list handler"
+  );
+
+  const inspectionsTabSource = read(
+    "components/master-v2/project-v2/MasterProjectV2InspectionsTab.tsx"
+  );
+  const followUpPopupSource = read(
+    "components/master-v2/project-v2/MasterProjectV2InspectorFollowUpPopup.tsx"
+  );
+  const documentsPanelSource = read(
+    "components/master-v2/project-v2/ProjectDocumentsPanel.tsx"
+  );
+
+  assert(
+    inspectionsTabSource.includes("listMasterInspectorReports(buildingId)"),
+    "InspectionsTab: uses scoped listMasterInspectorReports"
+  );
+  assert(
+    !inspectionsTabSource.includes("getAllInspectorReports("),
+    "InspectionsTab: no getAllInspectorReports"
+  );
+  assert(
+    !inspectionsTabSource.includes("listAllDocumentInspectorMeta("),
+    "InspectionsTab: no listAllDocumentInspectorMeta"
+  );
+  assert(
+    !inspectionsTabSource.includes("listAllDocumentInspectorNotifications("),
+    "InspectionsTab: no global notifications read"
+  );
+  assert(
+    !inspectionsTabSource.includes("listMasterDocumentsByBuilding("),
+    "InspectionsTab: no master-documents list for follow-up stages"
+  );
+
+  assert(
+    followUpPopupSource.includes("listMasterInspectorReports(buildingId)"),
+    "FollowUpPopup: uses scoped listMasterInspectorReports"
+  );
+  assert(
+    !followUpPopupSource.includes("getAllInspectorReports("),
+    "FollowUpPopup: no getAllInspectorReports"
+  );
+  assert(
+    !followUpPopupSource.includes("listAllDocumentInspectorNotifications("),
+    "FollowUpPopup: no global notifications read"
+  );
+  assert(
+    !followUpPopupSource.includes("getAllDocuments("),
+    "FollowUpPopup: no getAllDocuments"
+  );
+
+  assert(
+    !documentsPanelSource.includes("listAllDocumentInspectorMeta("),
+    "ProjectDocumentsPanel: no global listAllDocumentInspectorMeta"
+  );
+  assert(
+    documentsPanelSource.includes("listMasterInspectorReports(buildingId)") ||
+      documentsPanelSource.includes("inspectorMetaDocumentIds"),
+    "ProjectDocumentsPanel: scoped inspector meta ids"
+  );
+
+  assert(
+    apiClientSource.includes("listMasterInspectorReports") &&
+      apiClientSource.includes("masterApiFetch"),
+    "master-inspector-reports-api: list via masterApiFetch"
+  );
+  assert(
+    serverSource.includes("listMasterInspectorReportsByBuildingServer") &&
+      serverSource.includes("INSPECTOR_META_READ_COLUMNS") &&
+      serverSource.includes("LEGACY_INSPECTOR_REPORT_READ_COLUMNS"),
+    "master-inspector-reports-server: scoped list column projections"
   );
 
   const legacyTracking = read("lib/inspector-report-tracking.ts");
@@ -303,6 +384,38 @@ async function main(): Promise<void> {
     "validateInspectorReportFile: 20MB ceiling enforced"
   );
 
+  console.log("\n--- GET list API route ---");
+
+  const getNoSession = await listInspectorReportsGET(
+    makeMasterApiRequest("/forte/api/master-inspector-reports?buildingId=md25", {
+      method: "GET",
+    })
+  );
+  assert(getNoSession.status === 401, "GET without Master session → 401");
+
+  const prevSecret = process.env.FORTE_SESSION_SECRET;
+  const prevCode = process.env.MASTER_CODE;
+  process.env.FORTE_SESSION_SECRET = "qa-test-secret";
+  process.env.MASTER_CODE = "qa-test-code";
+  const sessionCookie = masterSessionCookie();
+
+  const getNoBuilding = await listInspectorReportsGET(
+    makeMasterApiRequest("/forte/api/master-inspector-reports", {
+      method: "GET",
+      cookie: sessionCookie ?? undefined,
+    })
+  );
+  assert(getNoBuilding.status === 400, "GET without buildingId → 400");
+
+  const getBadOrigin = await listInspectorReportsGET(
+    makeMasterApiRequest("/forte/api/master-inspector-reports?buildingId=md25", {
+      method: "GET",
+      cookie: sessionCookie ?? undefined,
+      origin: "https://evil.example",
+    })
+  );
+  assert(getBadOrigin.status === 403, "GET invalid origin → 403");
+
   console.log("\n--- API route ---");
 
   const noSession = await createInspectorReportPOST(
@@ -320,12 +433,6 @@ async function main(): Promise<void> {
     })
   );
   assert(badOrigin.status === 403, "invalid origin → 403");
-
-  const prevSecret = process.env.FORTE_SESSION_SECRET;
-  const prevCode = process.env.MASTER_CODE;
-  process.env.FORTE_SESSION_SECRET = "qa-test-secret";
-  process.env.MASTER_CODE = "qa-test-code";
-  const sessionCookie = masterSessionCookie();
 
   if (sessionCookie) {
     const invalidBuildingForm = new FormData();
@@ -454,8 +561,126 @@ async function main(): Promise<void> {
     serverSource.indexOf("export interface MasterInspectorReportDto"),
     serverSource.indexOf("export interface MasterInspectorReportCreateResult")
   );
+  const listDtoInterface = serverSource.slice(
+    serverSource.indexOf("export interface MasterInspectorReportListItemDto"),
+    serverSource.indexOf("export interface MasterInspectorNotificationDto")
+  );
   for (const field of FORBIDDEN_RESPONSE_FIELDS) {
-    assert(!dtoInterface.includes(field), `DTO interface excludes "${field}"`);
+    assert(!dtoInterface.includes(field), `create DTO excludes "${field}"`);
+    assert(!listDtoInterface.includes(field), `list DTO excludes "${field}"`);
+  }
+
+  if (
+    process.env.NEXT_PUBLIC_SUPABASE_URL &&
+    process.env.SUPABASE_SERVICE_ROLE_KEY &&
+    sessionCookie
+  ) {
+    console.log("\n--- GET building isolation (integration) ---");
+
+    const invalidBuildingGet = await listInspectorReportsGET(
+      makeMasterApiRequest("/forte/api/master-inspector-reports?buildingId=", {
+        method: "GET",
+        cookie: sessionCookie,
+      })
+    );
+    assert(invalidBuildingGet.status === 400, "GET invalid buildingId → 400");
+
+    const md25Get = await listInspectorReportsGET(
+      makeMasterApiRequest("/forte/api/master-inspector-reports?buildingId=md25", {
+        method: "GET",
+        cookie: sessionCookie,
+      })
+    );
+    assert(md25Get.status === 200, "GET md25 → 200");
+    const md25Payload = (await md25Get.json()) as Record<string, unknown>;
+    const md25Reports = (md25Payload.reports ?? []) as Array<Record<string, unknown>>;
+    const md25Notifications = (md25Payload.notifications ?? []) as Array<
+      Record<string, unknown>
+    >;
+    const md25Prepared = (md25Payload.preparedLetterStages ?? []) as Array<
+      Record<string, unknown>
+    >;
+
+    assert(
+      md25Reports.every((row) => String(row.building_id).toLowerCase() === "md25"),
+      "md25 GET reports scoped to md25"
+    );
+
+    const sl48Get = await listInspectorReportsGET(
+      makeMasterApiRequest("/forte/api/master-inspector-reports?buildingId=sl48", {
+        method: "GET",
+        cookie: sessionCookie,
+      })
+    );
+    assert(sl48Get.status === 200, "GET sl48 → 200");
+    const sl48Payload = (await sl48Get.json()) as Record<string, unknown>;
+    const sl48Reports = (sl48Payload.reports ?? []) as Array<Record<string, unknown>>;
+
+    assert(
+      sl48Reports.every((row) => String(row.building_id).toLowerCase() === "sl48"),
+      "sl48 GET reports scoped to sl48"
+    );
+
+    const md25Ids = new Set(md25Reports.map((row) => String(row.id)));
+    const sl48Ids = new Set(sl48Reports.map((row) => String(row.id)));
+    const overlap = [...md25Ids].filter((id) => sl48Ids.has(id));
+    assert(overlap.length === 0, "md25 response does not include sl48 report ids");
+
+    const md25FileUrls = md25Reports
+      .map((row) => String(row.file_url ?? ""))
+      .filter(Boolean);
+    const sl48FileUrls = new Set(
+      sl48Reports.map((row) => String(row.file_url ?? "")).filter(Boolean)
+    );
+    assert(
+      md25FileUrls.every((url) => !sl48FileUrls.has(url)),
+      "md25 response does not include sl48 file_url values"
+    );
+
+    const md25Serialized = JSON.stringify(md25Payload);
+    for (const sl48Report of sl48Reports) {
+      const sl48Id = String(sl48Report.id ?? "");
+      if (sl48Id) {
+        assert(!md25Serialized.includes(sl48Id), "md25 response excludes sl48 report id");
+      }
+    }
+
+    assert(
+      !md25Serialized.includes("storage_path"),
+      "GET response excludes storage_path"
+    );
+    assert(
+      !md25Serialized.includes("ai_summary") && !md25Serialized.includes('"ocr_text"'),
+      "GET response excludes OCR/summary fields"
+    );
+    assert(
+      !md25Serialized.includes('"ai_metadata"'),
+      "GET response excludes full ai_metadata"
+    );
+
+    const md25Server = await listMasterInspectorReportsByBuildingServer("md25");
+    assert(md25Server.error === null, "server list md25 succeeds");
+    assert(
+      md25Server.reports.every((row) => row.building_id === "md25"),
+      "server list md25 scoped"
+    );
+
+    const qaArtifactId = "2246c38a-dbc2-47bf-b7f4-469624b104e3";
+    const hasQaArtifact = md25Server.reports.some(
+      (row) => row.document_id === qaArtifactId || row.id === qaArtifactId
+    );
+    assert(hasQaArtifact, "md25 list includes preserved QA artifact report");
+
+    assert(
+      md25Prepared.every((row) => typeof row.reportDocumentId === "string"),
+      "preparedLetterStages slim DTO shape"
+    );
+    assert(
+      md25Notifications.every((row) => typeof row.document_id === "string"),
+      "notifications slim DTO shape"
+    );
+  } else {
+    console.warn("  ⚠ Skipping GET integration tests (service not configured)");
   }
 
   console.log("\n--- Regression: other security suites untouched ---");

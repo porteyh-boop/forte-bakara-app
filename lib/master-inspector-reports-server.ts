@@ -13,10 +13,24 @@ import {
   type CreateDocumentInput,
 } from "@/lib/document-center";
 import {
+  DOCUMENT_INSPECTOR_NOTIFICATIONS_TABLE,
+  type InspectorLetterStage,
+  type InspectorNotificationType,
+} from "@/lib/document-inspector-notifications";
+import {
   buildDocumentInspectorMetaInsertRow,
   DOCUMENT_INSPECTOR_META_TABLE,
   type DocumentInspectorMetaRecord,
 } from "@/lib/document-inspector-meta";
+import {
+  INSPECTOR_REPORTS_TABLE,
+  type InspectorReportSource,
+} from "@/lib/inspector-report-tracking";
+import {
+  MASTER_LETTER_METADATA_KEY,
+  MASTER_LETTER_METADATA_SCHEMA_VERSION,
+} from "@/lib/master-letter-metadata";
+import { MASTER_LETTER_TAG } from "@/lib/master-letters";
 import { parseBuildingIdFilter } from "@/lib/master-client-access-server";
 import { isValidIsoDate } from "@/lib/israeli-date-input";
 import {
@@ -35,6 +49,20 @@ const ELEVATORS_TABLE = "elevators";
 
 const INSPECTOR_REPORT_LIST_COLUMNS =
   "id, building_id, document_type, title, file_name, file_url, tags, visibility, created_at";
+
+const INSPECTOR_DOCUMENT_READ_COLUMNS =
+  "id, building_id, elevator_id, title, file_url";
+
+const INSPECTOR_META_READ_COLUMNS =
+  "document_id, report_date, inspector_name, has_remarks, deadline_at, next_inspection_date, status, closed_at, closure_notes";
+
+const LEGACY_INSPECTOR_REPORT_READ_COLUMNS =
+  "id, building_id, elevator_id, report_date, inspector_name, document_name, document_url, file_url, has_remarks, deadline_at, status, closed_at, closure_notes";
+
+const INSPECTOR_NOTIFICATION_READ_COLUMNS =
+  "document_id, notification_type, sent_at";
+
+const PREPARED_LETTER_READ_COLUMNS = "id, tags, ai_metadata";
 
 export interface MasterInspectorReportCreateInput {
   buildingId: string;
@@ -76,6 +104,44 @@ export interface MasterInspectorReportCreateResult {
     storageDeleted?: boolean;
     documentDeleted?: boolean;
   };
+}
+
+export interface MasterInspectorReportListItemDto {
+  id: string;
+  document_id: string | null;
+  source: InspectorReportSource;
+  building_id: string;
+  elevator_id: string | null;
+  report_date: string;
+  inspector_name: string | null;
+  document_name: string | null;
+  file_url: string | null;
+  document_url: string | null;
+  has_remarks: boolean;
+  deadline_at: string | null;
+  next_inspection_date: string | null;
+  status: InspectorReportStatus;
+  closed_at: string | null;
+  closure_notes: string | null;
+}
+
+export interface MasterInspectorNotificationDto {
+  document_id: string;
+  notification_type: InspectorNotificationType;
+  sent_at: string;
+}
+
+export interface MasterPreparedInspectorLetterStageDto {
+  reportDocumentId: string;
+  letterStage: InspectorLetterStage;
+}
+
+export interface MasterInspectorReportsListResult {
+  reports: MasterInspectorReportListItemDto[];
+  notifications: MasterInspectorNotificationDto[];
+  preparedLetterStages: MasterPreparedInspectorLetterStageDto[];
+  inspectorMetaDocumentIds: string[];
+  error: string | null;
 }
 
 function normalizeOptionalElevatorId(value: unknown): string | null {
@@ -507,6 +573,427 @@ export async function createMasterInspectorReportServer(
 
   return {
     report: mapMasterInspectorReportDto(insertDocumentResult.row, metaResult.meta),
+    error: null,
+  };
+}
+
+function isInspectorNotificationTypeValue(
+  value: string
+): value is InspectorNotificationType {
+  return (
+    value === "day_35" ||
+    value === "day_40" ||
+    value === "day_45_plus" ||
+    value === "letter_1" ||
+    value === "letter_2" ||
+    value === "letter_3"
+  );
+}
+
+function isInspectorLetterStageValue(value: string): value is InspectorLetterStage {
+  return value === "letter_1" || value === "letter_2" || value === "letter_3";
+}
+
+function extractPreparedLetterStageFromAiMetadata(
+  aiMetadata: unknown
+): MasterPreparedInspectorLetterStageDto | null {
+  if (!aiMetadata || typeof aiMetadata !== "object") return null;
+
+  const envelope = aiMetadata as Record<string, unknown>;
+  const letter = envelope[MASTER_LETTER_METADATA_KEY];
+  if (!letter || typeof letter !== "object") return null;
+
+  const data = letter as Record<string, unknown>;
+  if (Number(data.schemaVersion) !== MASTER_LETTER_METADATA_SCHEMA_VERSION) {
+    return null;
+  }
+
+  const followUpRaw = data.inspectorFollowUp;
+  if (!followUpRaw || typeof followUpRaw !== "object") return null;
+
+  const followUp = followUpRaw as Record<string, unknown>;
+  const reportDocumentId = String(followUp.reportDocumentId ?? "").trim();
+  const letterStage = String(followUp.letterStage ?? "").trim();
+  if (!reportDocumentId || !isInspectorLetterStageValue(letterStage)) {
+    return null;
+  }
+
+  return { reportDocumentId, letterStage };
+}
+
+function mapLegacyInspectorReportListItem(
+  row: Record<string, unknown>,
+  buildingId: string
+): MasterInspectorReportListItemDto {
+  const reportDate = String(row.report_date);
+  const normalizedReportDate = reportDate.includes("T")
+    ? reportDate.split("T")[0]
+    : reportDate;
+
+  return {
+    id: String(row.id),
+    document_id: null,
+    source: "legacy",
+    building_id: buildingId,
+    elevator_id: row.elevator_id ? String(row.elevator_id) : null,
+    report_date: normalizedReportDate,
+    inspector_name: row.inspector_name ? String(row.inspector_name) : null,
+    document_name: row.document_name ? String(row.document_name) : null,
+    file_url: row.file_url ? String(row.file_url) : null,
+    document_url: row.document_url ? String(row.document_url) : null,
+    has_remarks: Boolean(row.has_remarks),
+    deadline_at: row.deadline_at ? String(row.deadline_at) : null,
+    next_inspection_date: null,
+    status: row.status === "closed" ? "closed" : "open",
+    closed_at: row.closed_at ? String(row.closed_at) : null,
+    closure_notes: row.closure_notes ? String(row.closure_notes) : null,
+  };
+}
+
+function mapDocumentInspectorReportListItem(
+  documentRow: Record<string, unknown>,
+  meta: DocumentInspectorMetaRecord,
+  buildingId: string
+): MasterInspectorReportListItemDto {
+  return {
+    id: String(documentRow.id),
+    document_id: String(documentRow.id),
+    source: "document",
+    building_id: buildingId,
+    elevator_id: documentRow.elevator_id
+      ? String(documentRow.elevator_id)
+      : null,
+    report_date: meta.report_date,
+    inspector_name: meta.inspector_name,
+    document_name: String(documentRow.title ?? ""),
+    file_url: String(documentRow.file_url ?? "") || null,
+    document_url: null,
+    has_remarks: meta.has_remarks,
+    deadline_at: meta.deadline_at,
+    next_inspection_date: meta.next_inspection_date,
+    status: meta.status,
+    closed_at: meta.closed_at,
+    closure_notes: meta.closure_notes,
+  };
+}
+
+async function listDocumentBasedInspectorReportsForBuildingServer(
+  buildingId: string
+): Promise<{
+  reports: MasterInspectorReportListItemDto[];
+  inspectorMetaDocumentIds: string[];
+  documentIds: string[];
+  error: string | null;
+}> {
+  const client = getSupabaseServiceClient();
+  if (!client) {
+    return {
+      reports: [],
+      inspectorMetaDocumentIds: [],
+      documentIds: [],
+      error: "supabase_service_unconfigured",
+    };
+  }
+
+  const { data: documentRows, error: documentError } = await client
+    .from(DOCUMENTS_TABLE)
+    .select(INSPECTOR_DOCUMENT_READ_COLUMNS)
+    .eq("building_id", buildingId)
+    .eq("document_type", "inspector_report")
+    .order("created_at", { ascending: false });
+
+  if (documentError) {
+    console.warn(
+      "[master-inspector-reports-server] document list failed:",
+      documentError.message
+    );
+    return {
+      reports: [],
+      inspectorMetaDocumentIds: [],
+      documentIds: [],
+      error: documentError.message || "list_failed",
+    };
+  }
+
+  const documents = (documentRows ?? []) as Record<string, unknown>[];
+  const documentIds = documents.map((row) => String(row.id));
+  if (documentIds.length === 0) {
+    return {
+      reports: [],
+      inspectorMetaDocumentIds: [],
+      documentIds: [],
+      error: null,
+    };
+  }
+
+  const { data: metaRows, error: metaError } = await client
+    .from(DOCUMENT_INSPECTOR_META_TABLE)
+    .select(INSPECTOR_META_READ_COLUMNS)
+    .in("document_id", documentIds);
+
+  if (metaError) {
+    console.warn(
+      "[master-inspector-reports-server] meta list failed:",
+      metaError.message
+    );
+    return {
+      reports: [],
+      inspectorMetaDocumentIds: [],
+      documentIds: [],
+      error: metaError.message || "list_failed",
+    };
+  }
+
+  const metaByDocumentId = new Map<string, DocumentInspectorMetaRecord>();
+  for (const row of metaRows ?? []) {
+    const meta = mapDocumentInspectorMetaRow(row as Record<string, unknown>);
+    metaByDocumentId.set(meta.document_id, meta);
+  }
+
+  const reports: MasterInspectorReportListItemDto[] = [];
+  const inspectorMetaDocumentIds: string[] = [];
+
+  for (const documentRow of documents) {
+    const documentId = String(documentRow.id);
+    const meta = metaByDocumentId.get(documentId);
+    if (!meta) continue;
+    inspectorMetaDocumentIds.push(documentId);
+    reports.push(
+      mapDocumentInspectorReportListItem(documentRow, meta, buildingId)
+    );
+  }
+
+  reports.sort((a, b) => b.report_date.localeCompare(a.report_date));
+
+  return {
+    reports,
+    inspectorMetaDocumentIds,
+    documentIds,
+    error: null,
+  };
+}
+
+async function listLegacyInspectorReportsForBuildingServer(
+  buildingId: string
+): Promise<{ reports: MasterInspectorReportListItemDto[]; error: string | null }> {
+  const client = getSupabaseServiceClient();
+  if (!client) {
+    return { reports: [], error: "supabase_service_unconfigured" };
+  }
+
+  const { data, error } = await client
+    .from(INSPECTOR_REPORTS_TABLE)
+    .select(LEGACY_INSPECTOR_REPORT_READ_COLUMNS)
+    .eq("building_id", buildingId)
+    .order("report_date", { ascending: false });
+
+  if (error) {
+    console.warn(
+      "[master-inspector-reports-server] legacy list failed:",
+      error.message
+    );
+    return { reports: [], error: error.message || "list_failed" };
+  }
+
+  const reports = (data ?? []).map((row) =>
+    mapLegacyInspectorReportListItem(row as Record<string, unknown>, buildingId)
+  );
+
+  return { reports, error: null };
+}
+
+async function listInspectorNotificationsForBuildingDocumentIds(
+  documentIds: string[]
+): Promise<{ notifications: MasterInspectorNotificationDto[]; error: string | null }> {
+  if (documentIds.length === 0) {
+    return { notifications: [], error: null };
+  }
+
+  const client = getSupabaseServiceClient();
+  if (!client) {
+    return { notifications: [], error: "supabase_service_unconfigured" };
+  }
+
+  const { data, error } = await client
+    .from(DOCUMENT_INSPECTOR_NOTIFICATIONS_TABLE)
+    .select(INSPECTOR_NOTIFICATION_READ_COLUMNS)
+    .in("document_id", documentIds)
+    .order("sent_at", { ascending: false });
+
+  if (error) {
+    console.warn(
+      "[master-inspector-reports-server] notifications list failed:",
+      error.message
+    );
+    return { notifications: [], error: error.message || "list_failed" };
+  }
+
+  const notifications: MasterInspectorNotificationDto[] = [];
+  for (const row of data ?? []) {
+    const record = row as Record<string, unknown>;
+    const notificationType = String(record.notification_type);
+    if (!isInspectorNotificationTypeValue(notificationType)) continue;
+    notifications.push({
+      document_id: String(record.document_id),
+      notification_type: notificationType,
+      sent_at: String(record.sent_at),
+    });
+  }
+
+  return { notifications, error: null };
+}
+
+async function listPreparedInspectorLetterStagesForBuildingServer(
+  buildingId: string
+): Promise<{
+  preparedLetterStages: MasterPreparedInspectorLetterStageDto[];
+  error: string | null;
+}> {
+  const client = getSupabaseServiceClient();
+  if (!client) {
+    return {
+      preparedLetterStages: [],
+      error: "supabase_service_unconfigured",
+    };
+  }
+
+  const { data, error } = await client
+    .from(DOCUMENTS_TABLE)
+    .select(PREPARED_LETTER_READ_COLUMNS)
+    .eq("building_id", buildingId);
+
+  if (error) {
+    console.warn(
+      "[master-inspector-reports-server] prepared letter list failed:",
+      error.message
+    );
+    return { preparedLetterStages: [], error: error.message || "list_failed" };
+  }
+
+  const preparedLetterStages: MasterPreparedInspectorLetterStageDto[] = [];
+  for (const row of data ?? []) {
+    const record = row as Record<string, unknown>;
+    const rawTags = record.tags;
+    const tags = Array.isArray(rawTags)
+      ? rawTags.map((tag) => String(tag).trim())
+      : [];
+    if (!tags.includes(MASTER_LETTER_TAG)) continue;
+
+    const stage = extractPreparedLetterStageFromAiMetadata(record.ai_metadata);
+    if (stage) {
+      preparedLetterStages.push(stage);
+    }
+  }
+
+  return { preparedLetterStages, error: null };
+}
+
+async function listBuildingDocumentIdsServer(
+  buildingId: string
+): Promise<{ documentIds: string[]; error: string | null }> {
+  const client = getSupabaseServiceClient();
+  if (!client) {
+    return { documentIds: [], error: "supabase_service_unconfigured" };
+  }
+
+  const { data, error } = await client
+    .from(DOCUMENTS_TABLE)
+    .select("id")
+    .eq("building_id", buildingId);
+
+  if (error) {
+    console.warn(
+      "[master-inspector-reports-server] building document ids failed:",
+      error.message
+    );
+    return { documentIds: [], error: error.message || "list_failed" };
+  }
+
+  return {
+    documentIds: (data ?? []).map((row) =>
+      String((row as Record<string, unknown>).id)
+    ),
+    error: null,
+  };
+}
+
+export async function listMasterInspectorReportsByBuildingServer(
+  buildingId: string
+): Promise<MasterInspectorReportsListResult> {
+  if (!isSupabaseServiceConfigured()) {
+    return {
+      reports: [],
+      notifications: [],
+      preparedLetterStages: [],
+      inspectorMetaDocumentIds: [],
+      error: "supabase_service_unconfigured",
+    };
+  }
+
+  const normalizedBuilding = parseBuildingIdFilter(buildingId);
+  if (!normalizedBuilding) {
+    return {
+      reports: [],
+      notifications: [],
+      preparedLetterStages: [],
+      inspectorMetaDocumentIds: [],
+      error: "invalid_building_id",
+    };
+  }
+
+  const [
+    documentBased,
+    legacy,
+    buildingDocuments,
+    preparedLetters,
+  ] = await Promise.all([
+    listDocumentBasedInspectorReportsForBuildingServer(normalizedBuilding),
+    listLegacyInspectorReportsForBuildingServer(normalizedBuilding),
+    listBuildingDocumentIdsServer(normalizedBuilding),
+    listPreparedInspectorLetterStagesForBuildingServer(normalizedBuilding),
+  ]);
+
+  const errors = [
+    documentBased.error,
+    legacy.error,
+    buildingDocuments.error,
+    preparedLetters.error,
+  ].filter(Boolean);
+
+  if (errors.length > 0) {
+    return {
+      reports: [],
+      notifications: [],
+      preparedLetterStages: [],
+      inspectorMetaDocumentIds: [],
+      error: errors[0] ?? "list_failed",
+    };
+  }
+
+  const notificationsResult =
+    await listInspectorNotificationsForBuildingDocumentIds(
+      buildingDocuments.documentIds
+    );
+
+  if (notificationsResult.error) {
+    return {
+      reports: [],
+      notifications: [],
+      preparedLetterStages: [],
+      inspectorMetaDocumentIds: [],
+      error: notificationsResult.error,
+    };
+  }
+
+  const reports = [...documentBased.reports, ...legacy.reports].sort((a, b) =>
+    b.report_date.localeCompare(a.report_date)
+  );
+
+  return {
+    reports,
+    notifications: notificationsResult.notifications,
+    preparedLetterStages: preparedLetters.preparedLetterStages,
+    inspectorMetaDocumentIds: documentBased.inspectorMetaDocumentIds,
     error: null,
   };
 }
