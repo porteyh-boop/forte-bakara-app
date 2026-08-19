@@ -8,10 +8,10 @@ import {
   todayIsoDate,
 } from "@/lib/israeli-date-input";
 import {
-  createInspectorReportWithFile,
   validateInspectorReportFile,
   validateInspectorReportInput,
 } from "@/lib/inspector-report-tracking";
+import { createMasterInspectorReport } from "@/lib/master-inspector-reports-api";
 
 interface ElevatorOption {
   id: string;
@@ -116,9 +116,17 @@ export default function MasterProjectV2InspectorReportDialog({
     }
 
     setCreating(true);
-    const created = await createInspectorReportWithFile(
-      input,
-      selectedFile,
+    const { report: created } = await createMasterInspectorReport(
+      {
+        buildingId: input.buildingId,
+        elevatorId: input.elevatorId,
+        documentName: input.documentName || selectedFile.name,
+        reportDate: input.reportDate,
+        inspectorName: input.inspectorName,
+        hasRemarks: input.hasRemarks,
+        nextInspectionDate: input.nextInspectionDate,
+        file: selectedFile,
+      },
       setUploadProgress
     );
     setCreating(false);

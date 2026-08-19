@@ -7005,6 +7005,24 @@ if (masterDocumentsSecurityQa.status !== 0) {
   console.log("Master V2 Documents Security QA עבר");
 }
 
+console.log("\n=== Master V2 Inspector Reports Security QA (Phase 1.5B-3D-A) ===");
+const masterInspectorReportsSecurityQa = spawnSync(
+  "npx",
+  ["tsx", "scripts/qa-master-inspector-reports-security.ts"],
+  {
+    stdio: "inherit",
+    shell: true,
+    cwd: process.cwd(),
+  }
+);
+if (masterInspectorReportsSecurityQa.status !== 0) {
+  failed += 1;
+  console.error("Master V2 Inspector Reports Security QA נכשל");
+} else {
+  passed += 1;
+  console.log("Master V2 Inspector Reports Security QA עבר");
+}
+
 console.log(`\n=== סיכום: ${passed} עברו, ${failed} נכשלו ===`);
 console.log(`=== מיתוג: ${brandFiles.length} קבצים נסרקו ===\n`);
 process.exit(failed > 0 ? 1 : 0);

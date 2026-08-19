@@ -608,13 +608,16 @@ async function main(): Promise<void> {
   );
 
   assert(
-    inspectorDialogSource.includes("createInspectorReportWithFile"),
-    "InspectorReportDialog: still uses shared inspector flow (Phase 3C blocker)"
+    inspectorDialogSource.includes("createMasterInspectorReport"),
+    "InspectorReportDialog: uses secure master-inspector-reports-api (Phase 3D-A)"
   );
   assert(
-    inspectorDialogSource.includes("uploadDocumentCenterFile") ||
-      inspectorDialogSource.includes("createInspectorReportWithFile"),
-    "InspectorReportDialog: upload remains direct anon via inspector-report-tracking"
+    !inspectorDialogSource.includes("createInspectorReportWithFile"),
+    "InspectorReportDialog: no direct createInspectorReportWithFile"
+  );
+  assert(
+    !inspectorDialogSource.includes("uploadDocumentCenterFile"),
+    "InspectorReportDialog: no direct Storage upload"
   );
 
   const apiClientSource = read("lib/master-documents-api.ts");
