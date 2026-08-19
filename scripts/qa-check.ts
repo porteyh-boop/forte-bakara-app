@@ -6987,6 +6987,24 @@ if (masterFaultAggregatesSecurityQa.status !== 0) {
   console.log("Master V2 Fault Aggregates Security QA עבר");
 }
 
+console.log("\n=== Master V2 Documents Security QA (Phase 1.5B-3A) ===");
+const masterDocumentsSecurityQa = spawnSync(
+  "npx",
+  ["tsx", "scripts/qa-master-documents-security.ts"],
+  {
+    stdio: "inherit",
+    shell: true,
+    cwd: process.cwd(),
+  }
+);
+if (masterDocumentsSecurityQa.status !== 0) {
+  failed += 1;
+  console.error("Master V2 Documents Security QA נכשל");
+} else {
+  passed += 1;
+  console.log("Master V2 Documents Security QA עבר");
+}
+
 console.log(`\n=== סיכום: ${passed} עברו, ${failed} נכשלו ===`);
 console.log(`=== מיתוג: ${brandFiles.length} קבצים נסרקו ===\n`);
 process.exit(failed > 0 ? 1 : 0);

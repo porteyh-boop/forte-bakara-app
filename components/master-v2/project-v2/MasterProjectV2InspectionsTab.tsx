@@ -40,7 +40,7 @@ import {
   getPreparedStagesForReport,
   resolveInspectorReportTrackingId,
 } from "@/lib/inspector-follow-up-prepared-stages";
-import { getAllDocuments, type DocumentRecord } from "@/lib/document-center";
+import { listMasterDocumentsByBuilding } from "@/lib/master-documents-api";
 import {
   closeInspectorReport,
   deleteInspectorReport,
@@ -52,6 +52,7 @@ import {
   type InspectorReportRecord,
 } from "@/lib/inspector-report-tracking";
 import { isPilotCloudConfigured } from "@/lib/pilot-cloud";
+import type { DocumentRecord } from "@/lib/document-center";
 
 interface MasterProjectV2InspectionsTabProps {
   buildingId: string;
@@ -153,12 +154,12 @@ export default function MasterProjectV2InspectionsTab({
     }
 
     setLoading(true);
-    const [reportRows, metaRows, notificationRows, documentsResult] =
+    const [reportRows, metaRows, notificationRows, savedLetterDocuments] =
       await Promise.all([
       getAllInspectorReports(),
       listAllDocumentInspectorMeta(),
       listAllDocumentInspectorNotifications(),
-      getAllDocuments(),
+      listMasterDocumentsByBuilding(buildingId),
     ]);
 
     const metaMap: Record<string, DocumentInspectorMetaRecord> = {};
@@ -170,7 +171,7 @@ export default function MasterProjectV2InspectionsTab({
     setNotificationsByDocumentId(
       groupNotificationsByDocumentId(notificationRows)
     );
-    setSavedLetters(documentsResult.documents);
+    setSavedLetters(savedLetterDocuments);
     setReports(
       reportRows.filter((report) => report.building_id === buildingId)
     );

@@ -18,7 +18,6 @@ import {
   DEFAULT_DOCUMENT_VISIBILITY,
   deleteDocument,
   deleteDocumentCenterStorageFile,
-  getAllDocuments,
   getDocumentTypeLabel,
   getDocumentUploadVisibilityHint,
   getDocumentVisibilityChangeMessage,
@@ -28,6 +27,7 @@ import {
   type DocumentRecord,
   type DocumentVisibility,
 } from "@/lib/document-center";
+import { listMasterDocumentsByBuilding } from "@/lib/master-documents-api";
 import {
   buildProjectV2AdditionalInspectionUploadTags,
   buildProjectV2UploadTags,
@@ -96,21 +96,15 @@ export default function ProjectDocumentsPanel({
 
     setLoading(true);
     setError(null);
-    const [listResult, inspectorMeta] = await Promise.all([
-      getAllDocuments(),
+    const [listDocuments, inspectorMeta] = await Promise.all([
+      listMasterDocumentsByBuilding(buildingId),
       listAllDocumentInspectorMeta(),
     ]);
     setLoading(false);
 
-    if (listResult.error) {
-      setError(listResult.error);
-      setAllDocuments([]);
-      return;
-    }
-
     const metaIds = new Set(inspectorMeta.map((row) => row.document_id));
     setInspectorMetaIds(metaIds);
-    setAllDocuments(listResult.documents);
+    setAllDocuments(listDocuments);
   }, [buildingId, cloudReady]);
 
   useEffect(() => {
