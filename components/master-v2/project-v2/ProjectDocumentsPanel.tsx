@@ -15,16 +15,16 @@ import {
 import { listAllDocumentInspectorMeta } from "@/lib/document-inspector-meta";
 import {
   DEFAULT_DOCUMENT_VISIBILITY,
-  deleteDocument,
   getDocumentTypeLabel,
   getDocumentUploadVisibilityHint,
   getDocumentVisibilityChangeMessage,
-  updateDocumentVisibility,
   type DocumentRecord,
   type DocumentVisibility,
 } from "@/lib/document-center";
 import {
+  deleteMasterDocument,
   listMasterDocumentsByBuilding,
+  updateMasterDocumentVisibility,
   uploadMasterDocument,
 } from "@/lib/master-documents-api";
 import {
@@ -197,7 +197,11 @@ export default function ProjectDocumentsPanel({
     setError(null);
 
     const { document: updated, error: updateError } =
-      await updateDocumentVisibility(document.id, nextVisibility);
+      await updateMasterDocumentVisibility(
+        buildingId,
+        document.id,
+        nextVisibility
+      );
     setActionId(null);
 
     if (!updated || updateError) {
@@ -218,11 +222,14 @@ export default function ProjectDocumentsPanel({
     setActionId(documentId);
     setMessage(null);
     setError(null);
-    const ok = await deleteDocument(documentId);
+    const { ok, error: deleteError } = await deleteMasterDocument(
+      buildingId,
+      documentId
+    );
     setActionId(null);
 
     if (!ok) {
-      setError("מחיקת המסמך נכשלה.");
+      setError(deleteError ?? "מחיקת המסמך נכשלה.");
       return;
     }
 

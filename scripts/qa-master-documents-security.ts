@@ -1,5 +1,5 @@
 /**
- * Security Phase 1.5B-3A/3B — Master V2 documents secure read + upload path QA.
+ * Security Phase 1.5B-3A/3B/3C — Master V2 documents secure read/upload/delete/visibility QA.
  * Run: npx tsx scripts/qa-master-documents-security.ts
  */
 import fs from "fs";
@@ -31,7 +31,9 @@ loadEnvFile(".env.local");
 
 import {
   mapMasterDocumentDto,
+  parseDocumentId,
   validateMasterDocumentUploadMetadata,
+  validateMasterDocumentVisibilityValue,
 } from "../lib/master-documents-server";
 import {
   createMasterSessionToken,
@@ -41,6 +43,12 @@ import {
   GET as listDocumentsGET,
   POST as uploadDocumentPOST,
 } from "../app/forte/api/master-documents/route";
+import {
+  PATCH as patchDocumentPATCH,
+  DELETE as deleteDocumentDELETE,
+} from "../app/forte/api/master-documents/[documentId]/route";
+
+const QA_3B_ARTIFACT_ID = "bf90106a-76cd-404c-b1f4-ad8a74d83310";
 
 let passed = 0;
 let failed = 0;
@@ -131,7 +139,7 @@ function makeUploadFormData(overrides?: {
 }
 
 async function main(): Promise<void> {
-  console.log("\n=== Master V2 Documents Security QA (Phase 1.5B-3A/3B) ===\n");
+  console.log("\n=== Master V2 Documents Security QA (Phase 1.5B-3A/3B/3C) ===\n");
 
   const dto = mapMasterDocumentDto({
     id: "doc-1",
@@ -260,6 +268,166 @@ async function main(): Promise<void> {
   });
   assert(invalidBuilding === "invalid_building_id", "metadata: invalid buildingId");
 
+  assert(parseDocumentId("not-a-uuid") === null, "parseDocumentId: invalid id blocked");
+  assert(
+    parseDocumentId(QA_3B_ARTIFACT_ID) === QA_3B_ARTIFACT_ID,
+    "parseDocumentId: accepts QA artifact uuid"
+  );
+  assert(
+    validateMasterDocumentVisibilityValue("internal") === "internal",
+    "visibility validation: internal"
+  );
+  assert(
+    validateMasterDocumentVisibilityValue("bad") === null,
+    "visibility validation: invalid blocked"
+  );
+
+  const noSessionPatch = await patchDocumentPATCH(
+    makeMasterApiRequest(
+      `/forte/api/master-documents/${QA_3B_ARTIFACT_ID}`,
+      {
+        method: "PATCH",
+        contentType: "application/json",
+        body: JSON.stringify({
+          buildingId: "md25",
+          action: "update_visibility",
+          visibility: "internal",
+        }),
+      }
+    ),
+    { params: Promise.resolve({ documentId: QA_3B_ARTIFACT_ID }) }
+  );
+  assert(noSessionPatch.status === 401, "PATCH without session → 401");
+
+  const noSessionDelete = await deleteDocumentDELETE(
+    makeMasterApiRequest(
+      `/forte/api/master-documents/${QA_3B_ARTIFACT_ID}?buildingId=md25`,
+      { method: "DELETE", cookie: "" }
+    ),
+    { params: Promise.resolve({ documentId: QA_3B_ARTIFACT_ID }) }
+  );
+  assert(noSessionDelete.status === 401, "DELETE without session → 401");
+
+  const crossPatch = await patchDocumentPATCH(
+    makeMasterApiRequest(
+      `/forte/api/master-documents/${QA_3B_ARTIFACT_ID}`,
+      {
+        method: "PATCH",
+        cookie: sessionCookie,
+        contentType: "application/json",
+        body: JSON.stringify({
+          buildingId: "sl48",
+          action: "update_visibility",
+          visibility: "client",
+        }),
+      }
+    ),
+    { params: Promise.resolve({ documentId: QA_3B_ARTIFACT_ID }) }
+  );
+  assert(crossPatch.status === 403, "PATCH cross-building → 403");
+
+  const crossDelete = await deleteDocumentDELETE(
+    makeMasterApiRequest(
+      `/forte/api/master-documents/${QA_3B_ARTIFACT_ID}?buildingId=sl48`,
+      { method: "DELETE", cookie: sessionCookie }
+    ),
+    { params: Promise.resolve({ documentId: QA_3B_ARTIFACT_ID }) }
+  );
+  assert(crossDelete.status === 403, "DELETE cross-building → 403");
+
+  const invalidDocPatch = await patchDocumentPATCH(
+    makeMasterApiRequest("/forte/api/master-documents/not-a-uuid", {
+      method: "PATCH",
+      cookie: sessionCookie,
+      contentType: "application/json",
+      body: JSON.stringify({
+        buildingId: "md25",
+        action: "update_visibility",
+        visibility: "internal",
+      }),
+    }),
+    { params: Promise.resolve({ documentId: "not-a-uuid" }) }
+  );
+  assert(invalidDocPatch.status === 400, "PATCH invalid documentId → 400");
+
+  const missingBuildingPatch = await patchDocumentPATCH(
+    makeMasterApiRequest(
+      `/forte/api/master-documents/${QA_3B_ARTIFACT_ID}`,
+      {
+        method: "PATCH",
+        cookie: sessionCookie,
+        contentType: "application/json",
+        body: JSON.stringify({
+          action: "update_visibility",
+          visibility: "internal",
+        }),
+      }
+    ),
+    { params: Promise.resolve({ documentId: QA_3B_ARTIFACT_ID }) }
+  );
+  assert(missingBuildingPatch.status === 400, "PATCH missing buildingId → 400");
+
+  const invalidVisibilityPatch = await patchDocumentPATCH(
+    makeMasterApiRequest(
+      `/forte/api/master-documents/${QA_3B_ARTIFACT_ID}`,
+      {
+        method: "PATCH",
+        cookie: sessionCookie,
+        contentType: "application/json",
+        body: JSON.stringify({
+          buildingId: "md25",
+          action: "update_visibility",
+          visibility: "public",
+        }),
+      }
+    ),
+    { params: Promise.resolve({ documentId: QA_3B_ARTIFACT_ID }) }
+  );
+  assert(invalidVisibilityPatch.status === 400, "PATCH invalid visibility → 400");
+
+  const forbiddenPathPatch = await patchDocumentPATCH(
+    makeMasterApiRequest(
+      `/forte/api/master-documents/${QA_3B_ARTIFACT_ID}`,
+      {
+        method: "PATCH",
+        cookie: sessionCookie,
+        contentType: "application/json",
+        body: JSON.stringify({
+          buildingId: "md25",
+          action: "update_visibility",
+          visibility: "internal",
+          storagePath: "sl48/evil.pdf",
+        }),
+      }
+    ),
+    { params: Promise.resolve({ documentId: QA_3B_ARTIFACT_ID }) }
+  );
+  assert(
+    forbiddenPathPatch.status === 400,
+    "PATCH arbitrary storagePath → rejected"
+  );
+
+  const sameBuildingPatch = await patchDocumentPATCH(
+    makeMasterApiRequest(
+      `/forte/api/master-documents/${QA_3B_ARTIFACT_ID}`,
+      {
+        method: "PATCH",
+        cookie: sessionCookie,
+        contentType: "application/json",
+        body: JSON.stringify({
+          buildingId: "md25",
+          action: "update_visibility",
+          visibility: "internal",
+        }),
+      }
+    ),
+    { params: Promise.resolve({ documentId: QA_3B_ARTIFACT_ID }) }
+  );
+  assert(
+    sameBuildingPatch.status === 200,
+    "PATCH same-building visibility → allowed (QA artifact preserved)"
+  );
+
   if (prevSecret === undefined) delete process.env.FORTE_SESSION_SECRET;
   else process.env.FORTE_SESSION_SECRET = prevSecret;
   if (prevCode === undefined) delete process.env.MASTER_CODE;
@@ -284,9 +452,33 @@ async function main(): Promise<void> {
     "master-documents-server: storage path built server-side"
   );
   assert(
+    serverSource.includes("verifyMasterDocumentBuildingServer"),
+    "master-documents-server: document + building ownership verification"
+  );
+  assert(
+    serverSource.includes("DOCUMENT_MUTATION_COLUMNS") &&
+      serverSource.includes("storage_path"),
+    "master-documents-server: storage_path loaded from DB for mutations"
+  );
+  assert(
+    serverSource.includes("updateMasterDocumentVisibilityServer") &&
+      serverSource.includes("deleteMasterDocumentServer"),
+    "master-documents-server: visibility update + delete server-side"
+  );
+  assert(
+    serverSource.includes("storage_delete_failed") &&
+      serverSource.includes("db_delete_failed") &&
+      serverSource.includes("partialFailure"),
+    "master-documents-server: delete partial failure reporting"
+  );
+  assert(
+    serverSource.includes("isStoragePathOwnedByBuilding"),
+    "master-documents-server: storage path ownership guard"
+  );
+  assert(
     serverSource.includes("deleteMasterDocumentStorageFile") &&
       serverSource.includes("cleanupFailed"),
-    "master-documents-server: DB failure cleanup path exists"
+    "master-documents-server: upload DB failure cleanup path exists"
   );
   assert(
     serverSource.includes('.from(DOCUMENT_CENTER_BUCKET)') &&
@@ -327,6 +519,27 @@ async function main(): Promise<void> {
     "master-documents/route.ts: POST handler exists"
   );
 
+  const documentRouteSource = read(
+    "app/forte/api/master-documents/[documentId]/route.ts"
+  );
+  assert(
+    documentRouteSource.includes("export async function PATCH"),
+    "master-documents/[documentId]/route.ts: PATCH handler exists"
+  );
+  assert(
+    documentRouteSource.includes("export async function DELETE"),
+    "master-documents/[documentId]/route.ts: DELETE handler exists"
+  );
+  assert(
+    documentRouteSource.includes("FORBIDDEN_MUTATION_FIELDS"),
+    "master-documents/[documentId]/route.ts: rejects browser storagePath/bucket"
+  );
+  assert(
+    documentRouteSource.includes("verifyMasterDocumentBuildingServer") ||
+      documentRouteSource.includes("updateMasterDocumentVisibilityServer"),
+    "master-documents/[documentId]/route.ts: server-side ownership before mutation"
+  );
+
   const panelSource = read(
     "components/master-v2/project-v2/ProjectDocumentsPanel.tsx"
   );
@@ -361,14 +574,32 @@ async function main(): Promise<void> {
     "ProjectDocumentsPanel: uses master-documents-api upload"
   );
   assert(
+    panelSource.includes("updateMasterDocumentVisibility("),
+    "ProjectDocumentsPanel: uses master-documents-api visibility"
+  );
+  assert(
+    panelSource.includes("deleteMasterDocument("),
+    "ProjectDocumentsPanel: uses master-documents-api delete"
+  );
+  assert(
     !panelSource.includes("uploadDocumentCenterFile") &&
       !panelSource.includes("createDocument("),
     "ProjectDocumentsPanel: no direct browser upload/insert"
   );
   assert(
+    !panelSource.includes("updateDocumentVisibility(") &&
+      !panelSource.includes("deleteDocument(") &&
+      !panelSource.includes("deleteDocumentCenterStorageFile("),
+    "ProjectDocumentsPanel: no direct browser delete/visibility mutations"
+  );
+  assert(
     !panelSource.includes("storage.from") &&
       !panelSource.includes("getPublicUrl"),
     "ProjectDocumentsPanel: no browser storage/getPublicUrl"
+  );
+  assert(
+    !panelSource.includes('.from("documents")'),
+    "ProjectDocumentsPanel: no direct documents table mutations"
   );
 
   assert(
@@ -404,6 +635,11 @@ async function main(): Promise<void> {
     "master-documents-api: upload via multipart FormData"
   );
   assert(
+    apiClientSource.includes("updateMasterDocumentVisibility") &&
+      apiClientSource.includes("deleteMasterDocument"),
+    "master-documents-api: visibility + delete client functions"
+  );
+  assert(
     !apiClientSource.includes("storage.from") &&
       !apiClientSource.includes("getPublicUrl"),
     "master-documents-api: no browser storage/getPublicUrl"
@@ -413,6 +649,11 @@ async function main(): Promise<void> {
   assert(
     documentCenterSource.includes("uploadDocumentCenterFile"),
     "document-center.ts: Legacy upload path preserved"
+  );
+  assert(
+    documentCenterSource.includes("deleteDocument(") &&
+      documentCenterSource.includes("updateDocumentVisibility("),
+    "document-center.ts: Legacy delete/visibility preserved for non-V2 flows"
   );
 
   const documentsTab = read(
@@ -488,6 +729,14 @@ async function main(): Promise<void> {
     const md25Ids = new Set(md25Docs.map((row) => row.id));
     const overlap = sl48Docs.some((row) => md25Ids.has(row.id));
     assert(!overlap, "md25 list does not include sl48 document ids");
+
+    const qaArtifactStillListed = md25Docs.some(
+      (row) => row.id === QA_3B_ARTIFACT_ID
+    );
+    assert(
+      qaArtifactStillListed,
+      "QA 3B artifact still exists after 3C security tests (not deleted)"
+    );
 
     const sample = md25Docs[0] ?? sl48Docs[0];
     if (sample) {

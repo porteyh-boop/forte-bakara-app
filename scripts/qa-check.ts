@@ -4306,7 +4306,7 @@ const projectDocumentsPanelPath = path.join(
 assert(fs.existsSync(projectDocumentsPanelPath), "Project V2: ProjectDocumentsPanel קיים");
 const projectDocumentsPanel = fs.readFileSync(projectDocumentsPanelPath, "utf8");
 assert(
-  projectDocumentsPanel.includes("updateDocumentVisibility") &&
+  projectDocumentsPanel.includes("updateMasterDocumentVisibility") &&
     projectDocumentsPanel.includes("ProjectDocumentVisibilityBadge") &&
     projectDocumentsPanel.includes("ProjectDocumentVisibilityUploadField") &&
     projectDocumentsPanel.includes("DEFAULT_DOCUMENT_VISIBILITY"),

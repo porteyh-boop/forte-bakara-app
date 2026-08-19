@@ -27,6 +27,16 @@ interface UploadResponse {
   error?: string | null;
 }
 
+interface VisibilityResponse {
+  document?: MasterDocumentDto | null;
+  error?: string | null;
+}
+
+interface DeleteResponse {
+  ok?: boolean;
+  error?: string | null;
+}
+
 export interface UploadMasterDocumentInput {
   buildingId: string;
   documentType: DocumentTypeId;
@@ -38,6 +48,16 @@ export interface UploadMasterDocumentInput {
 
 export interface UploadMasterDocumentResult {
   document: DocumentRecord | null;
+  error: string | null;
+}
+
+export interface UpdateMasterDocumentVisibilityResult {
+  document: DocumentRecord | null;
+  error: string | null;
+}
+
+export interface DeleteMasterDocumentResult {
+  ok: boolean;
   error: string | null;
 }
 
@@ -182,5 +202,82 @@ export async function uploadMasterDocument(
   } catch (error) {
     console.warn("[master-documents-api] upload error:", error);
     return { document: null, error: "upload_failed" };
+  }
+}
+
+export async function updateMasterDocumentVisibility(
+  buildingId: string,
+  documentId: string,
+  visibility: DocumentVisibility
+): Promise<UpdateMasterDocumentVisibilityResult> {
+  if (!isMasterDocumentsApiConfigured() || !buildingId.trim() || !documentId.trim()) {
+    return { document: null, error: "not_configured" };
+  }
+
+  try {
+    const response = await masterApiFetch(
+      `${MASTER_DOCUMENTS_API}/${encodeURIComponent(documentId.trim())}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          buildingId: buildingId.trim(),
+          action: "update_visibility",
+          visibility,
+        }),
+      }
+    );
+
+    const payload = await parseMasterApiJson<VisibilityResponse>(response);
+    if (!response.ok) {
+      return {
+        document: null,
+        error: payload?.error ?? (await parseApiError(response)),
+      };
+    }
+
+    if (!payload?.document) {
+      return {
+        document: null,
+        error: payload?.error ?? "visibility_update_failed",
+      };
+    }
+
+    return {
+      document: mapMasterDocumentDtoToRecord(payload.document),
+      error: null,
+    };
+  } catch (error) {
+    console.warn("[master-documents-api] visibility update error:", error);
+    return { document: null, error: "visibility_update_failed" };
+  }
+}
+
+export async function deleteMasterDocument(
+  buildingId: string,
+  documentId: string
+): Promise<DeleteMasterDocumentResult> {
+  if (!isMasterDocumentsApiConfigured() || !buildingId.trim() || !documentId.trim()) {
+    return { ok: false, error: "not_configured" };
+  }
+
+  try {
+    const params = new URLSearchParams({ buildingId: buildingId.trim() });
+    const response = await masterApiFetch(
+      `${MASTER_DOCUMENTS_API}/${encodeURIComponent(documentId.trim())}?${params.toString()}`,
+      { method: "DELETE" }
+    );
+
+    const payload = await parseMasterApiJson<DeleteResponse>(response);
+    if (!response.ok) {
+      return {
+        ok: false,
+        error: payload?.error ?? (await parseApiError(response)),
+      };
+    }
+
+    return { ok: Boolean(payload?.ok), error: null };
+  } catch (error) {
+    console.warn("[master-documents-api] delete error:", error);
+    return { ok: false, error: "delete_failed" };
   }
 }

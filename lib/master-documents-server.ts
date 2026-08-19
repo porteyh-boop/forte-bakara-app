@@ -1,4 +1,7 @@
-import { parseBuildingIdFilter } from "@/lib/master-client-access-server";
+import {
+  BUILDING_FORBIDDEN_ERROR,
+  parseBuildingIdFilter,
+} from "@/lib/master-client-access-server";
 import {
   buildDocumentInsertRow,
   buildDocumentInsertRowWithoutVisibilityColumn,
@@ -10,6 +13,7 @@ import {
   DOCUMENT_UNSUPPORTED_CONTENT_TYPE_ERROR,
   isMissingVisibilityColumnError,
   normalizeDocumentTags,
+  normalizeDocumentVisibility,
   resolveDocumentContentType,
   resolveDocumentVisibility,
   validateDocumentCenterFile,
@@ -24,6 +28,90 @@ import {
 
 const DOCUMENT_LIST_COLUMNS =
   "id, building_id, document_type, title, file_name, file_url, tags, visibility, created_at, ai_metadata";
+
+const DOCUMENT_MUTATION_COLUMNS = "id, building_id, storage_path";
+
+export { BUILDING_FORBIDDEN_ERROR };
+
+export function parseDocumentId(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const uuidPattern =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidPattern.test(trimmed) ? trimmed : null;
+}
+
+interface MasterDocumentMutationRow {
+  id: string;
+  building_id: string;
+  storage_path: string;
+}
+
+async function loadMasterDocumentMutationRow(
+  documentId: string
+): Promise<MasterDocumentMutationRow | null> {
+  const client = getSupabaseServiceClient();
+  if (!client) return null;
+
+  const { data, error } = await client
+    .from(DOCUMENTS_TABLE)
+    .select(DOCUMENT_MUTATION_COLUMNS)
+    .eq("id", documentId)
+    .maybeSingle();
+
+  if (error || !data) return null;
+
+  const row = data as Record<string, unknown>;
+  return {
+    id: String(row.id),
+    building_id: String(row.building_id ?? "").trim().toLowerCase(),
+    storage_path: String(row.storage_path ?? "").trim(),
+  };
+}
+
+export async function verifyMasterDocumentBuildingServer(
+  documentId: string,
+  buildingId: string
+): Promise<
+  | { ok: true; row: MasterDocumentMutationRow }
+  | { ok: false; error: typeof BUILDING_FORBIDDEN_ERROR | "not_found" | "invalid_building_id" }
+> {
+  const expected = parseBuildingIdFilter(buildingId);
+  if (!expected) {
+    return { ok: false, error: "invalid_building_id" };
+  }
+
+  const row = await loadMasterDocumentMutationRow(documentId);
+  if (!row) {
+    return { ok: false, error: "not_found" };
+  }
+
+  if (row.building_id !== expected) {
+    return { ok: false, error: BUILDING_FORBIDDEN_ERROR };
+  }
+
+  return { ok: true, row };
+}
+
+function isStoragePathOwnedByBuilding(
+  storagePath: string,
+  buildingId: string
+): boolean {
+  const normalized = buildingId.trim().toLowerCase();
+  const path = storagePath.trim();
+  if (!path || path.includes("..") || path.startsWith("/")) return false;
+  return path.startsWith(`${normalized}/`);
+}
+
+export function validateMasterDocumentVisibilityValue(
+  value: unknown
+): DocumentVisibility | null {
+  if (value === "internal" || value === "client") {
+    return value;
+  }
+  return null;
+}
 
 export interface MasterDocumentDto {
   id: string;
@@ -372,5 +460,146 @@ export async function uploadMasterDocumentServer(
   return {
     document: mapMasterDocumentDto(insertResult.row),
     error: null,
+  };
+}
+
+export async function updateMasterDocumentVisibilityServer(
+  documentId: string,
+  buildingId: string,
+  visibility: DocumentVisibility
+): Promise<{
+  document: MasterDocumentDto | null;
+  error: string | null;
+}> {
+  if (!isSupabaseServiceConfigured()) {
+    return { document: null, error: "supabase_service_unconfigured" };
+  }
+
+  const verified = await verifyMasterDocumentBuildingServer(
+    documentId,
+    buildingId
+  );
+  if (!verified.ok) {
+    return { document: null, error: verified.error };
+  }
+
+  const client = getSupabaseServiceClient();
+  if (!client) {
+    return { document: null, error: "supabase_service_unconfigured" };
+  }
+
+  const normalizedVisibility = normalizeDocumentVisibility(visibility);
+  const now = new Date().toISOString();
+
+  const { data, error } = await client
+    .from(DOCUMENTS_TABLE)
+    .update({
+      visibility: normalizedVisibility,
+      updated_at: now,
+    })
+    .eq("id", verified.row.id)
+    .eq("building_id", verified.row.building_id)
+    .select(DOCUMENT_LIST_COLUMNS)
+    .single();
+
+  if (error || !data) {
+    console.warn(
+      "[master-documents-server] visibility update failed:",
+      error?.message
+    );
+    return {
+      document: null,
+      error: error?.message || "visibility_update_failed",
+    };
+  }
+
+  return {
+    document: mapMasterDocumentDto(data as Record<string, unknown>),
+    error: null,
+  };
+}
+
+export interface DeleteMasterDocumentResult {
+  ok: boolean;
+  error: string | null;
+  storageDeleted?: boolean;
+  dbDeleted?: boolean;
+  partialFailure?: boolean;
+}
+
+export async function deleteMasterDocumentServer(
+  documentId: string,
+  buildingId: string
+): Promise<DeleteMasterDocumentResult> {
+  if (!isSupabaseServiceConfigured()) {
+    return { ok: false, error: "supabase_service_unconfigured" };
+  }
+
+  const verified = await verifyMasterDocumentBuildingServer(
+    documentId,
+    buildingId
+  );
+  if (!verified.ok) {
+    return { ok: false, error: verified.error };
+  }
+
+  const client = getSupabaseServiceClient();
+  if (!client) {
+    return { ok: false, error: "supabase_service_unconfigured" };
+  }
+
+  const storagePath = verified.row.storage_path;
+  let storageDeleted = false;
+
+  if (storagePath) {
+    if (!isStoragePathOwnedByBuilding(storagePath, verified.row.building_id)) {
+      return { ok: false, error: "invalid_storage_path" };
+    }
+
+    const { error: storageError } = await client.storage
+      .from(DOCUMENT_CENTER_BUCKET)
+      .remove([storagePath]);
+
+    if (storageError) {
+      console.warn(
+        "[master-documents-server] storage delete failed:",
+        storageError.message
+      );
+      return {
+        ok: false,
+        error: "storage_delete_failed",
+        storageDeleted: false,
+        dbDeleted: false,
+      };
+    }
+
+    storageDeleted = true;
+  }
+
+  const { error: dbError } = await client
+    .from(DOCUMENTS_TABLE)
+    .delete()
+    .eq("id", verified.row.id)
+    .eq("building_id", verified.row.building_id);
+
+  if (dbError) {
+    console.warn(
+      "[master-documents-server] db delete failed after storage delete:",
+      dbError.message
+    );
+    return {
+      ok: false,
+      error: "db_delete_failed",
+      storageDeleted,
+      dbDeleted: false,
+      partialFailure: storageDeleted,
+    };
+  }
+
+  return {
+    ok: true,
+    error: null,
+    storageDeleted,
+    dbDeleted: true,
   };
 }
