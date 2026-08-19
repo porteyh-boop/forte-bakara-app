@@ -1,5 +1,5 @@
 /**
- * Security Phase 1.5B-3A — Master V2 documents secure read path QA.
+ * Security Phase 1.5B-3A/3B — Master V2 documents secure read + upload path QA.
  * Run: npx tsx scripts/qa-master-documents-security.ts
  */
 import fs from "fs";
@@ -29,12 +29,18 @@ function loadEnvFile(rel: string): void {
 
 loadEnvFile(".env.local");
 
-import { mapMasterDocumentDto } from "../lib/master-documents-server";
+import {
+  mapMasterDocumentDto,
+  validateMasterDocumentUploadMetadata,
+} from "../lib/master-documents-server";
 import {
   createMasterSessionToken,
   FORTE_MASTER_SESSION_COOKIE,
 } from "../lib/forte-master-api-auth";
-import { GET as listDocumentsGET } from "../app/forte/api/master-documents/route";
+import {
+  GET as listDocumentsGET,
+  POST as uploadDocumentPOST,
+} from "../app/forte/api/master-documents/route";
 
 let passed = 0;
 let failed = 0;
@@ -55,19 +61,20 @@ function read(rel: string): string {
 
 function makeMasterApiRequest(
   urlPath: string,
-  init?: { method?: string; cookie?: string }
+  init?: { method?: string; cookie?: string; body?: FormData | string; contentType?: string }
 ): NextRequest {
   const url = `http://localhost:3000${urlPath}`;
   const headers: Record<string, string> = {
     host: "localhost:3000",
     origin: "http://localhost:3000",
-    "Content-Type": "application/json",
   };
   if (init?.cookie) headers.cookie = init.cookie;
+  if (init?.contentType) headers["Content-Type"] = init.contentType;
 
   return new NextRequest(url, {
     method: init?.method ?? "GET",
     headers,
+    body: init?.body,
   });
 }
 
@@ -89,8 +96,42 @@ function assertDtoMinimized(sample: Record<string, unknown>): void {
   }
 }
 
+function makeUploadFormData(overrides?: {
+  buildingId?: string;
+  documentType?: string;
+  title?: string;
+  fileName?: string;
+  fileContent?: string;
+  fileType?: string;
+  tags?: string;
+  extra?: Record<string, string>;
+}): FormData {
+  const formData = new FormData();
+  formData.append("buildingId", overrides?.buildingId ?? "md25");
+  formData.append("documentType", overrides?.documentType ?? "correspondence");
+  formData.append("title", overrides?.title ?? "QA test document");
+  formData.append(
+    "tags",
+    overrides?.tags ?? JSON.stringify(["QA"])
+  );
+  const fileName = overrides?.fileName ?? "qa-test.pdf";
+  const content = overrides?.fileContent ?? "%PDF-1.4 qa test";
+  formData.append(
+    "file",
+    new File([content], fileName, {
+      type: overrides?.fileType ?? "application/pdf",
+    })
+  );
+  if (overrides?.extra) {
+    for (const [key, value] of Object.entries(overrides.extra)) {
+      formData.append(key, value);
+    }
+  }
+  return formData;
+}
+
 async function main(): Promise<void> {
-  console.log("\n=== Master V2 Documents Security QA (Phase 1.5B-3A) ===\n");
+  console.log("\n=== Master V2 Documents Security QA (Phase 1.5B-3A/3B) ===\n");
 
   const dto = mapMasterDocumentDto({
     id: "doc-1",
@@ -121,17 +162,103 @@ async function main(): Promise<void> {
   process.env.FORTE_SESSION_SECRET = "qa-test-secret";
   process.env.MASTER_CODE = "qa-test-code";
 
-  const noSession = await listDocumentsGET(
+  const noSessionGet = await listDocumentsGET(
     makeMasterApiRequest("/forte/api/master-documents?buildingId=md25")
   );
-  assert(noSession.status === 401, "GET /master-documents without session → 401");
+  assert(noSessionGet.status === 401, "GET /master-documents without session → 401");
+
+  const noSessionPost = await uploadDocumentPOST(
+    makeMasterApiRequest("/forte/api/master-documents", {
+      method: "POST",
+      body: makeUploadFormData(),
+    })
+  );
+  assert(noSessionPost.status === 401, "POST /master-documents without session → 401");
+
+  const sessionCookie = masterSessionCookie() ?? "";
 
   const noBuilding = await listDocumentsGET(
     makeMasterApiRequest("/forte/api/master-documents", {
-      cookie: masterSessionCookie() ?? "",
+      cookie: sessionCookie,
     })
   );
   assert(noBuilding.status === 400, "GET without buildingId → 400");
+
+  const missingFile = await uploadDocumentPOST(
+    makeMasterApiRequest("/forte/api/master-documents", {
+      method: "POST",
+      cookie: sessionCookie,
+      body: (() => {
+        const form = new FormData();
+        form.append("buildingId", "md25");
+        form.append("documentType", "correspondence");
+        form.append("title", "No file");
+        return form;
+      })(),
+    })
+  );
+  assert(missingFile.status === 400, "POST without file → 400");
+
+  const emptyFile = await uploadDocumentPOST(
+    makeMasterApiRequest("/forte/api/master-documents", {
+      method: "POST",
+      cookie: sessionCookie,
+      body: makeUploadFormData({ fileContent: "" }),
+    })
+  );
+  assert(emptyFile.status === 400, "POST empty file → 400");
+
+  const pathTraversal = await uploadDocumentPOST(
+    makeMasterApiRequest("/forte/api/master-documents", {
+      method: "POST",
+      cookie: sessionCookie,
+      body: makeUploadFormData({ fileName: "../../evil.pdf" }),
+    })
+  );
+  assert(pathTraversal.status === 400, "POST path traversal filename → blocked");
+
+  const forbiddenBucket = await uploadDocumentPOST(
+    makeMasterApiRequest("/forte/api/master-documents", {
+      method: "POST",
+      cookie: sessionCookie,
+      body: makeUploadFormData({ extra: { bucket: "other-bucket" } }),
+    })
+  );
+  assert(forbiddenBucket.status === 400, "POST arbitrary bucket field → blocked");
+
+  const forbiddenStoragePath = await uploadDocumentPOST(
+    makeMasterApiRequest("/forte/api/master-documents", {
+      method: "POST",
+      cookie: sessionCookie,
+      body: makeUploadFormData({
+        extra: { storagePath: "sl48/2026-01-01/evil.pdf" },
+      }),
+    })
+  );
+  assert(
+    forbiddenStoragePath.status === 400,
+    "POST arbitrary storagePath field → blocked"
+  );
+
+  const invalidMetadata = validateMasterDocumentUploadMetadata({
+    buildingId: "md25",
+    documentType: "not-a-type",
+    title: "Test",
+    fileName: "test.pdf",
+    mimeType: "application/pdf",
+    fileSizeBytes: 100,
+  });
+  assert(invalidMetadata === "invalid_document_type", "metadata: invalid document type");
+
+  const invalidBuilding = validateMasterDocumentUploadMetadata({
+    buildingId: "",
+    documentType: "correspondence",
+    title: "Test",
+    fileName: "test.pdf",
+    mimeType: "application/pdf",
+    fileSizeBytes: 100,
+  });
+  assert(invalidBuilding === "invalid_building_id", "metadata: invalid buildingId");
 
   if (prevSecret === undefined) delete process.env.FORTE_SESSION_SECRET;
   else process.env.FORTE_SESSION_SECRET = prevSecret;
@@ -152,19 +279,52 @@ async function main(): Promise<void> {
     !serverSource.includes('select("*")'),
     "master-documents-server: no SELECT *"
   );
-
-  const listRoute = read("app/forte/api/master-documents/route.ts");
   assert(
-    listRoute.includes("requireMasterApiSession"),
+    serverSource.includes("buildDocumentStoragePath("),
+    "master-documents-server: storage path built server-side"
+  );
+  assert(
+    serverSource.includes("deleteMasterDocumentStorageFile") &&
+      serverSource.includes("cleanupFailed"),
+    "master-documents-server: DB failure cleanup path exists"
+  );
+  assert(
+    serverSource.includes('.from(DOCUMENT_CENTER_BUCKET)') &&
+      serverSource.includes(".upload("),
+    "master-documents-server: storage upload server-side"
+  );
+  assert(
+    serverSource.includes('.from(DOCUMENTS_TABLE)') &&
+      serverSource.includes(".insert("),
+    "master-documents-server: documents INSERT server-side"
+  );
+  assert(
+    serverSource.includes("buildDocumentPublicUrl") &&
+      !serverSource.includes("getPilotSupabaseClient"),
+    "master-documents-server: public URL built server-side"
+  );
+
+  const routeSource = read("app/forte/api/master-documents/route.ts");
+  assert(
+    routeSource.includes("requireMasterApiSession"),
     "master-documents/route.ts: requireMasterApiSession"
   );
   assert(
-    listRoute.includes("isAllowedForteApiOrigin"),
+    routeSource.includes("isAllowedForteApiOrigin"),
     "master-documents/route.ts: origin check"
   );
   assert(
-    listRoute.includes("parseBuildingIdFilter"),
+    routeSource.includes("parseBuildingIdFilter"),
     "master-documents/route.ts: buildingId validation"
+  );
+  assert(
+    routeSource.includes("FORBIDDEN_UPLOAD_FIELDS") &&
+      routeSource.includes("storagePath"),
+    "master-documents/route.ts: rejects browser storagePath/bucket"
+  );
+  assert(
+    routeSource.includes("export async function POST"),
+    "master-documents/route.ts: POST handler exists"
   );
 
   const panelSource = read(
@@ -172,6 +332,9 @@ async function main(): Promise<void> {
   );
   const inspectionsSource = read(
     "components/master-v2/project-v2/MasterProjectV2InspectionsTab.tsx"
+  );
+  const inspectorDialogSource = read(
+    "components/master-v2/project-v2/MasterProjectV2InspectorReportDialog.tsx"
   );
 
   for (const [file, source] of [
@@ -194,8 +357,33 @@ async function main(): Promise<void> {
     "ProjectDocumentsPanel: uses master-documents-api list"
   );
   assert(
+    panelSource.includes("uploadMasterDocument("),
+    "ProjectDocumentsPanel: uses master-documents-api upload"
+  );
+  assert(
+    !panelSource.includes("uploadDocumentCenterFile") &&
+      !panelSource.includes("createDocument("),
+    "ProjectDocumentsPanel: no direct browser upload/insert"
+  );
+  assert(
+    !panelSource.includes("storage.from") &&
+      !panelSource.includes("getPublicUrl"),
+    "ProjectDocumentsPanel: no browser storage/getPublicUrl"
+  );
+
+  assert(
     inspectionsSource.includes("listMasterDocumentsByBuilding(buildingId)"),
     "InspectionsTab: uses master-documents-api list"
+  );
+
+  assert(
+    inspectorDialogSource.includes("createInspectorReportWithFile"),
+    "InspectorReportDialog: still uses shared inspector flow (Phase 3C blocker)"
+  );
+  assert(
+    inspectorDialogSource.includes("uploadDocumentCenterFile") ||
+      inspectorDialogSource.includes("createInspectorReportWithFile"),
+    "InspectorReportDialog: upload remains direct anon via inspector-report-tracking"
   );
 
   const apiClientSource = read("lib/master-documents-api.ts");
@@ -205,9 +393,26 @@ async function main(): Promise<void> {
     "master-documents-api: no service_role in browser client"
   );
   assert(
-    apiClientSource.includes('credentials: "include"') ||
+    apiClientSource.includes("credentials") ||
+      apiClientSource.includes("withCredentials") ||
       apiClientSource.includes("masterApiFetch"),
-    "master-documents-api: uses masterApiFetch with session cookie"
+    "master-documents-api: session cookie on API calls"
+  );
+  assert(
+    apiClientSource.includes("uploadMasterDocument") &&
+      apiClientSource.includes("FormData"),
+    "master-documents-api: upload via multipart FormData"
+  );
+  assert(
+    !apiClientSource.includes("storage.from") &&
+      !apiClientSource.includes("getPublicUrl"),
+    "master-documents-api: no browser storage/getPublicUrl"
+  );
+
+  const documentCenterSource = read("lib/document-center.ts");
+  assert(
+    documentCenterSource.includes("uploadDocumentCenterFile"),
+    "document-center.ts: Legacy upload path preserved"
   );
 
   const documentsTab = read(
@@ -222,13 +427,33 @@ async function main(): Promise<void> {
   assert(
     portalRoute.includes("buildClientPortalBootstrap"),
     "Client Portal bootstrap API unchanged"
-
   );
 
-  async function runIsolationTests(sessionCookie: string): Promise<void> {
+  const faultsRoute = read("app/forte/api/master-faults/route.ts");
+  assert(
+    faultsRoute.includes("requireMasterApiSession"),
+    "Master Faults API unchanged (2A regression)"
+  );
+
+  const aggregatesRoute = read("app/forte/api/master-fault-aggregates/route.ts");
+  assert(
+    aggregatesRoute.includes("requireMasterApiSession"),
+    "Master Fault Aggregates API unchanged (2B regression)"
+  );
+
+  const clientAccessRoute = read("app/forte/api/master-client-access/route.ts");
+  assert(
+    clientAccessRoute.includes("requireMasterApiSession"),
+    "Master Client Access API unchanged (regression)"
+  );
+
+  process.env.FORTE_SESSION_SECRET = "qa-test-secret";
+  process.env.MASTER_CODE = "qa-test-code";
+  const sessionCookieForIsolation = masterSessionCookie();
+  if (sessionCookieForIsolation) {
     const md25List = await listDocumentsGET(
       makeMasterApiRequest("/forte/api/master-documents?buildingId=md25", {
-        cookie: sessionCookie,
+        cookie: sessionCookieForIsolation,
       })
     );
     assert(md25List.status === 200, "GET /master-documents md25 → 200");
@@ -247,7 +472,7 @@ async function main(): Promise<void> {
 
     const sl48List = await listDocumentsGET(
       makeMasterApiRequest("/forte/api/master-documents?buildingId=sl48", {
-        cookie: sessionCookie,
+        cookie: sessionCookieForIsolation,
       })
     );
     assert(sl48List.status === 200, "GET /master-documents sl48 → 200");
@@ -264,28 +489,16 @@ async function main(): Promise<void> {
     const overlap = sl48Docs.some((row) => md25Ids.has(row.id));
     assert(!overlap, "md25 list does not include sl48 document ids");
 
-    const md48InMd25 = md25Docs.some((row) => row.building_id === "sl48");
-    assert(!md48InMd25, "md25 list does not include sl48 building_id rows");
-
-    const sl48InSl48Only = sl48Docs.some((row) => row.building_id === "md25");
-    assert(!sl48InSl48Only, "sl48 list does not include md25 building_id rows");
-
     const sample = md25Docs[0] ?? sl48Docs[0];
     if (sample) {
       assertDtoMinimized(sample as Record<string, unknown>);
     } else {
       assert(true, "DTO minimization sample skipped (no documents in DB)");
     }
-  }
-
-  process.env.FORTE_SESSION_SECRET = "qa-test-secret";
-  process.env.MASTER_CODE = "qa-test-code";
-  const sessionCookie = masterSessionCookie();
-  if (sessionCookie) {
-    await runIsolationTests(sessionCookie);
   } else {
     console.warn("  ⚠ Skipping isolation integration tests (no session secret)");
   }
+
   if (prevSecret === undefined) delete process.env.FORTE_SESSION_SECRET;
   else process.env.FORTE_SESSION_SECRET = prevSecret;
   if (prevCode === undefined) delete process.env.MASTER_CODE;

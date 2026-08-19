@@ -22,6 +22,25 @@ interface ListResponse {
   error?: string | null;
 }
 
+interface UploadResponse {
+  document?: MasterDocumentDto | null;
+  error?: string | null;
+}
+
+export interface UploadMasterDocumentInput {
+  buildingId: string;
+  documentType: DocumentTypeId;
+  title: string;
+  file: File;
+  tags?: string[];
+  visibility?: DocumentVisibility;
+}
+
+export interface UploadMasterDocumentResult {
+  document: DocumentRecord | null;
+  error: string | null;
+}
+
 export type { MasterDocumentDto };
 
 export function isMasterDocumentsApiConfigured(): boolean {
@@ -85,5 +104,83 @@ export async function listMasterDocumentsByBuilding(
   } catch (error) {
     console.warn("[master-documents-api] list error:", error);
     return [];
+  }
+}
+
+function uploadMasterDocumentWithProgress(
+  formData: FormData,
+  onProgress?: (percent: number) => void
+): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", MASTER_DOCUMENTS_API);
+    xhr.withCredentials = true;
+    xhr.responseType = "json";
+
+    xhr.upload.onprogress = (event) => {
+      if (!onProgress || !event.lengthComputable) return;
+      onProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)));
+    };
+
+    xhr.onload = () => {
+      resolve(
+        new Response(JSON.stringify(xhr.response ?? {}), {
+          status: xhr.status,
+          headers: { "Content-Type": "application/json" },
+        })
+      );
+    };
+
+    xhr.onerror = () => reject(new Error("upload_network_error"));
+    xhr.send(formData);
+  });
+}
+
+export async function uploadMasterDocument(
+  input: UploadMasterDocumentInput,
+  onProgress?: (percent: number) => void
+): Promise<UploadMasterDocumentResult> {
+  if (!isMasterDocumentsApiConfigured() || !input.buildingId.trim()) {
+    return { document: null, error: "not_configured" };
+  }
+
+  if (typeof window === "undefined") {
+    return { document: null, error: "browser_only" };
+  }
+
+  const formData = new FormData();
+  formData.append("buildingId", input.buildingId.trim());
+  formData.append("documentType", input.documentType);
+  formData.append("title", input.title.trim());
+  formData.append("file", input.file);
+  formData.append("tags", JSON.stringify(input.tags ?? []));
+  if (input.visibility) {
+    formData.append("visibility", input.visibility);
+  }
+
+  try {
+    onProgress?.(0);
+    const response = await uploadMasterDocumentWithProgress(formData, onProgress);
+    onProgress?.(100);
+
+    const payload = await parseMasterApiJson<UploadResponse>(response);
+    if (!response.ok) {
+      return {
+        document: null,
+        error: payload?.error ?? (await parseApiError(response)),
+      };
+    }
+
+    if (!payload?.document) {
+      return { document: null, error: payload?.error ?? "upload_failed" };
+    }
+
+    return {
+      document: mapMasterDocumentDtoToRecord(payload.document),
+      error: null,
+    };
+  } catch (error) {
+    console.warn("[master-documents-api] upload error:", error);
+    return { document: null, error: "upload_failed" };
   }
 }

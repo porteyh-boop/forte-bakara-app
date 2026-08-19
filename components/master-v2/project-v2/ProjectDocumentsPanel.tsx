@@ -14,20 +14,19 @@ import {
 } from "@/components/master-v2/project-v2/ProjectDocumentVisibility";
 import { listAllDocumentInspectorMeta } from "@/lib/document-inspector-meta";
 import {
-  createDocument,
   DEFAULT_DOCUMENT_VISIBILITY,
   deleteDocument,
-  deleteDocumentCenterStorageFile,
   getDocumentTypeLabel,
   getDocumentUploadVisibilityHint,
   getDocumentVisibilityChangeMessage,
   updateDocumentVisibility,
-  uploadDocumentCenterFile,
-  validateCreateDocumentInput,
   type DocumentRecord,
   type DocumentVisibility,
 } from "@/lib/document-center";
-import { listMasterDocumentsByBuilding } from "@/lib/master-documents-api";
+import {
+  listMasterDocumentsByBuilding,
+  uploadMasterDocument,
+} from "@/lib/master-documents-api";
 import {
   buildProjectV2AdditionalInspectionUploadTags,
   buildProjectV2UploadTags,
@@ -152,53 +151,23 @@ export default function ProjectDocumentsPanel({
     setMessage(null);
     setError(null);
 
-    const uploaded = await uploadDocumentCenterFile(
-      selectedFile,
-      buildingId,
+    const { document: created, error: uploadError } = await uploadMasterDocument(
+      {
+        buildingId,
+        documentType: uploadDocumentType,
+        title: docTitle.trim() || selectedFile.name,
+        file: selectedFile,
+        tags: uploadTags,
+        visibility: documentVisibility,
+      },
       setUploadProgress
     );
 
-    if (!uploaded.ok) {
-      setCreating(false);
-      setUploadProgress(null);
-      setError(
-        uploaded.details ??
-          (uploaded.stage === "validation"
-            ? uploaded.error
-            : "העלאת הקובץ נכשלה")
-      );
-      return;
-    }
-
-    const input = {
-      buildingId,
-      documentType: uploadDocumentType,
-      title: docTitle.trim() || selectedFile.name,
-      fileName: selectedFile.name,
-      fileUrl: uploaded.fileUrl,
-      storagePath: uploaded.storagePath,
-      mimeType: uploaded.contentType,
-      fileSizeBytes: selectedFile.size,
-      tags: uploadTags,
-      visibility: documentVisibility,
-    };
-
-    const validationError = validateCreateDocumentInput(input);
-    if (validationError) {
-      setCreating(false);
-      setUploadProgress(null);
-      await deleteDocumentCenterStorageFile(uploaded.storagePath);
-      setError(validationError);
-      return;
-    }
-
-    const { document: created, error: insertError } = await createDocument(input);
     setCreating(false);
     setUploadProgress(null);
 
     if (!created) {
-      await deleteDocumentCenterStorageFile(uploaded.storagePath);
-      setError(insertError ?? "שמירת המסמך נכשלה.");
+      setError(uploadError ?? "שמירת המסמך נכשלה.");
       return;
     }
 
