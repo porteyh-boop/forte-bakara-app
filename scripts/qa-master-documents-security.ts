@@ -606,6 +606,19 @@ async function main(): Promise<void> {
     inspectionsSource.includes("listMasterInspectorReports(buildingId)"),
     "InspectionsTab: uses master-inspector-reports-api list"
   );
+  assert(
+    inspectionsSource.includes("closeMasterInspectorReport("),
+    "InspectionsTab: uses secure closeMasterInspectorReport API"
+  );
+  assert(
+    inspectionsSource.includes("deleteMasterInspectorReport("),
+    "InspectionsTab: uses secure deleteMasterInspectorReport API"
+  );
+  assert(
+    !inspectionsSource.includes("closeInspectorReport(") &&
+      !inspectionsSource.includes("deleteInspectorReport("),
+    "InspectionsTab: no direct legacy close/delete"
+  );
 
   assert(
     inspectorDialogSource.includes("createMasterInspectorReport"),

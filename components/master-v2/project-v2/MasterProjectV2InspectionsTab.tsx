@@ -37,6 +37,8 @@ import {
 } from "@/lib/inspector-follow-up-prepared-stages";
 import {
   buildPreparedStagesFromInspectorListResponse,
+  closeMasterInspectorReport,
+  deleteMasterInspectorReport,
   groupMasterInspectorNotificationsByDocumentId,
   listMasterInspectorReports,
   mapMasterInspectorReportListItemToRecord,
@@ -46,8 +48,6 @@ import type {
   MasterPreparedInspectorLetterStageDto,
 } from "@/lib/master-inspector-reports-server";
 import {
-  closeInspectorReport,
-  deleteInspectorReport,
   formatInspectorDeadline,
   formatInspectorReportDate,
   getInspectorReportDocumentUrl,
@@ -240,7 +240,7 @@ export default function MasterProjectV2InspectionsTab({
     if (!guardSensitiveAction()) return;
 
     setActionId(reportId);
-    const ok = await deleteInspectorReport(reportId);
+    const ok = await deleteMasterInspectorReport(reportId, buildingId);
     setActionId(null);
     setMessage(ok ? "התסקיר נמחק." : "מחיקת התסקיר נכשלה.");
     if (ok) await refresh();
@@ -249,10 +249,11 @@ export default function MasterProjectV2InspectionsTab({
   async function handleClose(reportId: string) {
     if (!guardSensitiveAction()) return;
     setActionId(reportId);
-    const ok = await closeInspectorReport({
+    const ok = await closeMasterInspectorReport(
       reportId,
-      closureNotes: closureNotes[reportId] ?? "",
-    });
+      buildingId,
+      closureNotes[reportId] ?? ""
+    );
     setActionId(null);
     setMessage(ok ? "המעקב נסגר לאחר טיפול." : "סגירת המעקב נכשלה.");
     if (ok) await refresh();

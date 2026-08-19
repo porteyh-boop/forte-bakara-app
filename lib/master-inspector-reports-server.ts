@@ -23,9 +23,12 @@ import {
   type DocumentInspectorMetaRecord,
 } from "@/lib/document-inspector-meta";
 import {
+  extractInspectorReportStoragePath,
+  INSPECTOR_REPORTS_BUCKET,
   INSPECTOR_REPORTS_TABLE,
   type InspectorReportSource,
 } from "@/lib/inspector-report-tracking";
+import { parseDocumentId } from "@/lib/master-documents-server";
 import {
   MASTER_LETTER_METADATA_KEY,
   MASTER_LETTER_METADATA_SCHEMA_VERSION,
@@ -46,6 +49,11 @@ import {
 } from "@/lib/supabase-server";
 
 const ELEVATORS_TABLE = "elevators";
+
+export const BUILDING_FORBIDDEN_ERROR = "building_forbidden";
+
+const INSPECTOR_REPORT_MUTATION_COLUMNS =
+  "id, building_id, document_type, storage_path, file_url";
 
 const INSPECTOR_REPORT_LIST_COLUMNS =
   "id, building_id, document_type, title, file_name, file_url, tags, visibility, created_at";
@@ -915,6 +923,331 @@ async function listBuildingDocumentIdsServer(
     ),
     error: null,
   };
+}
+
+export function parseInspectorReportId(value: unknown): string | null {
+  return parseDocumentId(value);
+}
+
+type InspectorReportBuildingVerifyResult =
+  | {
+      ok: true;
+      source: "document";
+      reportId: string;
+      buildingId: string;
+      storagePath: string;
+    }
+  | {
+      ok: true;
+      source: "legacy";
+      reportId: string;
+      buildingId: string;
+      fileUrl: string | null;
+    }
+  | {
+      ok: false;
+      error:
+        | "not_found"
+        | typeof BUILDING_FORBIDDEN_ERROR
+        | "invalid_building_id"
+        | "invalid_report_id"
+        | "supabase_service_unconfigured";
+    };
+
+function isStoragePathOwnedByBuilding(
+  storagePath: string,
+  buildingId: string
+): boolean {
+  const normalized = buildingId.trim().toLowerCase();
+  const path = storagePath.trim();
+  if (!path || path.includes("..") || path.startsWith("/")) return false;
+  return path.startsWith(`${normalized}/`);
+}
+
+async function verifyInspectorReportBuildingServer(
+  reportId: string,
+  buildingId: string
+): Promise<InspectorReportBuildingVerifyResult> {
+  const expectedBuilding = parseBuildingIdFilter(buildingId);
+  if (!expectedBuilding) {
+    return { ok: false, error: "invalid_building_id" };
+  }
+
+  const parsedReportId = parseInspectorReportId(reportId);
+  if (!parsedReportId) {
+    return { ok: false, error: "invalid_report_id" };
+  }
+
+  const client = getSupabaseServiceClient();
+  if (!client) {
+    return { ok: false, error: "supabase_service_unconfigured" };
+  }
+
+  const { data: documentRow, error: documentError } = await client
+    .from(DOCUMENTS_TABLE)
+    .select(INSPECTOR_REPORT_MUTATION_COLUMNS)
+    .eq("id", parsedReportId)
+    .maybeSingle();
+
+  if (documentError) {
+    console.warn(
+      "[master-inspector-reports-server] report verify document lookup failed:",
+      documentError.message
+    );
+    return { ok: false, error: "not_found" };
+  }
+
+  if (
+    documentRow &&
+    String((documentRow as Record<string, unknown>).document_type) ===
+      "inspector_report"
+  ) {
+    const row = documentRow as Record<string, unknown>;
+    const rowBuilding = String(row.building_id ?? "").trim().toLowerCase();
+    if (rowBuilding !== expectedBuilding) {
+      return { ok: false, error: BUILDING_FORBIDDEN_ERROR };
+    }
+
+    const { data: metaRow, error: metaError } = await client
+      .from(DOCUMENT_INSPECTOR_META_TABLE)
+      .select("document_id")
+      .eq("document_id", parsedReportId)
+      .maybeSingle();
+
+    if (metaError || !metaRow) {
+      return { ok: false, error: "not_found" };
+    }
+
+    return {
+      ok: true,
+      source: "document",
+      reportId: parsedReportId,
+      buildingId: rowBuilding,
+      storagePath: String(row.storage_path ?? "").trim(),
+    };
+  }
+
+  const { data: legacyRow, error: legacyError } = await client
+    .from(INSPECTOR_REPORTS_TABLE)
+    .select("id, building_id, file_url")
+    .eq("id", parsedReportId)
+    .maybeSingle();
+
+  if (legacyError) {
+    console.warn(
+      "[master-inspector-reports-server] report verify legacy lookup failed:",
+      legacyError.message
+    );
+    return { ok: false, error: "not_found" };
+  }
+
+  if (legacyRow) {
+    const row = legacyRow as Record<string, unknown>;
+    const rowBuilding = String(row.building_id ?? "").trim().toLowerCase();
+    if (rowBuilding !== expectedBuilding) {
+      return { ok: false, error: BUILDING_FORBIDDEN_ERROR };
+    }
+
+    return {
+      ok: true,
+      source: "legacy",
+      reportId: parsedReportId,
+      buildingId: rowBuilding,
+      fileUrl: row.file_url ? String(row.file_url) : null,
+    };
+  }
+
+  return { ok: false, error: "not_found" };
+}
+
+async function deleteLegacyInspectorReportStorageFileServer(
+  fileUrl: string | null
+): Promise<boolean> {
+  if (!fileUrl?.trim()) return true;
+
+  const storagePath = extractInspectorReportStoragePath(fileUrl);
+  if (!storagePath) return true;
+
+  const client = getSupabaseServiceClient();
+  if (!client) return false;
+
+  const { error } = await client.storage
+    .from(INSPECTOR_REPORTS_BUCKET)
+    .remove([storagePath]);
+
+  if (error) {
+    console.warn(
+      "[master-inspector-reports-server] legacy storage delete failed:",
+      error.message
+    );
+    return false;
+  }
+
+  return true;
+}
+
+export interface MasterInspectorReportMutationResult {
+  ok: boolean;
+  report: MasterInspectorReportListItemDto | null;
+  error: string | null;
+}
+
+export async function closeMasterInspectorReportServer(
+  reportId: string,
+  buildingId: string,
+  closureNotes?: string | null
+): Promise<MasterInspectorReportMutationResult> {
+  if (!isSupabaseServiceConfigured()) {
+    return { ok: false, report: null, error: "supabase_service_unconfigured" };
+  }
+
+  const verified = await verifyInspectorReportBuildingServer(reportId, buildingId);
+  if (!verified.ok) {
+    return { ok: false, report: null, error: verified.error };
+  }
+
+  const client = getSupabaseServiceClient();
+  if (!client) {
+    return { ok: false, report: null, error: "supabase_service_unconfigured" };
+  }
+
+  const closedAt = new Date().toISOString();
+  const normalizedClosureNotes = closureNotes?.trim() || null;
+
+  if (verified.source === "document") {
+    const { data, error } = await client
+      .from(DOCUMENT_INSPECTOR_META_TABLE)
+      .update({
+        status: "closed",
+        closed_at: closedAt,
+        closure_notes: normalizedClosureNotes,
+        updated_at: closedAt,
+      })
+      .eq("document_id", verified.reportId)
+      .select(INSPECTOR_META_READ_COLUMNS)
+      .single();
+
+    if (error || !data) {
+      console.warn(
+        "[master-inspector-reports-server] close document meta failed:",
+        error?.message
+      );
+      return { ok: false, report: null, error: error?.message || "close_failed" };
+    }
+
+    const { data: documentRow, error: documentError } = await client
+      .from(DOCUMENTS_TABLE)
+      .select(INSPECTOR_DOCUMENT_READ_COLUMNS)
+      .eq("id", verified.reportId)
+      .eq("building_id", verified.buildingId)
+      .single();
+
+    if (documentError || !documentRow) {
+      return { ok: false, report: null, error: "close_failed" };
+    }
+
+    const meta = mapDocumentInspectorMetaRow(data as Record<string, unknown>);
+    return {
+      ok: true,
+      report: mapDocumentInspectorReportListItem(
+        documentRow as Record<string, unknown>,
+        meta,
+        verified.buildingId
+      ),
+      error: null,
+    };
+  }
+
+  const { data, error } = await client
+    .from(INSPECTOR_REPORTS_TABLE)
+    .update({
+      status: "closed",
+      closed_at: closedAt,
+      closure_notes: normalizedClosureNotes,
+    })
+    .eq("id", verified.reportId)
+    .eq("building_id", verified.buildingId)
+    .select(LEGACY_INSPECTOR_REPORT_READ_COLUMNS)
+    .single();
+
+  if (error || !data) {
+    console.warn(
+      "[master-inspector-reports-server] close legacy report failed:",
+      error?.message
+    );
+    return { ok: false, report: null, error: error?.message || "close_failed" };
+  }
+
+  return {
+    ok: true,
+    report: mapLegacyInspectorReportListItem(
+      data as Record<string, unknown>,
+      verified.buildingId
+    ),
+    error: null,
+  };
+}
+
+export async function deleteMasterInspectorReportServer(
+  reportId: string,
+  buildingId: string
+): Promise<{ ok: boolean; error: string | null }> {
+  if (!isSupabaseServiceConfigured()) {
+    return { ok: false, error: "supabase_service_unconfigured" };
+  }
+
+  const verified = await verifyInspectorReportBuildingServer(reportId, buildingId);
+  if (!verified.ok) {
+    return { ok: false, error: verified.error };
+  }
+
+  const client = getSupabaseServiceClient();
+  if (!client) {
+    return { ok: false, error: "supabase_service_unconfigured" };
+  }
+
+  if (verified.source === "document") {
+    if (verified.storagePath) {
+      if (!isStoragePathOwnedByBuilding(verified.storagePath, verified.buildingId)) {
+        return { ok: false, error: "invalid_storage_path" };
+      }
+      await deleteInspectorReportStorageFile(verified.storagePath);
+    }
+
+    const { error } = await client
+      .from(DOCUMENTS_TABLE)
+      .delete()
+      .eq("id", verified.reportId)
+      .eq("building_id", verified.buildingId);
+
+    if (error) {
+      console.warn(
+        "[master-inspector-reports-server] delete document report failed:",
+        error.message
+      );
+      return { ok: false, error: error.message || "delete_failed" };
+    }
+
+    return { ok: true, error: null };
+  }
+
+  await deleteLegacyInspectorReportStorageFileServer(verified.fileUrl);
+
+  const { error } = await client
+    .from(INSPECTOR_REPORTS_TABLE)
+    .delete()
+    .eq("id", verified.reportId)
+    .eq("building_id", verified.buildingId);
+
+  if (error) {
+    console.warn(
+      "[master-inspector-reports-server] delete legacy report failed:",
+      error.message
+    );
+    return { ok: false, error: error.message || "delete_failed" };
+  }
+
+  return { ok: true, error: null };
 }
 
 export async function listMasterInspectorReportsByBuildingServer(

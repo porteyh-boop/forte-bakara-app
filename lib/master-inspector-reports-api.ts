@@ -41,6 +41,12 @@ interface ListResponse {
   error?: string | null;
 }
 
+interface MutationResponse {
+  ok?: boolean;
+  report?: MasterInspectorReportListItemDto | null;
+  error?: string | null;
+}
+
 export interface CreateMasterInspectorReportInput {
   buildingId: string;
   elevatorId?: string | null;
@@ -271,5 +277,90 @@ export async function listMasterInspectorReports(
   } catch (error) {
     console.warn("[master-inspector-reports-api] list error:", error);
     return { ...empty, error: "list_failed" };
+  }
+}
+
+export async function closeMasterInspectorReport(
+  reportId: string,
+  buildingId: string,
+  closureNotes?: string
+): Promise<InspectorReportRecord | null> {
+  if (
+    !isMasterInspectorReportsApiConfigured() ||
+    !reportId.trim() ||
+    !buildingId.trim()
+  ) {
+    return null;
+  }
+
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const response = await masterApiFetch(
+      `${MASTER_INSPECTOR_REPORTS_API}/${encodeURIComponent(reportId.trim())}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          action: "close",
+          buildingId: buildingId.trim(),
+          closureNotes: closureNotes ?? "",
+        }),
+      }
+    );
+    const payload = await parseMasterApiJson<MutationResponse>(response);
+
+    if (!response.ok || !payload?.ok || !payload.report) {
+      console.warn(
+        "[master-inspector-reports-api] close failed:",
+        payload?.error ?? response.status
+      );
+      return null;
+    }
+
+    return mapMasterInspectorReportListItemToRecord(payload.report);
+  } catch (error) {
+    console.warn("[master-inspector-reports-api] close error:", error);
+    return null;
+  }
+}
+
+export async function deleteMasterInspectorReport(
+  reportId: string,
+  buildingId: string
+): Promise<boolean> {
+  if (
+    !isMasterInspectorReportsApiConfigured() ||
+    !reportId.trim() ||
+    !buildingId.trim()
+  ) {
+    return false;
+  }
+
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  try {
+    const params = new URLSearchParams({ buildingId: buildingId.trim() });
+    const response = await masterApiFetch(
+      `${MASTER_INSPECTOR_REPORTS_API}/${encodeURIComponent(reportId.trim())}?${params.toString()}`,
+      { method: "DELETE" }
+    );
+    const payload = await parseMasterApiJson<MutationResponse>(response);
+
+    if (!response.ok || !payload?.ok) {
+      console.warn(
+        "[master-inspector-reports-api] delete failed:",
+        payload?.error ?? response.status
+      );
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.warn("[master-inspector-reports-api] delete error:", error);
+    return false;
   }
 }

@@ -1,5 +1,5 @@
 /**
- * Security Phase 1.5B-3D-A/3D-B — Master V2 inspector report secure create + read QA.
+ * Security Phase 1.5B-3D-A/3D-B/3D-C — Master V2 inspector report secure create/read/close/delete QA.
  * Run: npx tsx scripts/qa-master-inspector-reports-security.ts
  */
 import fs from "fs";
@@ -34,6 +34,9 @@ import {
   validateInspectorReportFile,
 } from "../lib/inspector-report-tracking";
 import {
+  BUILDING_FORBIDDEN_ERROR,
+  closeMasterInspectorReportServer,
+  deleteMasterInspectorReportServer,
   listMasterInspectorReportsByBuildingServer,
   validateMasterInspectorReportCreateMetadata,
 } from "../lib/master-inspector-reports-server";
@@ -45,6 +48,10 @@ import {
   GET as listInspectorReportsGET,
   POST as createInspectorReportPOST,
 } from "../app/forte/api/master-inspector-reports/route";
+import {
+  DELETE as deleteInspectorReportDELETE,
+  PATCH as closeInspectorReportPATCH,
+} from "../app/forte/api/master-inspector-reports/[reportId]/route";
 
 let passed = 0;
 let failed = 0;
@@ -132,7 +139,7 @@ const FORBIDDEN_RESPONSE_FIELDS = [
 
 async function main(): Promise<void> {
   console.log(
-    "\n=== Master V2 Inspector Reports Security QA (Phase 1.5B-3D-A/3D-B) ===\n"
+    "\n=== Master V2 Inspector Reports Security QA (Phase 1.5B-3D-A/3D-B/3D-C) ===\n"
   );
 
   console.log("--- Static wiring ---");
@@ -240,6 +247,22 @@ async function main(): Promise<void> {
     !inspectionsTabSource.includes("listMasterDocumentsByBuilding("),
     "InspectionsTab: no master-documents list for follow-up stages"
   );
+  assert(
+    inspectionsTabSource.includes("closeMasterInspectorReport("),
+    "InspectionsTab: uses closeMasterInspectorReport API"
+  );
+  assert(
+    inspectionsTabSource.includes("deleteMasterInspectorReport("),
+    "InspectionsTab: uses deleteMasterInspectorReport API"
+  );
+  assert(
+    !inspectionsTabSource.includes("closeInspectorReport("),
+    "InspectionsTab: no direct closeInspectorReport"
+  );
+  assert(
+    !inspectionsTabSource.includes("deleteInspectorReport("),
+    "InspectionsTab: no direct deleteInspectorReport"
+  );
 
   assert(
     followUpPopupSource.includes("listMasterInspectorReports(buildingId)"),
@@ -274,10 +297,45 @@ async function main(): Promise<void> {
     "master-inspector-reports-api: list via masterApiFetch"
   );
   assert(
+    apiClientSource.includes("closeMasterInspectorReport") &&
+      apiClientSource.includes("deleteMasterInspectorReport"),
+    "master-inspector-reports-api: close/delete via masterApiFetch"
+  );
+  assert(
+    !apiClientSource.includes("closeInspectorReport") &&
+      !apiClientSource.includes("deleteInspectorReport"),
+    "master-inspector-reports-api: no legacy close/delete"
+  );
+  assert(
     serverSource.includes("listMasterInspectorReportsByBuildingServer") &&
       serverSource.includes("INSPECTOR_META_READ_COLUMNS") &&
       serverSource.includes("LEGACY_INSPECTOR_REPORT_READ_COLUMNS"),
     "master-inspector-reports-server: scoped list column projections"
+  );
+  assert(
+    serverSource.includes("closeMasterInspectorReportServer") &&
+      serverSource.includes("deleteMasterInspectorReportServer") &&
+      serverSource.includes("verifyInspectorReportBuildingServer"),
+    "master-inspector-reports-server: scoped close/delete + building verify"
+  );
+  assert(
+    serverSource.includes(BUILDING_FORBIDDEN_ERROR),
+    "master-inspector-reports-server: building_forbidden error"
+  );
+
+  const reportRouteSource = read(
+    "app/forte/api/master-inspector-reports/[reportId]/route.ts"
+  );
+  assert(
+    reportRouteSource.includes("export async function PATCH") &&
+      reportRouteSource.includes("export async function DELETE") &&
+      reportRouteSource.includes("closeMasterInspectorReportServer") &&
+      reportRouteSource.includes("deleteMasterInspectorReportServer"),
+    "master-inspector-reports/[reportId] route: PATCH close + DELETE"
+  );
+  assert(
+    reportRouteSource.includes("forbidden_field"),
+    "master-inspector-reports/[reportId] route: forbidden storage fields"
   );
 
   const legacyTracking = read("lib/inspector-report-tracking.ts");
@@ -681,6 +739,157 @@ async function main(): Promise<void> {
     );
   } else {
     console.warn("  ⚠ Skipping GET integration tests (service not configured)");
+  }
+
+  const qaArtifactId = "2246c38a-dbc2-47bf-b7f4-469624b104e3";
+
+  console.log("\n--- Close/Delete API route (Phase 3D-C) ---");
+
+  const patchNoSession = await closeInspectorReportPATCH(
+    makeMasterApiRequest(
+      `/forte/api/master-inspector-reports/${qaArtifactId}`,
+      { method: "PATCH" }
+    ),
+    { params: Promise.resolve({ reportId: qaArtifactId }) }
+  );
+  assert(patchNoSession.status === 401, "PATCH close without Master session → 401");
+
+  const deleteNoSession = await deleteInspectorReportDELETE(
+    makeMasterApiRequest(
+      `/forte/api/master-inspector-reports/${qaArtifactId}?buildingId=md25`,
+      { method: "DELETE" }
+    ),
+    { params: Promise.resolve({ reportId: qaArtifactId }) }
+  );
+  assert(deleteNoSession.status === 401, "DELETE without Master session → 401");
+
+  if (sessionCookie) {
+    const crossBuildingCloseWithBody = await closeInspectorReportPATCH(
+      new NextRequest(
+        `http://localhost:3000/forte/api/master-inspector-reports/${qaArtifactId}`,
+        {
+          method: "PATCH",
+          headers: {
+            host: "localhost:3000",
+            origin: "http://localhost:3000",
+            cookie: sessionCookie,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            action: "close",
+            buildingId: "sl48",
+            closureNotes: "QA cross-building close attempt",
+          }),
+        }
+      ),
+      { params: Promise.resolve({ reportId: qaArtifactId }) }
+    );
+    assert(
+      crossBuildingCloseWithBody.status === 403,
+      "cross-building close → 403 (QA artifact preserved)"
+    );
+
+    const crossBuildingDelete = await deleteInspectorReportDELETE(
+      makeMasterApiRequest(
+        `/forte/api/master-inspector-reports/${qaArtifactId}?buildingId=sl48`,
+        {
+          method: "DELETE",
+          cookie: sessionCookie,
+        }
+      ),
+      { params: Promise.resolve({ reportId: qaArtifactId }) }
+    );
+    assert(
+      crossBuildingDelete.status === 403,
+      "cross-building delete → 403 (QA artifact preserved)"
+    );
+
+    const forbiddenStorageField = await closeInspectorReportPATCH(
+      new NextRequest(
+        `http://localhost:3000/forte/api/master-inspector-reports/${qaArtifactId}`,
+        {
+          method: "PATCH",
+          headers: {
+            host: "localhost:3000",
+            origin: "http://localhost:3000",
+            cookie: sessionCookie,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            action: "close",
+            buildingId: "md25",
+            storage_path: "evil/path.pdf",
+          }),
+        }
+      ),
+      { params: Promise.resolve({ reportId: qaArtifactId }) }
+    );
+    assert(forbiddenStorageField.status === 400, "browser-supplied storage_path on close → 400");
+
+    const notFoundClose = await closeInspectorReportPATCH(
+      new NextRequest(
+        "http://localhost:3000/forte/api/master-inspector-reports/00000000-0000-4000-8000-000000000099",
+        {
+          method: "PATCH",
+          headers: {
+            host: "localhost:3000",
+            origin: "http://localhost:3000",
+            cookie: sessionCookie,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            action: "close",
+            buildingId: "md25",
+          }),
+        }
+      ),
+      { params: Promise.resolve({ reportId: "00000000-0000-4000-8000-000000000099" }) }
+    );
+    assert(notFoundClose.status === 404, "close missing report → 404");
+
+    if (
+      process.env.NEXT_PUBLIC_SUPABASE_URL &&
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    ) {
+      const crossBuildingServerClose = await closeMasterInspectorReportServer(
+        qaArtifactId,
+        "sl48"
+      );
+      assert(
+        crossBuildingServerClose.error === BUILDING_FORBIDDEN_ERROR,
+        "server close cross-building → building_forbidden"
+      );
+      assert(
+        !crossBuildingServerClose.ok,
+        "server close cross-building returns not ok"
+      );
+
+      const crossBuildingServerDelete = await deleteMasterInspectorReportServer(
+        qaArtifactId,
+        "sl48"
+      );
+      assert(
+        crossBuildingServerDelete.error === BUILDING_FORBIDDEN_ERROR,
+        "server delete cross-building → building_forbidden"
+      );
+
+      const md25After = await listMasterInspectorReportsByBuildingServer("md25");
+      const qaStillPresent = md25After.reports.some(
+        (row) => row.document_id === qaArtifactId || row.id === qaArtifactId
+      );
+      assert(qaStillPresent, "QA artifact still present after auth-only close/delete tests");
+      const qaReport = md25After.reports.find(
+        (row) => row.document_id === qaArtifactId || row.id === qaArtifactId
+      );
+      assert(
+        qaReport?.status === "open",
+        "QA artifact still open after auth-only close/delete tests"
+      );
+    } else {
+      assert(true, "server close/delete integration skipped (service not configured)");
+    }
+  } else {
+    console.warn("  ⚠ Skipping close/delete route tests (no session secret)");
   }
 
   console.log("\n--- Regression: other security suites untouched ---");
