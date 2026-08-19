@@ -20,15 +20,16 @@ import {
   type FaultNotificationRecord,
 } from "@/lib/fault-notifications";
 import {
-  closePilotFault,
-  deletePilotFault,
-  getAllPilotFaults,
-  isPilotCloudConfigured,
-  reopenPilotFault,
-  startPilotFaultTreatment,
-  updatePilotFaultTreatmentNote,
-  type PilotCloudFault,
-} from "@/lib/pilot-cloud";
+  closeMasterFault,
+  deleteMasterFault,
+  isMasterFaultsApiConfigured,
+  listMasterFaultsByBuilding,
+  reopenMasterFault,
+  startMasterFaultTreatment,
+  updateMasterFaultTreatmentNote,
+  type MasterFaultDto,
+} from "@/lib/master-faults-api";
+import type { PilotCloudFault } from "@/lib/pilot-cloud";
 
 function formatCloudDate(iso: string): string {
   return new Intl.DateTimeFormat("he-IL", {
@@ -52,9 +53,9 @@ export default function MasterProjectV2FaultsTab({
   onHighlightConsumed,
 }: MasterProjectV2FaultsTabProps) {
   const { guardSensitiveAction } = useAppVersion();
-  const cloudReady = isPilotCloudConfigured();
+  const cloudReady = isMasterFaultsApiConfigured();
 
-  const [faults, setFaults] = useState<PilotCloudFault[]>([]);
+  const [faults, setFaults] = useState<MasterFaultDto[]>([]);
   const [notificationsByFault, setNotificationsByFault] = useState<
     Record<string, FaultNotificationRecord[]>
   >({});
@@ -70,7 +71,7 @@ export default function MasterProjectV2FaultsTab({
     if (!cloudReady) return;
     setLoading(true);
     const [faultRows, cloudResult, notificationRows] = await Promise.all([
-      getAllPilotFaults(),
+      listMasterFaultsByBuilding(buildingId),
       getAllCloudBuildingsWithMeta(),
       listFaultNotificationsByBuilding(buildingId),
     ]);
@@ -92,9 +93,9 @@ export default function MasterProjectV2FaultsTab({
 
   const buildingFaults = useMemo(() => {
     const filtered = filterPilotFaultsByBuildingLiveStart(
-      faults,
+      faults as PilotCloudFault[],
       liveStartedAtByBuilding
-    ).filter((fault) => fault.building_id === buildingId);
+    );
 
     const q = search.trim().toLowerCase();
     if (!q) return filtered;
@@ -115,7 +116,7 @@ export default function MasterProjectV2FaultsTab({
         .toLowerCase()
         .includes(q)
     );
-  }, [faults, liveStartedAtByBuilding, buildingId, search]);
+  }, [faults, liveStartedAtByBuilding, search]);
 
   useEffect(() => {
     if (!highlightFaultId || loading) return;
@@ -149,7 +150,7 @@ export default function MasterProjectV2FaultsTab({
   ) {
     if (!guardSensitiveAction()) return;
     setActionId(id);
-    await startPilotFaultTreatment(id, { treatmentNote });
+    await startMasterFaultTreatment(id, buildingId, treatmentNote);
     await refresh();
     setActionId(null);
   }
@@ -157,7 +158,7 @@ export default function MasterProjectV2FaultsTab({
   async function handleUpdateTreatmentNote(id: string, treatmentNote: string) {
     if (!guardSensitiveAction()) return;
     setActionId(id);
-    await updatePilotFaultTreatmentNote(id, treatmentNote);
+    await updateMasterFaultTreatmentNote(id, buildingId, treatmentNote);
     await refresh();
     setActionId(null);
   }
@@ -165,7 +166,7 @@ export default function MasterProjectV2FaultsTab({
   async function handleClose(id: string, closureNote?: string | null) {
     if (!guardSensitiveAction()) return;
     setActionId(id);
-    await closePilotFault(id, { closureNote });
+    await closeMasterFault(id, buildingId, closureNote);
     await refresh();
     setActionId(null);
   }
@@ -173,7 +174,7 @@ export default function MasterProjectV2FaultsTab({
   async function handleReopen(id: string) {
     if (!guardSensitiveAction()) return;
     setActionId(id);
-    await reopenPilotFault(id);
+    await reopenMasterFault(id, buildingId);
     await refresh();
     setActionId(null);
   }
@@ -182,7 +183,7 @@ export default function MasterProjectV2FaultsTab({
     if (!window.confirm("למחוק דיווח זה מהענן?")) return;
     if (!guardSensitiveAction()) return;
     setActionId(id);
-    await deletePilotFault(id);
+    await deleteMasterFault(id, buildingId);
     await refresh();
     setActionId(null);
   }

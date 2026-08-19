@@ -12,28 +12,48 @@ import {
   type CloudElevatorRow,
 } from "@/lib/buildings-cloud";
 import {
-  buildLiveStartedAtByBuilding,
-  filterPilotFaultsByBuildingLiveStart,
-} from "@/lib/building-live";
-import {
-  getAllBuildingIds,
-  getStaticDemoBuildingMeta,
   getAllDemoBuildingIds,
+  getStaticDemoBuildingMeta,
 } from "@/lib/buildings";
 import {
   buildMasterBuildingList,
-  summarizeFaultBuildings,
+  type FaultBuildingSummary,
 } from "@/lib/master-buildings-list";
-import { buildBuildingDossier } from "@/lib/master-building-dossier";
+import type { BuildingDossier } from "@/lib/master-building-dossier";
 import { buildMasterProjectV2Path } from "@/lib/master-project-v2-routes";
 import { ensureMasterV2SessionsValid } from "@/lib/master-v2-auth";
 import {
-  getAllPilotFaults,
+  isMasterFaultAggregatesApiConfigured,
+  listMasterFaultAggregates,
+  type MasterFaultAggregateDto,
+} from "@/lib/master-fault-aggregates-api";
+import {
   isMasterAuthenticated,
   isPilotCloudConfigured,
   setMasterAuthenticated,
-  type PilotCloudFault,
 } from "@/lib/pilot-cloud";
+
+function buildStubDossier(
+  buildingId: string,
+  buildingName: string,
+  elevatorCount: number,
+  lastFaultDate: string | null
+): BuildingDossier {
+  return {
+    buildingId,
+    buildingName,
+    totalFaults: 0,
+    openFaults: 0,
+    closedFaults: 0,
+    elevatorCount,
+    faultsByElevator: [],
+    lastFaultDate,
+    healthScore: 100,
+    healthLevel: "green",
+    recurringCount: 0,
+    faults: [],
+  };
+}
 
 export default function MasterPageContentV2() {
   const { selectBuilding } = useBuilding();
@@ -45,10 +65,9 @@ export default function MasterPageContentV2() {
   const [elevatorsByBuilding, setElevatorsByBuilding] = useState<
     Record<string, CloudElevatorRow[]>
   >({});
-  const [faults, setFaults] = useState<PilotCloudFault[]>([]);
-  const [liveStartedAtByBuilding, setLiveStartedAtByBuilding] = useState<
-    Record<string, string | null>
-  >({});
+  const [faultAggregates, setFaultAggregates] = useState<
+    MasterFaultAggregateDto[]
+  >([]);
 
   useEffect(() => {
     setAuthed(isMasterAuthenticated());
@@ -66,8 +85,11 @@ export default function MasterPageContentV2() {
     setLoading(true);
     setCloudLoadError(null);
 
-    const faultRows = cloudReady ? await getAllPilotFaults() : [];
-    setFaults(faultRows);
+    const aggregates =
+      cloudReady && isMasterFaultAggregatesApiConfigured()
+        ? await listMasterFaultAggregates()
+        : [];
+    setFaultAggregates(aggregates);
 
     let rows: CloudBuildingRow[] = [];
     let grouped: Record<string, CloudElevatorRow[]> = {};
@@ -83,14 +105,6 @@ export default function MasterPageContentV2() {
         if (!grouped[elevator.building_id]) grouped[elevator.building_id] = [];
         grouped[elevator.building_id].push(elevator);
       }
-
-      const cloudLiveMap: Record<string, string | null> = {};
-      for (const row of rows) {
-        cloudLiveMap[row.building_id] = row.live_started_at ?? null;
-      }
-      setLiveStartedAtByBuilding(
-        buildLiveStartedAtByBuilding(getAllBuildingIds(), cloudLiveMap)
-      );
     }
 
     setBuildings(rows);
@@ -102,11 +116,22 @@ export default function MasterPageContentV2() {
     if (authed) void refresh();
   }, [authed, refresh]);
 
-  const dossierFaults = useMemo(
+  const faultBuildings = useMemo<FaultBuildingSummary[]>(
     () =>
-      filterPilotFaultsByBuildingLiveStart(faults, liveStartedAtByBuilding),
-    [faults, liveStartedAtByBuilding]
+      faultAggregates.map((aggregate) => ({
+        buildingId: aggregate.buildingId,
+        buildingName: aggregate.buildingName,
+      })),
+    [faultAggregates]
   );
+
+  const aggregateByBuildingId = useMemo(() => {
+    const map = new Map<string, MasterFaultAggregateDto>();
+    for (const aggregate of faultAggregates) {
+      map.set(aggregate.buildingId, aggregate);
+    }
+    return map;
+  }, [faultAggregates]);
 
   const masterBuildingList = useMemo(
     () =>
@@ -115,30 +140,28 @@ export default function MasterPageContentV2() {
         demoBuildingIds: getAllDemoBuildingIds(),
         resolveDemoName: (id) => getStaticDemoBuildingMeta(id).name,
         resolveDemoCity: (id) => getStaticDemoBuildingMeta(id).city,
-        faultBuildings: summarizeFaultBuildings(dossierFaults),
+        faultBuildings,
       }),
-    [buildings, dossierFaults]
+    [buildings, faultBuildings]
   );
 
   const dossierByBuildingId = useMemo(() => {
-    const map = new Map<
-      string,
-      ReturnType<typeof buildBuildingDossier>
-    >();
+    const map = new Map<string, BuildingDossier>();
     for (const entry of masterBuildingList) {
       const elevators = elevatorsByBuilding[entry.buildingId] ?? [];
+      const aggregate = aggregateByBuildingId.get(entry.buildingId);
       map.set(
         entry.buildingId,
-        buildBuildingDossier({
-          buildingId: entry.buildingId,
-          buildingName: entry.name,
-          faults: dossierFaults,
-          registeredElevatorIds: elevators.map((e) => e.elevator_id),
-        })
+        buildStubDossier(
+          entry.buildingId,
+          entry.name,
+          elevators.length,
+          aggregate?.lastFaultDate ?? null
+        )
       );
     }
     return map;
-  }, [masterBuildingList, elevatorsByBuilding, dossierFaults]);
+  }, [masterBuildingList, elevatorsByBuilding, aggregateByBuildingId]);
 
   function handleRowClick(buildingId: string) {
     selectBuilding(buildingId);

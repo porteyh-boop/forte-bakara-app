@@ -23,7 +23,7 @@ import {
   formatFaultNotificationTimestamp,
   type FaultNotificationRecord,
 } from "@/lib/fault-notifications";
-import type { PilotCloudFault } from "@/lib/pilot-cloud";
+import type { MasterFaultDto } from "@/lib/master-faults-api";
 import type { FaultStatus } from "@/lib/types";
 
 function formatFaultSource(source: string | null): string {
@@ -46,7 +46,7 @@ function faultStatusForBadge(status: string): FaultStatus {
 }
 
 interface MasterProjectV2FaultCardProps {
-  fault: PilotCloudFault;
+  fault: MasterFaultDto;
   highlighted?: boolean;
   notifications?: FaultNotificationRecord[];
   actionId: string | null;

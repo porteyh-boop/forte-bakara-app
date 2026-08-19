@@ -6951,6 +6951,42 @@ if (masterClientSecurityQa.status !== 0) {
   console.log("Master V2 Client Access Security QA עבר");
 }
 
+console.log("\n=== Master V2 Project Faults Security QA (Phase 1.5B-2A) ===");
+const masterFaultsSecurityQa = spawnSync(
+  "npx",
+  ["tsx", "scripts/qa-master-faults-security.ts"],
+  {
+    stdio: "inherit",
+    shell: true,
+    cwd: process.cwd(),
+  }
+);
+if (masterFaultsSecurityQa.status !== 0) {
+  failed += 1;
+  console.error("Master V2 Project Faults Security QA נכשל");
+} else {
+  passed += 1;
+  console.log("Master V2 Project Faults Security QA עבר");
+}
+
+console.log("\n=== Master V2 Fault Aggregates Security QA (Phase 1.5B-2B) ===");
+const masterFaultAggregatesSecurityQa = spawnSync(
+  "npx",
+  ["tsx", "scripts/qa-master-fault-aggregates-security.ts"],
+  {
+    stdio: "inherit",
+    shell: true,
+    cwd: process.cwd(),
+  }
+);
+if (masterFaultAggregatesSecurityQa.status !== 0) {
+  failed += 1;
+  console.error("Master V2 Fault Aggregates Security QA נכשל");
+} else {
+  passed += 1;
+  console.log("Master V2 Fault Aggregates Security QA עבר");
+}
+
 console.log(`\n=== סיכום: ${passed} עברו, ${failed} נכשלו ===`);
 console.log(`=== מיתוג: ${brandFiles.length} קבצים נסרקו ===\n`);
 process.exit(failed > 0 ? 1 : 0);
