@@ -1892,6 +1892,14 @@ const masterSystemManagementSource = fs.readFileSync(
   path.join(process.cwd(), "components/MasterSystemManagementSection.tsx"),
   "utf8"
 );
+const masterAuthSource = fs.readFileSync(
+  path.join(process.cwd(), "lib/master-auth-client.ts"),
+  "utf8"
+);
+const masterCodeGateSource = fs.readFileSync(
+  path.join(process.cwd(), "components/master-v2/MasterCodeGate.tsx"),
+  "utf8"
+);
 assert(
   masterSource.includes("authenticateMasterWithCode") &&
     masterSource.includes("masterAuthErrorMessage"),
@@ -1903,12 +1911,11 @@ assert(
   "ענן פיילוט: קוד נכון מאפשר צפייה"
 );
 assert(
-  !pilotCloudSource.includes("NEXT_PUBLIC_MASTER_CODE"),
-  "Master Auth: pilot-cloud לא מכיל NEXT_PUBLIC_MASTER_CODE"
-);
-assert(
-  !pilotCloudSource.includes("verifyMasterCode"),
-  "Master Auth: אין verifyMasterCode ב-client"
+  !pilotCloudSource.includes("NEXT_PUBLIC_MASTER_CODE") &&
+    !pilotCloudSource.includes("verifyMasterCode") &&
+    !masterCodeGateSource.includes("verifyMasterCode") &&
+    !masterAuthSource.includes("NEXT_PUBLIC_MASTER_CODE"),
+  "Master Auth: client auth — server POST בלבד"
 );
 assert(
   masterSource.includes("getAllPilotFaults") &&

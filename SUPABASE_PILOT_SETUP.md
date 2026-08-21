@@ -44,7 +44,8 @@
 | `MASTER_CODE` | קוד פנימי (למשל `forte2026`) | **שרת בלבד** — גישה ל-`/master` |
 | `FORTE_SESSION_SECRET` | מחרוזת אקראית ארוכה | חובה ל-session של APIs מוגנים |
 
-**אין** להגדיר `NEXT_PUBLIC_MASTER_CODE` — הקוד לא יורד לדפדפן.
+**אין** להגדיר `NEXT_PUBLIC_MASTER_CODE` — הקוד לא יורד לדפדפן.  
+(אם עדיין קיים ב-Vercel מהעבר, השרת יכול לקרוא אותו זמנית — אך מומלץ להעביר ל-`MASTER_CODE` ולמחוק.)
 
 אופציונלי (קיים):
 - `NEXT_PUBLIC_APP_ROLE=expert` — מסך מומחה

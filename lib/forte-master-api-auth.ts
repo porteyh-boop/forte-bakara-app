@@ -13,8 +13,11 @@ export function isForteSessionSecretConfigured(): boolean {
   return Boolean(getForteSessionSecret());
 }
 
+/** Server-only. Prefer MASTER_CODE; NEXT_PUBLIC_MASTER_CODE is legacy fallback (not bundled to client). */
 export function getMasterCodeForServer(): string | undefined {
-  return process.env.MASTER_CODE?.trim();
+  const serverCode = process.env.MASTER_CODE?.trim();
+  if (serverCode) return serverCode;
+  return process.env.NEXT_PUBLIC_MASTER_CODE?.trim();
 }
 
 export function isMasterCodeConfiguredOnServer(): boolean {
