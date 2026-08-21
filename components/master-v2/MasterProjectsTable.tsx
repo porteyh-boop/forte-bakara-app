@@ -11,7 +11,6 @@ import {
   ForteV2StatusBadge,
   ForteV2TableCard,
 } from "@/components/master-v2/project-v2/MasterProjectV2Workspace";
-import { isProjectCompletedStage } from "@/lib/project-workflow";
 
 interface MasterProjectsTableProps {
   rows: MasterProjectTableRow[];
@@ -19,11 +18,6 @@ interface MasterProjectsTableProps {
   onRowClick: (buildingId: string) => void;
   projectNumberSort: ProjectNumberSortDirection | null;
   onProjectNumberSortClick: () => void;
-}
-
-function projectStageTone(value: string): "blue" | "neutral" {
-  if (value === "—" || isProjectCompletedStage(value)) return "neutral";
-  return "blue";
 }
 
 export default function MasterProjectsTable({
@@ -90,9 +84,7 @@ export default function MasterProjectsTable({
             <th>שם הבניין</th>
             <th>לקוח</th>
             <th>עיר</th>
-            <th>סוג</th>
-            <th>שלב נוכחי</th>
-            <th>שלב הפרויקט</th>
+            <th>סוג שירות</th>
             <th>התקדמות</th>
             <th>עודכן</th>
           </tr>
@@ -116,28 +108,16 @@ export default function MasterProjectsTable({
               <td className="text-forte-text/85">{row.client}</td>
               <td className="text-forte-text/85">{row.city}</td>
               <td className="text-forte-text/85">
-                {row.projectTypeLabel ? (
-                  <ForteV2StatusBadge tone="blue">{row.projectTypeLabel}</ForteV2StatusBadge>
+                {row.serviceTypeLabel ? (
+                  <ForteV2StatusBadge tone="blue">{row.serviceTypeLabel}</ForteV2StatusBadge>
                 ) : (
                   "—"
                 )}
-              </td>
-              <td className="text-forte-text/85">{row.stage}</td>
-              <td>
-                <ForteV2StatusBadge tone={projectStageTone(row.projectStage)}>
-                  {row.projectStage}
-                </ForteV2StatusBadge>
               </td>
               <td>
                 <div className="min-w-[8rem] space-y-1">
                   <div className="text-xs font-semibold text-forte-primary whitespace-nowrap">
                     {row.progress == null ? "—" : `${row.progress}%`}
-                    {row.projectStage && row.projectStage !== "—" && (
-                      <span className="text-forte-text-secondary font-normal">
-                        {" "}
-                        — {row.projectStage}
-                      </span>
-                    )}
                   </div>
                   {row.progress != null && (
                     <div

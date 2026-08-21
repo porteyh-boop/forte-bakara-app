@@ -1,12 +1,16 @@
 import type { ProjectStage } from "@/lib/buildings-cloud";
 import type { ProjectTypeId } from "@/lib/project-type-config";
 import { PROJECT_TYPE_IDS } from "@/lib/project-type-config";
+import type { ServiceType } from "@/lib/service-type";
+import { validateServiceTypeFields } from "@/lib/service-type";
 
 export function validateNewProjectForm(form: {
   projectName: string;
   projectType: ProjectTypeId;
   elevatorCount: string;
   projectStage: string;
+  serviceType: ServiceType | "";
+  serviceTypeOther: string;
 }): string | null {
   if (!form.projectName.trim()) {
     return "שם הפרויקט הוא שדה חובה.";
@@ -37,6 +41,12 @@ export function validateNewProjectForm(form: {
   ) {
     return "שלב פרויקט לא תקין.";
   }
+
+  const serviceTypeError = validateServiceTypeFields(
+    form.serviceType,
+    form.serviceTypeOther
+  );
+  if (serviceTypeError) return serviceTypeError;
 
   return null;
 }

@@ -1,12 +1,12 @@
-import { getProjectProgress, getProjectStage } from "@/lib/get-project-stage";
+import { getProjectProgress } from "@/lib/get-project-stage";
 import type { MasterBuildingEntry } from "@/lib/master-buildings-list";
-import {
-  getProjectTypeLabel,
-  normalizeProjectType,
-  shouldShowProjectTypeInList,
-} from "@/lib/project-type-config";
-
+import { normalizeProjectType } from "@/lib/project-type-config";
 import { resolveDisplayProjectNumber } from "@/lib/project-number";
+import {
+  normalizeServiceType,
+  resolveServiceTypeDisplayLabel,
+  type ServiceType,
+} from "@/lib/service-type";
 
 export interface MasterProjectTableRow {
   buildingId: string;
@@ -14,9 +14,9 @@ export interface MasterProjectTableRow {
   buildingName: string;
   client: string;
   city: string;
-  projectTypeLabel: string | null;
-  stage: string;
-  projectStage: string;
+  serviceType: ServiceType | null;
+  serviceTypeOther: string | null;
+  serviceTypeLabel: string | null;
   progress: number | null;
   updatedAt: string | null;
 }
@@ -27,23 +27,29 @@ export function resolveProjectClient(entry: MasterBuildingEntry): string {
   return row.contact_name?.trim() || row.management_company?.trim() || "—";
 }
 
-export function resolveProjectStage(entry: MasterBuildingEntry): string {
-  if (entry.liveStartedAt) return "שימוש אמיתי";
-  if (entry.sources.includes("דמו")) return "דמו";
-  if (entry.sources.includes("ענן")) return "פיילוט";
-  return "מדיווחים";
+export function resolveProjectServiceType(
+  entry: MasterBuildingEntry
+): ServiceType | null {
+  const row = entry.cloudRow;
+  if (!row) return null;
+  return normalizeServiceType(row.service_type);
 }
 
-export function resolveProjectStageValue(entry: MasterBuildingEntry): string {
+export function resolveProjectServiceTypeOther(
+  entry: MasterBuildingEntry
+): string | null {
   const row = entry.cloudRow;
-  if (!row) return "—";
-  return getProjectStage(row.building_id, {
-    storedStage: row.project_stage,
-    liveStartedAt: row.live_started_at,
-    projectType: normalizeProjectType(row.project_type),
-    workflowState: row.project_workflow_state,
-    storedProgress: row.project_progress,
-  });
+  if (!row?.service_type_other) return null;
+  const trimmed = row.service_type_other.trim();
+  return trimmed || null;
+}
+
+export function resolveProjectServiceTypeLabel(
+  entry: MasterBuildingEntry
+): string | null {
+  const type = resolveProjectServiceType(entry);
+  if (!type) return null;
+  return resolveServiceTypeDisplayLabel(type, resolveProjectServiceTypeOther(entry));
 }
 
 export function resolveProjectProgress(entry: MasterBuildingEntry): number | null {
@@ -71,18 +77,13 @@ export function resolveProjectUpdatedAt(
   )[0];
 }
 
-export function resolveProjectTypeLabel(entry: MasterBuildingEntry): string | null {
-  const row = entry.cloudRow;
-  if (!row) return null;
-  const type = normalizeProjectType(row.project_type);
-  return shouldShowProjectTypeInList(type) ? getProjectTypeLabel(type) : null;
-}
-
 export function buildMasterProjectTableRow(
   entry: MasterBuildingEntry,
   dossierLastFaultDate: string | null | undefined
 ): MasterProjectTableRow {
   const row = entry.cloudRow;
+  const serviceType = resolveProjectServiceType(entry);
+  const serviceTypeOther = resolveProjectServiceTypeOther(entry);
   return {
     buildingId: entry.buildingId,
     projectNumber: row
@@ -94,9 +95,9 @@ export function buildMasterProjectTableRow(
     buildingName: entry.name,
     client: resolveProjectClient(entry),
     city: entry.city?.trim() || "—",
-    projectTypeLabel: resolveProjectTypeLabel(entry),
-    stage: resolveProjectStage(entry),
-    projectStage: resolveProjectStageValue(entry),
+    serviceType,
+    serviceTypeOther,
+    serviceTypeLabel: resolveProjectServiceTypeLabel(entry),
     progress: resolveProjectProgress(entry),
     updatedAt: resolveProjectUpdatedAt(entry, dossierLastFaultDate),
   };

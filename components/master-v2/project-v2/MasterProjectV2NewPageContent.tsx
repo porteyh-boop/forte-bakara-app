@@ -6,6 +6,9 @@ import { useEffect, useState } from "react";
 import { useAppVersion } from "@/components/AppVersionProvider";
 import MasterCodeGate from "@/components/master-v2/MasterCodeGate";
 import MasterShellLayout from "@/components/master-v2/MasterShellLayout";
+import ServiceTypeFields, {
+  type ServiceTypeFieldValues,
+} from "@/components/master-v2/project-v2/ServiceTypeFields";
 import {
   ForteV2FormInput,
   ForteV2FormLabel,
@@ -37,6 +40,7 @@ import {
   mapNewProjectStage,
   validateNewProjectForm,
 } from "@/lib/project-v2-create";
+import { normalizeServiceTypePersistence } from "@/lib/service-type";
 import { generateNextProjectBuildingId } from "@/lib/project-number";
 import {
   buildMasterProjectV2Path,
@@ -63,6 +67,8 @@ const emptyForm = {
   startDate: "",
   deliveryDate: "",
   notes: "",
+  serviceType: "" as ServiceTypeFieldValues["serviceType"],
+  serviceTypeOther: "",
 };
 
 export default function MasterProjectV2NewPageContent() {
@@ -131,6 +137,10 @@ export default function MasterProjectV2NewPageContent() {
     }
 
     const projectStage = mapNewProjectStage(form.projectStage);
+    const serviceTypeFields = normalizeServiceTypePersistence({
+      serviceType: form.serviceType || null,
+      serviceTypeOther: form.serviceTypeOther,
+    });
 
     const result = await createCloudBuildingWithElevators(
       {
@@ -151,6 +161,8 @@ export default function MasterProjectV2NewPageContent() {
         projectDeliveryDate: form.deliveryDate || null,
         projectNotes: form.notes.trim(),
         projectType: form.projectType,
+        serviceType: serviceTypeFields.serviceType,
+        serviceTypeOther: serviceTypeFields.serviceTypeOther,
       },
       toSaveElevatorInputs(buildingId, elevatorDrafts)
     );
@@ -230,6 +242,17 @@ export default function MasterProjectV2NewPageContent() {
                     className="form-input text-sm py-2"
                   />
                 </FormField>
+                <div className="md:col-span-2">
+                  <ServiceTypeFields
+                    values={{
+                      serviceType: form.serviceType,
+                      serviceTypeOther: form.serviceTypeOther,
+                    }}
+                    onChange={(patch) =>
+                      setForm((current) => ({ ...current, ...patch }))
+                    }
+                  />
+                </div>
                 <FormField label="לקוח">
                   <input
                     type="text"

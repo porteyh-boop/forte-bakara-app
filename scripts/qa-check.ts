@@ -54,6 +54,13 @@ import {
   sortMasterProjectTableRowsByProjectNumber,
   type MasterProjectTableRow,
 } from "../components/master-v2/master-v2-project-rows";
+import {
+  normalizeServiceTypePersistence,
+  resolveServiceTypeDisplayLabel,
+  serviceTypeMatchesFilter,
+  SERVICE_TYPE_OTHER,
+  validateServiceTypeFields,
+} from "../lib/service-type";
 import { getFaultLifecycleStats } from "../lib/fault-stats";
 import {
   buildFaultFromSubmission,
@@ -6077,8 +6084,9 @@ const sampleProjectRows: MasterProjectTableRow[] = [
     buildingName: "C",
     client: "—",
     city: "—",
-    stage: "—",
-    projectStage: "—",
+    serviceType: null,
+    serviceTypeOther: null,
+    serviceTypeLabel: null,
     progress: null,
     updatedAt: null,
   },
@@ -6088,8 +6096,9 @@ const sampleProjectRows: MasterProjectTableRow[] = [
     buildingName: "A",
     client: "—",
     city: "—",
-    stage: "—",
-    projectStage: "—",
+    serviceType: null,
+    serviceTypeOther: null,
+    serviceTypeLabel: null,
     progress: null,
     updatedAt: null,
   },
@@ -6099,8 +6108,9 @@ const sampleProjectRows: MasterProjectTableRow[] = [
     buildingName: "D",
     client: "—",
     city: "—",
-    stage: "—",
-    projectStage: "—",
+    serviceType: null,
+    serviceTypeOther: null,
+    serviceTypeLabel: null,
     progress: null,
     updatedAt: null,
   },
@@ -6110,8 +6120,9 @@ const sampleProjectRows: MasterProjectTableRow[] = [
     buildingName: "B",
     client: "—",
     city: "—",
-    stage: "—",
-    projectStage: "—",
+    serviceType: null,
+    serviceTypeOther: null,
+    serviceTypeLabel: null,
     progress: null,
     updatedAt: null,
   },
@@ -6531,10 +6542,36 @@ assert(
   "Project Workflow UX: isProjectCompletedStage"
 );
 assert(
-  masterProjectsViewSource.includes("getProjectStageFilterOptions") &&
-    masterProjectsViewSource.includes("projectStagesMatchFilter") &&
-    masterProjectsTableSource.includes("isProjectCompletedStage"),
-  "Project Workflow UX: MasterProjectsView/Table מחוברים ל-source מרכזי"
+  masterProjectsViewSource.includes("serviceTypeMatchesFilter") &&
+    masterProjectsViewSource.includes("SERVICE_TYPE_FILTER_OPTIONS") &&
+    masterProjectsTableSource.includes("סוג שירות") &&
+    !masterProjectsTableSource.includes("שלב נוכחי") &&
+    !masterProjectsTableSource.includes("projectStage"),
+  "Service Type UX: MasterProjectsView/Table — סוג שירות + הסרת שלבים"
+);
+assert(
+  validateServiceTypeFields(SERVICE_TYPE_OTHER, "") === "יש להגדיר סוג שירות אחר." &&
+    validateServiceTypeFields("בקרת שירות", "") === null &&
+    resolveServiceTypeDisplayLabel(SERVICE_TYPE_OTHER, "בדיקת נזק למעלית") ===
+      "בדיקת נזק למעלית" &&
+    resolveServiceTypeDisplayLabel("בקרת שירות", null) === "בקרת שירות" &&
+    serviceTypeMatchesFilter("אחר", "אחר") &&
+    serviceTypeMatchesFilter("לא מוגדר", null) &&
+    normalizeServiceTypePersistence({
+      serviceType: "בקרת שירות",
+      serviceTypeOther: "ישן",
+    }).serviceTypeOther === null,
+  "Service Type: validation + display + filter + reset other"
+);
+const serviceTypeMigrationSource = fs.readFileSync(
+  path.join(process.cwd(), "supabase/migrations/035_buildings_service_type.sql"),
+  "utf8"
+);
+assert(
+  serviceTypeMigrationSource.includes("service_type") &&
+    serviceTypeMigrationSource.includes("service_type_other") &&
+    serviceTypeMigrationSource.includes("buildings_service_type_other_check"),
+  "Service Type: migration 035 — עמודות + constraints"
 );
 
 const overdueDate = "2020-01-01";

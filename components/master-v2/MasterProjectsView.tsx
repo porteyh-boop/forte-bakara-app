@@ -21,8 +21,12 @@ import {
 } from "@/components/master-v2/project-v2/MasterProjectV2Workspace";
 import type { MasterBuildingEntry } from "@/lib/master-buildings-list";
 import type { BuildingDossier } from "@/lib/master-building-dossier";
-import { getProjectStageFilterOptions, projectStagesMatchFilter } from "@/lib/project-workflow";
 import { MASTER_PROJECT_V2_NEW_PATH } from "@/lib/master-project-v2-routes";
+import {
+  SERVICE_TYPE_FILTER_OPTIONS,
+  serviceTypeMatchesFilter,
+  serviceTypeSearchHaystack,
+} from "@/lib/service-type";
 
 interface MasterProjectsViewProps {
   entries: MasterBuildingEntry[];
@@ -31,9 +35,6 @@ interface MasterProjectsViewProps {
   onRefresh: () => void;
   onRowClick: (buildingId: string) => void;
 }
-
-const STAGE_OPTIONS = ["הכל", "שימוש אמיתי", "פיילוט", "דמו", "מדיווחים"];
-const STATUS_OPTIONS = ["הכל", ...getProjectStageFilterOptions()];
 
 export default function MasterProjectsView({
   entries,
@@ -45,8 +46,7 @@ export default function MasterProjectsView({
   const [search, setSearch] = useState("");
   const [clientFilter, setClientFilter] = useState("הכל");
   const [cityFilter, setCityFilter] = useState("הכל");
-  const [stageFilter, setStageFilter] = useState("הכל");
-  const [statusFilter, setStatusFilter] = useState("הכל");
+  const [serviceTypeFilter, setServiceTypeFilter] = useState("הכל");
   const [yearFilter, setYearFilter] = useState("הכל");
   const [projectNumberSort, setProjectNumberSort] =
     useState<ProjectNumberSortDirection | null>(null);
@@ -90,8 +90,10 @@ export default function MasterProjectsView({
     return tableRows.filter((row) => {
       if (clientFilter !== "הכל" && row.client !== clientFilter) return false;
       if (cityFilter !== "הכל" && row.city !== cityFilter) return false;
-      if (stageFilter !== "הכל" && row.stage !== stageFilter) return false;
-      if (statusFilter !== "הכל" && !projectStagesMatchFilter(statusFilter, row.projectStage)) {
+      if (
+        serviceTypeFilter !== "הכל" &&
+        !serviceTypeMatchesFilter(serviceTypeFilter, row.serviceType)
+      ) {
         return false;
       }
       if (yearFilter !== "הכל") {
@@ -101,11 +103,11 @@ export default function MasterProjectsView({
       if (!q) return true;
       const haystack = [
         row.buildingId,
+        row.projectNumber,
         row.buildingName,
         row.client,
         row.city,
-        row.stage,
-        row.projectStage,
+        serviceTypeSearchHaystack(row.serviceType, row.serviceTypeOther),
       ]
         .join(" ")
         .toLowerCase();
@@ -116,8 +118,7 @@ export default function MasterProjectsView({
     search,
     clientFilter,
     cityFilter,
-    stageFilter,
-    statusFilter,
+    serviceTypeFilter,
     yearFilter,
   ]);
 
@@ -139,8 +140,7 @@ export default function MasterProjectsView({
   const hasActiveFilters =
     clientFilter !== "הכל" ||
     cityFilter !== "הכל" ||
-    stageFilter !== "הכל" ||
-    statusFilter !== "הכל" ||
+    serviceTypeFilter !== "הכל" ||
     yearFilter !== "הכל" ||
     search.trim() !== "";
 
@@ -148,8 +148,7 @@ export default function MasterProjectsView({
     setSearch("");
     setClientFilter("הכל");
     setCityFilter("הכל");
-    setStageFilter("הכל");
-    setStatusFilter("הכל");
+    setServiceTypeFilter("הכל");
     setYearFilter("הכל");
   }
 
@@ -170,7 +169,7 @@ export default function MasterProjectsView({
           <ForteV2SearchField
             value={search}
             onChange={setSearch}
-            placeholder="חיפוש לפי מספר פרויקט, שם בניין, לקוח או עיר..."
+            placeholder="חיפוש לפי מספר פרויקט, שם בניין, לקוח, עיר או סוג שירות..."
           />
           <ForteV2ToolbarDivider />
           <ForteV2FilterPill
@@ -186,16 +185,10 @@ export default function MasterProjectsView({
             onChange={setCityFilter}
           />
           <ForteV2FilterPill
-            label="שלב"
-            value={stageFilter}
-            options={STAGE_OPTIONS}
-            onChange={setStageFilter}
-          />
-          <ForteV2FilterPill
-            label="שלב פרויקט"
-            value={statusFilter}
-            options={STATUS_OPTIONS}
-            onChange={setStatusFilter}
+            label="סוג שירות"
+            value={serviceTypeFilter}
+            options={[...SERVICE_TYPE_FILTER_OPTIONS]}
+            onChange={setServiceTypeFilter}
           />
           <ForteV2FilterPill
             label="שנה"

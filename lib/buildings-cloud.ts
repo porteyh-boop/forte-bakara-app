@@ -1,5 +1,10 @@
 import type { IncomeType } from "./project-financial";
 import { orderFieldsFromBuildingRow, roundMoney } from "./project-financial";
+import {
+  normalizeServiceType,
+  normalizeServiceTypePersistence,
+  type ServiceType,
+} from "./service-type";
 import type { ProjectTypeId } from "./project-type-config";
 import { DEFAULT_PROJECT_TYPE, normalizeProjectType } from "./project-type-config";
 import {
@@ -66,6 +71,8 @@ export interface CloudBuildingRow {
   income_type: IncomeType | null;
   payment_terms: string | null;
   next_payment_date: string | null;
+  service_type: ServiceType | null;
+  service_type_other: string | null;
 }
 
 export interface CloudElevatorRow {
@@ -106,6 +113,8 @@ export interface SaveBuildingInput {
   incomeType?: IncomeType | null;
   paymentTerms?: string | null;
   nextPaymentDate?: string | null;
+  serviceType?: ServiceType | null;
+  serviceTypeOther?: string | null;
 }
 
 export interface SaveElevatorInput {
@@ -227,6 +236,9 @@ export function mapCloudBuildingRow(
     income_type: orderFields.incomeType,
     payment_terms: orderFields.paymentTerms,
     next_payment_date: orderFields.nextPaymentDate,
+    service_type: normalizeServiceType(raw.service_type),
+    service_type_other:
+      raw.service_type_other != null ? String(raw.service_type_other) : null,
   };
 }
 
@@ -322,6 +334,16 @@ export async function createCloudBuilding(
       project_delivery_date: input.projectDeliveryDate || null,
       project_notes: input.projectNotes?.trim() || null,
       project_type: input.projectType ?? DEFAULT_PROJECT_TYPE,
+      ...(() => {
+        const normalized = normalizeServiceTypePersistence({
+          serviceType: input.serviceType ?? null,
+          serviceTypeOther: input.serviceTypeOther ?? null,
+        });
+        return {
+          service_type: normalized.serviceType,
+          service_type_other: normalized.serviceTypeOther,
+        };
+      })(),
     })
     .select("*")
     .single();
@@ -436,6 +458,14 @@ export async function updateCloudBuilding(
   }
   if (input.nextPaymentDate !== undefined) {
     patch.next_payment_date = input.nextPaymentDate || null;
+  }
+  if (input.serviceType !== undefined || input.serviceTypeOther !== undefined) {
+    const normalized = normalizeServiceTypePersistence({
+      serviceType: input.serviceType ?? null,
+      serviceTypeOther: input.serviceTypeOther ?? null,
+    });
+    patch.service_type = normalized.serviceType;
+    patch.service_type_other = normalized.serviceTypeOther;
   }
 
   const { data, error } = await client
