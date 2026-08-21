@@ -99,10 +99,6 @@ export function getSupabaseAnonKey(): string | undefined {
   return process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 }
 
-export function getMasterCode(): string | undefined {
-  return process.env.NEXT_PUBLIC_MASTER_CODE;
-}
-
 export function isPilotCloudConfigured(): boolean {
   return Boolean(getSupabaseUrl() && getSupabaseAnonKey());
 }
@@ -163,16 +159,6 @@ export function getPilotSupabaseClient(): SupabaseClient | null {
   }
   supabaseClient = createClient(url, key);
   return supabaseClient;
-}
-
-export function isMasterCodeConfigured(): boolean {
-  return Boolean(getMasterCode());
-}
-
-export function verifyMasterCode(code: string): boolean {
-  const expected = getMasterCode();
-  if (!expected) return false;
-  return code.trim() === expected;
 }
 
 export function isMasterAuthenticated(): boolean {

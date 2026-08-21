@@ -10,14 +10,15 @@ import {
 import { buildForteBuildingPath } from "@/lib/forte-building-routes";
 import {
   checkForteMasterApiSession,
-  establishForteMasterApiSession,
 } from "@/lib/forte-master-api-client";
 import {
+  authenticateMasterWithCode,
+  masterAuthErrorMessage,
+} from "@/lib/master-auth-client";
+import {
   isMasterAuthenticated,
-  isMasterCodeConfigured,
   isPilotCloudConfigured,
   setMasterAuthenticated,
-  verifyMasterCode,
 } from "@/lib/pilot-cloud";
 
 const DETAILS_TAB_LABEL = "פרטי הבניין והתקשרות";
@@ -34,27 +35,17 @@ function MasterCodeGate({ onSuccess }: { onSuccess: () => void }) {
     e.preventDefault();
     if (submitting) return;
 
-    if (!isMasterCodeConfigured()) {
-      setError("קוד גישה לא הוגדר במערכת (NEXT_PUBLIC_MASTER_CODE).");
-      return;
-    }
-    if (!verifyMasterCode(code)) {
-      setError("קוד גישה שגוי.");
-      return;
-    }
-
     setSubmitting(true);
     setError(null);
 
-    const sessionOk = await establishForteMasterApiSession(code);
+    const result = await authenticateMasterWithCode(code);
     setSubmitting(false);
 
-    if (!sessionOk) {
-      setError("אימות שרת נכשל. נסו שוב.");
+    if (!result.ok) {
+      setError(masterAuthErrorMessage(result.error));
       return;
     }
 
-    setMasterAuthenticated(true);
     onSuccess();
   }
 

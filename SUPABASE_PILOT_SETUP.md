@@ -41,7 +41,10 @@
 |--------|--------|--------|
 | `NEXT_PUBLIC_SUPABASE_URL` | `https://xxxx.supabase.co` | חובה לענן |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `eyJhbG...` | חובה לענן |
-| `NEXT_PUBLIC_MASTER_CODE` | קוד פנימי (למשל `forte2026`) | גישה ל-`/master` |
+| `MASTER_CODE` | קוד פנימי (למשל `forte2026`) | **שרת בלבד** — גישה ל-`/master` |
+| `FORTE_SESSION_SECRET` | מחרוזת אקראית ארוכה | חובה ל-session של APIs מוגנים |
+
+**אין** להגדיר `NEXT_PUBLIC_MASTER_CODE` — הקוד לא יורד לדפדפן.
 
 אופציונלי (קיים):
 - `NEXT_PUBLIC_APP_ROLE=expert` — מסך מומחה
@@ -64,7 +67,7 @@
 
 ### ג. מסך ניהול
 1. גלשו ל-`https://your-app.vercel.app/master`
-2. הזינו את `NEXT_PUBLIC_MASTER_CODE`
+2. הזינו את `MASTER_CODE` (לא נחשף ב-JS של הדפדפן)
 3. ודאו שהדיווח/משוב מופיעים
 
 ---

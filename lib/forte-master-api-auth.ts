@@ -14,9 +14,7 @@ export function isForteSessionSecretConfigured(): boolean {
 }
 
 export function getMasterCodeForServer(): string | undefined {
-  const serverCode = process.env.MASTER_CODE?.trim();
-  if (serverCode) return serverCode;
-  return process.env.NEXT_PUBLIC_MASTER_CODE?.trim();
+  return process.env.MASTER_CODE?.trim();
 }
 
 export function isMasterCodeConfiguredOnServer(): boolean {

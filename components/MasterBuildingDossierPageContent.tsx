@@ -45,12 +45,13 @@ import {
   type DocumentRecord,
 } from "@/lib/document-center";
 import {
+  authenticateMasterWithCode,
+  masterAuthErrorMessage,
+} from "@/lib/master-auth-client";
+import {
   getAllPilotFaults,
   isMasterAuthenticated,
-  isMasterCodeConfigured,
   isPilotCloudConfigured,
-  setMasterAuthenticated,
-  verifyMasterCode,
   type PilotCloudFault,
 } from "@/lib/pilot-cloud";
 import { mergeMasterBuildingPilotFaults } from "@/lib/master-live-faults";
@@ -60,25 +61,30 @@ const OPEN_FAULT_STATUSES = new Set(["פתוחה", "בטיפול", "מושבתת
 function MasterCodeGate({ onSuccess }: { onSuccess: () => void }) {
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!isMasterCodeConfigured()) {
-      setError("קוד גישה לא הוגדר במערכת (NEXT_PUBLIC_MASTER_CODE).");
+    if (submitting) return;
+
+    setSubmitting(true);
+    setError(null);
+
+    const result = await authenticateMasterWithCode(code);
+    setSubmitting(false);
+
+    if (!result.ok) {
+      setError(masterAuthErrorMessage(result.error));
       return;
     }
-    if (!verifyMasterCode(code)) {
-      setError("קוד גישה שגוי.");
-      return;
-    }
-    setMasterAuthenticated(true);
+
     onSuccess();
   }
 
   return (
     <div className="min-h-screen bg-gray-light flex items-center justify-center p-4">
       <form
-        onSubmit={handleSubmit}
+        onSubmit={(e) => void handleSubmit(e)}
         className="w-full max-w-sm bg-white rounded-2xl border border-gray-200 p-6 shadow-sm"
       >
         <h1 className="text-lg font-bold text-navy mb-1">גישה למסך ניהול פיילוט</h1>
@@ -92,8 +98,8 @@ function MasterCodeGate({ onSuccess }: { onSuccess: () => void }) {
           autoComplete="off"
         />
         {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
-        <button type="submit" className="btn-primary w-full">
-          כניסה
+        <button type="submit" className="btn-primary w-full" disabled={submitting}>
+          {submitting ? "מאמת..." : "כניסה"}
         </button>
       </form>
     </div>

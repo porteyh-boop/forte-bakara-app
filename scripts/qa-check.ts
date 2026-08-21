@@ -110,14 +110,16 @@ import {
   type ReportImageAttachment,
 } from "../lib/report-image";
 import {
-  getMasterCode,
   isPilotCloudConfigured,
   mapPilotFeedbackRow,
   PILOT_FAULTS_TABLE,
   PILOT_FEEDBACK_TABLE,
-  verifyMasterCode,
   type PilotCloudFault,
 } from "../lib/pilot-cloud";
+import {
+  getMasterCodeForServer,
+  verifyMasterCodeOnServer,
+} from "../lib/forte-master-api-auth";
 import {
   reconcileSubmittedReportsWithCloud,
 } from "../lib/report-cloud-sync";
@@ -1891,13 +1893,22 @@ const masterSystemManagementSource = fs.readFileSync(
   "utf8"
 );
 assert(
-  masterSource.includes("verifyMasterCode") &&
-    masterSource.includes("קוד גישה שגוי"),
-  "ענן פיילוט: /master דורש קוד — שגוי חוסם"
+  masterSource.includes("authenticateMasterWithCode") &&
+    masterSource.includes("masterAuthErrorMessage"),
+  "ענן פיילוט: /master דורש קוד — אימות בשרת בלבד"
 );
 assert(
-  masterSource.includes("setMasterAuthenticated(true)"),
+  masterSource.includes("setMasterAuthenticated(true)") ||
+    masterSource.includes("authenticateMasterWithCode"),
   "ענן פיילוט: קוד נכון מאפשר צפייה"
+);
+assert(
+  !pilotCloudSource.includes("NEXT_PUBLIC_MASTER_CODE"),
+  "Master Auth: pilot-cloud לא מכיל NEXT_PUBLIC_MASTER_CODE"
+);
+assert(
+  !pilotCloudSource.includes("verifyMasterCode"),
+  "Master Auth: אין verifyMasterCode ב-client"
 );
 assert(
   masterSource.includes("getAllPilotFaults") &&
@@ -6000,10 +6011,16 @@ console.log("");
 
 setCatalogSnapshot(null);
 
-const masterCode = getMasterCode();
+const masterCode = getMasterCodeForServer();
 if (masterCode) {
-  assert(verifyMasterCode(masterCode), "ענן פיילוט: verifyMasterCode — קוד מ-env תקין");
-  assert(!verifyMasterCode("wrong-code-xyz"), "ענן פיילוט: קוד שגוי נדחה");
+  assert(
+    verifyMasterCodeOnServer(masterCode),
+    "Master Auth: verifyMasterCodeOnServer — קוד מ-env תקין"
+  );
+  assert(
+    !verifyMasterCodeOnServer("wrong-code-xyz"),
+    "Master Auth: קוד שגוי נדחה בשרת"
+  );
 }
 
 // Branding scan
