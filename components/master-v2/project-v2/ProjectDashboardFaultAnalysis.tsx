@@ -33,6 +33,7 @@ export default function ProjectDashboardFaultAnalysis({
         buildingName={buildingName}
         showBuildingLabel={false}
         showSummaryCard={false}
+        layout="compact"
       />
     </ForteV2Panel>
   );

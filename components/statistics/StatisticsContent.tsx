@@ -35,6 +35,8 @@ export interface StatisticsContentProps {
   showBuildingLabel?: boolean;
   /** Hide the total-faults summary card (charts only). */
   showSummaryCard?: boolean;
+  /** Compact 3-column grid for V2 project dashboard. */
+  layout?: "default" | "compact";
 }
 
 export default function StatisticsContent({
@@ -44,6 +46,7 @@ export default function StatisticsContent({
   loadRows,
   showBuildingLabel = true,
   showSummaryCard = true,
+  layout = "default",
 }: StatisticsContentProps) {
   const [period, setPeriod] = useState<StatisticsPeriod>("30d");
   const [rows, setRows] = useState<StatisticsFaultRow[] | null>(null);
@@ -126,15 +129,25 @@ export default function StatisticsContent({
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className={`flex flex-col ${layout === "compact" ? "gap-3" : "gap-4"}`}>
       {showBuildingLabel ? (
         <p className="text-xs text-gray-text">בניין: {buildingName}</p>
       ) : null}
-      <PeriodFilter value={period} onChange={setPeriod} />
+      <PeriodFilter value={period} onChange={setPeriod} compact={layout === "compact"} />
       {showSummaryCard ? <SummaryCard totalFaults={snapshot.totalFaults} /> : null}
-      <MonthlyChart data={snapshot.monthly} />
-      <FaultTypeChart data={snapshot.byType} />
-      <ElevatorChart data={snapshot.byElevator} />
+      {layout === "compact" ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 items-stretch">
+          <MonthlyChart data={snapshot.monthly} compact />
+          <FaultTypeChart data={snapshot.byType} compact />
+          <ElevatorChart data={snapshot.byElevator} compact />
+        </div>
+      ) : (
+        <>
+          <MonthlyChart data={snapshot.monthly} />
+          <FaultTypeChart data={snapshot.byType} />
+          <ElevatorChart data={snapshot.byElevator} />
+        </>
+      )}
     </div>
   );
 }

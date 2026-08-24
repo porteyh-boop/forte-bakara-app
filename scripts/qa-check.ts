@@ -6843,7 +6843,15 @@ assert(
     fs.readFileSync(
       path.join(process.cwd(), "components/statistics/StatisticsContent.tsx"),
       "utf8"
-    ).includes("showSummaryCard"),
+    ).includes("showSummaryCard") &&
+    fs.readFileSync(
+      path.join(process.cwd(), "components/master-v2/project-v2/ProjectDashboardFaultAnalysis.tsx"),
+      "utf8"
+    ).includes('layout="compact"') &&
+    fs.readFileSync(
+      path.join(process.cwd(), "components/statistics/StatisticsContent.tsx"),
+      "utf8"
+    ).includes('layout?: "default" | "compact"'),
   "Project V2 Dashboard: ניתוח תקלות ב-details + סוג שירות בפרטי הפרויקט"
 );
 assert(
