@@ -422,6 +422,11 @@ import {
   buildMasterProjectV2Path,
   MASTER_BUSINESS_PATH,
 } from "../lib/master-project-v2-routes";
+import {
+  clearProjectV2NavStack,
+  popProjectV2NavTab,
+  pushProjectV2NavTab,
+} from "../lib/master-project-v2-nav-stack";
 import type { FeedbackSubmissionInput } from "../lib/types";
 
 let passed = 0;
@@ -5199,6 +5204,87 @@ assert(
     projectPageSource.includes("projectIdLabel"),
   "Project Type: תצוגת מספר הזמנה בכותרת בדק בית"
 );
+
+const projectV2NavStackSource = fs.readFileSync(
+  path.join(process.cwd(), "lib/master-project-v2-nav-stack.ts"),
+  "utf8"
+);
+const projectV2NavContextSource = fs.readFileSync(
+  path.join(process.cwd(), "components/master-v2/project-v2/MasterProjectV2NavContext.tsx"),
+  "utf8"
+);
+const projectV2WorkspaceSource = fs.readFileSync(
+  path.join(process.cwd(), "components/master-v2/project-v2/MasterProjectV2Workspace.tsx"),
+  "utf8"
+);
+assert(
+  projectV2NavStackSource.includes("pushProjectV2NavTab") &&
+    projectV2NavStackSource.includes("popProjectV2NavTab") &&
+    projectV2NavStackSource.includes("sessionStorage") &&
+    projectPageSource.includes("MasterProjectV2NavProvider") &&
+    projectPageSource.includes("popProjectV2NavTab") &&
+    projectPageSource.includes("skipNavPushRef") &&
+    projectV2NavContextSource.includes('showTabBack: Boolean(buildingId) && activeTab !== "details"') &&
+    projectV2WorkspaceSource.includes("← חזרה") &&
+    projectV2WorkspaceSource.includes("useMasterProjectV2Nav"),
+  "Project V2 Nav: stack + כפתור חזרה בטאבים פנימיים"
+);
+
+{
+  const navStore = new Map<string, string>();
+  (globalThis as typeof globalThis & { window?: typeof globalThis; sessionStorage?: Storage }).window =
+    globalThis;
+  (globalThis as typeof globalThis & { sessionStorage?: Storage }).sessionStorage = {
+    get length() {
+      return navStore.size;
+    },
+    clear() {
+      navStore.clear();
+    },
+    getItem(key: string) {
+      return navStore.get(key) ?? null;
+    },
+    key(index: number) {
+      return [...navStore.keys()][index] ?? null;
+    },
+    removeItem(key: string) {
+      navStore.delete(key);
+    },
+    setItem(key: string, value: string) {
+      navStore.set(key, value);
+    },
+  } as Storage;
+
+  clearProjectV2NavStack("md25");
+  pushProjectV2NavTab("md25", "details");
+  pushProjectV2NavTab("md25", "details");
+  assert(
+    popProjectV2NavTab("md25") === "details" &&
+      popProjectV2NavTab("md25") === null,
+    "Project V2 Nav: push/pop stack בסיסי"
+  );
+
+  pushProjectV2NavTab("md25", "details");
+  pushProjectV2NavTab("md25", "documents");
+  assert(
+    popProjectV2NavTab("md25") === "documents" &&
+      popProjectV2NavTab("md25") === "details" &&
+      popProjectV2NavTab("md25") === null,
+    "Project V2 Nav: push/pop stack — מסלול A→B→C"
+  );
+
+  pushProjectV2NavTab("md25", "details");
+  pushProjectV2NavTab("biz-1", "faults");
+  assert(
+    popProjectV2NavTab("biz-1") === "faults" &&
+      popProjectV2NavTab("md25") === "details" &&
+      popProjectV2NavTab("biz-1") === null,
+    "Project V2 Nav: stacks מבודדים בין פרויקטים"
+  );
+  clearProjectV2NavStack("md25");
+  clearProjectV2NavStack("biz-1");
+}
+
 const detailsTabSource = fs.readFileSync(
   path.join(process.cwd(), "components/master-v2/project-v2/MasterProjectV2DetailsTab.tsx"),
   "utf8"

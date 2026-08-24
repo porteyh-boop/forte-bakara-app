@@ -2,8 +2,21 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { useMasterProjectV2Nav } from "@/components/master-v2/project-v2/MasterProjectV2NavContext";
 
 /* ── Layout ── */
+
+function ForteV2TabBackButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-1 text-[11px] font-semibold text-forte-text-secondary hover:text-forte-primary mb-2 transition-colors"
+    >
+      ← חזרה
+    </button>
+  );
+}
 
 export function ForteV2TabShell({
   title,
@@ -18,9 +31,14 @@ export function ForteV2TabShell({
   children: ReactNode;
   workspace?: string;
 }) {
+  const projectNav = useMasterProjectV2Nav();
+
   return (
     <MasterProjectV2Workspace data-workspace={workspace}>
       <div className="fv2-tab-shell-header">
+        {projectNav?.showTabBack ? (
+          <ForteV2TabBackButton onClick={projectNav.goBack} />
+        ) : null}
         <ForteV2SectionHeader title={title} description={description} actions={actions} />
       </div>
       <div className="fv2-tab-content">{children}</div>

@@ -31,6 +31,7 @@ import {
   MASTER_PROJECTS_V2_LIST_PATH,
   type ProjectV2TabId,
 } from "@/lib/master-project-v2-routes";
+import { pushProjectV2NavTab, popProjectV2NavTab } from "@/lib/master-project-v2-nav-stack";
 import {
   DEFAULT_PROJECT_TYPE,
   getProjectTypeLabel,
@@ -48,6 +49,7 @@ import {
 } from "@/lib/buildings";
 import MasterProjectV2TasksTab from "@/components/master-v2/project-v2/MasterProjectV2TasksTab";
 import MasterProjectV2DocumentsTab from "@/components/master-v2/project-v2/MasterProjectV2DocumentsTab";
+import { MasterProjectV2NavProvider } from "@/components/master-v2/project-v2/MasterProjectV2NavContext";
 import { ensureMasterV2SessionsValid } from "@/lib/master-v2-auth";
 import {
   isMasterAuthenticated,
@@ -151,12 +153,17 @@ export default function MasterProjectV2PageContent() {
   const [cloudRow, setCloudRow] = useState<CloudBuildingRow | null>(null);
   const [loading, setLoading] = useState(false);
   const loadRequestRef = useRef(0);
+  const prevTabRef = useRef<ProjectV2Tab | null>(null);
+  const skipNavPushRef = useRef(false);
+  const prevProjectTypeRef = useRef<ProjectTypeId>(DEFAULT_PROJECT_TYPE);
 
   useEffect(() => {
     setCloudRow(null);
     setDetails(emptyMasterProjectV2Details(buildingId || "—"));
     setActiveTab(resolveInitialTab(tabParam, faultIdParam, DEFAULT_PROJECT_TYPE));
     setLoading(Boolean(buildingId));
+    prevTabRef.current = null;
+    skipNavPushRef.current = false;
   }, [buildingId]);
 
   const loadProject = useCallback(async () => {
@@ -209,6 +216,23 @@ export default function MasterProjectV2PageContent() {
   );
 
   useEffect(() => {
+    if (prevProjectTypeRef.current !== projectType) {
+      prevProjectTypeRef.current = projectType;
+      skipNavPushRef.current = true;
+    }
+  }, [projectType]);
+
+  useEffect(() => {
+    if (!buildingId) return;
+    const prev = prevTabRef.current;
+    if (prev !== null && prev !== activeTab && !skipNavPushRef.current) {
+      pushProjectV2NavTab(buildingId, prev);
+    }
+    skipNavPushRef.current = false;
+    prevTabRef.current = activeTab;
+  }, [activeTab, buildingId]);
+
+  useEffect(() => {
     setActiveTab(resolveInitialTab(tabParam, faultIdParam, projectType));
   }, [tabParam, faultIdParam, projectType]);
 
@@ -217,10 +241,12 @@ export default function MasterProjectV2PageContent() {
     const allowed = resolveInitialTab(tabParam, faultIdParam, projectType);
     if (allowed === activeTab) return;
     if (tabParam === "documents" && projectType === "standard") {
+      skipNavPushRef.current = true;
       router.replace(buildMasterProjectV2Path(buildingId));
       return;
     }
     if (tabParam && isProjectV2TabId(tabParam) && allowed !== tabParam) {
+      skipNavPushRef.current = true;
       router.replace(
         buildMasterProjectV2Path(buildingId, allowed === "details" ? undefined : allowed)
       );
@@ -276,6 +302,24 @@ export default function MasterProjectV2PageContent() {
     }
     router.replace(buildMasterProjectV2Path(buildingId, tab === "details" ? undefined : tab));
   }
+
+  const goBack = useCallback(() => {
+    if (!buildingId) return;
+
+    const previousTab = popProjectV2NavTab(buildingId);
+    const targetTab: ProjectV2Tab = previousTab ?? "details";
+    if (targetTab === activeTab) return;
+
+    skipNavPushRef.current = true;
+    setActiveTab(targetTab);
+    if (targetTab === "faults" && faultIdParam) {
+      router.replace(buildMasterProjectV2FaultPath(buildingId, faultIdParam));
+      return;
+    }
+    router.replace(
+      buildMasterProjectV2Path(buildingId, targetTab === "details" ? undefined : targetTab)
+    );
+  }, [activeTab, buildingId, faultIdParam, router]);
 
   function renderTabContent() {
     if (loading && activeTab === "details") {
@@ -388,7 +432,17 @@ export default function MasterProjectV2PageContent() {
           )}
           <ForteV2Panel large className="flex-1 min-h-[calc(100vh-15rem)] overflow-hidden flex flex-col !p-0">
             <div className="flex-1 flex flex-col min-h-0 overflow-auto p-5">
-              {renderTabContent()}
+              {buildingId ? (
+                <MasterProjectV2NavProvider
+                  buildingId={buildingId}
+                  activeTab={activeTab}
+                  goBack={goBack}
+                >
+                  {renderTabContent()}
+                </MasterProjectV2NavProvider>
+              ) : (
+                renderTabContent()
+              )}
             </div>
           </ForteV2Panel>
         </div>
