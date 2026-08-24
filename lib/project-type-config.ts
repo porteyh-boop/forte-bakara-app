@@ -10,18 +10,21 @@ export const PROJECT_TYPE_LABELS: Record<ProjectTypeId, string> = {
   home_inspection: "בדק בית",
 };
 
+/** @deprecated V2 tabs removed — URL fallback handled in PageContent */
+export const DEPRECATED_PROJECT_V2_TABS = ["reports", "settings"] as const;
+
 export const PROJECT_V2_TAB_LABELS: Record<ProjectV2TabId, string> = {
-  details: "פרטי הפרויקט",
+  details: "ראשי",
+  execution: "שלב ביצוע",
+  finances: "כספים",
   letters: "מכתבים",
   inspections: "בדיקות",
   faults: "תקלות",
   contacts: "אנשי קשר",
   documents: "מסמכים",
   tasks: "משימות",
-  reports: "דוחות",
   ai: "AI Assistant",
   permissions: "הרשאות",
-  settings: "הגדרות",
 };
 
 interface ProjectTypeConfigEntry {
@@ -35,21 +38,22 @@ export const PROJECT_TYPE_CONFIG: Record<ProjectTypeId, ProjectTypeConfigEntry> 
     label: PROJECT_TYPE_LABELS.standard,
     tabs: [
       "details",
+      "execution",
+      "finances",
+      "documents",
       "letters",
       "inspections",
       "faults",
       "contacts",
       "tasks",
-      "reports",
       "ai",
       "permissions",
-      "settings",
     ],
     showTypeInList: false,
   },
   home_inspection: {
     label: PROJECT_TYPE_LABELS.home_inspection,
-    tabs: ["details", "contacts", "documents"],
+    tabs: ["details", "execution", "finances", "documents", "contacts"],
     showTypeInList: true,
   },
 };
@@ -77,6 +81,11 @@ export function isTabAllowedForProjectType(
   return getTabsForProjectType(type).includes(tab);
 }
 
+export function isDeprecatedProjectV2Tab(tab: string | null | undefined): boolean {
+  if (!tab) return false;
+  return (DEPRECATED_PROJECT_V2_TABS as readonly string[]).includes(tab);
+}
+
 export function resolveAllowedProjectV2Tab(
   type: ProjectTypeId,
   tab: ProjectV2TabId | "details" | null,
@@ -84,6 +93,9 @@ export function resolveAllowedProjectV2Tab(
 ): ProjectV2TabId | "details" {
   if (options?.faultId && isTabAllowedForProjectType(type, "faults")) {
     return "faults";
+  }
+  if (tab && isDeprecatedProjectV2Tab(tab)) {
+    return "details";
   }
   if (tab === "documents" && !isTabAllowedForProjectType(type, "documents")) {
     return "details";

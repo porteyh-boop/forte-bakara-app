@@ -38,10 +38,13 @@ import {
 } from "@/lib/project-number";
 import { getProjectTypeLabel, getProjectNumberLabel, normalizeProjectType } from "@/lib/project-type-config";
 import { MASTER_PROJECTS_V2_LIST_PATH } from "@/lib/master-project-v2-routes";
-import ProjectDocumentsPanel from "@/components/master-v2/project-v2/ProjectDocumentsPanel";
-import ProjectFinancialCard from "@/components/master-v2/project-v2/ProjectFinancialCard";
-import ProjectServiceTypePanel from "@/components/master-v2/project-v2/ProjectServiceTypePanel";
-import ProjectWorkflowProgress from "@/components/master-v2/project-v2/ProjectWorkflowProgress";
+import ProjectDashboardKpiGrid from "@/components/master-v2/project-v2/ProjectDashboardKpiGrid";
+import ProjectDashboardFaultAnalysis from "@/components/master-v2/project-v2/ProjectDashboardFaultAnalysis";
+import ServiceTypeFields, {
+  serviceTypeFieldsFromRow,
+  type ServiceTypeFieldValues,
+} from "@/components/master-v2/project-v2/ServiceTypeFields";
+import { formatServiceTypeDisplay, normalizeServiceTypePersistence, validateServiceTypeFields } from "@/lib/service-type";
 import { deleteBuildingProject } from "@/lib/buildings-delete-cloud";
 import { isContactsConfigured } from "@/lib/contacts-cloud";
 import { isPilotCloudConfigured } from "@/lib/pilot-cloud";
@@ -51,6 +54,7 @@ export interface MasterProjectV2Details {
   buildingId: string;
   projectNumber: string;
   projectTypeLabel: string;
+  serviceTypeLabel: string;
   buildingName: string;
   client: string;
   city: string;
@@ -97,6 +101,12 @@ export default function MasterProjectV2DetailsTab({
     projectExtrasFromRow(cloudRow)
   );
   const [projectNumberInput, setProjectNumberInput] = useState("");
+  const [serviceTypeDraft, setServiceTypeDraft] = useState<ServiceTypeFieldValues>(() =>
+    serviceTypeFieldsFromRow(
+      cloudRow?.service_type ?? null,
+      cloudRow?.service_type_other ?? null
+    )
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -129,12 +139,16 @@ export default function MasterProjectV2DetailsTab({
           buildingId: cloudRow.building_id,
         })
       );
+      setServiceTypeDraft(
+        serviceTypeFieldsFromRow(cloudRow.service_type, cloudRow.service_type_other)
+      );
     } else {
       setForm(emptyFormFromDetails(details));
       setProjectExtras(projectExtrasFromDetails(details));
       setProjectNumberInput(
         details.projectNumber === "—" ? "" : details.projectNumber
       );
+      setServiceTypeDraft({ serviceType: "", serviceTypeOther: "" });
     }
   }, [cloudRow, details]);
 
@@ -166,6 +180,20 @@ export default function MasterProjectV2DetailsTab({
       }
     }
 
+    const serviceTypeValidationError = validateServiceTypeFields(
+      serviceTypeDraft.serviceType,
+      serviceTypeDraft.serviceTypeOther
+    );
+    if (serviceTypeValidationError) {
+      setError(serviceTypeValidationError);
+      return;
+    }
+
+    const normalizedServiceType = normalizeServiceTypePersistence({
+      serviceType: serviceTypeDraft.serviceType || null,
+      serviceTypeOther: serviceTypeDraft.serviceTypeOther,
+    });
+
     setSaving(true);
     setError(null);
     const updated = await updateCloudBuilding(cloudRow.id, {
@@ -176,6 +204,8 @@ export default function MasterProjectV2DetailsTab({
       projectStartDate: projectExtras.projectStartDate || null,
       projectDeliveryDate: projectExtras.projectDeliveryDate || null,
       projectNotes: projectExtras.projectNotes,
+      serviceType: normalizedServiceType.serviceType,
+      serviceTypeOther: normalizedServiceType.serviceTypeOther,
     });
     setSaving(false);
 
@@ -230,7 +260,7 @@ export default function MasterProjectV2DetailsTab({
       <ForteV2TabShell
         workspace="project-v2-details"
         title="עריכת פרטי פרויקט"
-        description="עדכון נתוני הבניין, שלב ומסמכים"
+        description="עדכון נתוני הבניין"
         actions={
           <MasterProjectV2SecondaryButton
             onClick={() => {
@@ -245,6 +275,9 @@ export default function MasterProjectV2DetailsTab({
                     projectNumber: cloudRow.project_number,
                     buildingId: cloudRow.building_id,
                   })
+                );
+                setServiceTypeDraft(
+                  serviceTypeFieldsFromRow(cloudRow.service_type, cloudRow.service_type_other)
                 );
               }
             }}
@@ -357,16 +390,19 @@ export default function MasterProjectV2DetailsTab({
               />
             </label>
           </div>
+          <div className="pt-2 border-t border-forte-border/60">
+            <ServiceTypeFields
+              values={serviceTypeDraft}
+              onChange={(patch) =>
+                setServiceTypeDraft((current) => ({ ...current, ...patch }))
+              }
+            />
+          </div>
           <div className="flex flex-wrap gap-2 pt-2 border-t border-forte-border/60">
             <MasterProjectV2PrimaryButton type="submit" disabled={saving} size="sm">
               {saving ? "שומר..." : "שמור שינויים"}
             </MasterProjectV2PrimaryButton>
           </div>
-
-          <ProjectDocumentsPanel
-            buildingId={details.buildingId}
-            section="details"
-          />
 
           <div className="fv2-danger-zone">
             <p className="fv2-danger-zone-title">אזור מסוכן</p>
@@ -460,8 +496,8 @@ export default function MasterProjectV2DetailsTab({
   return (
     <ForteV2TabShell
       workspace="project-v2-details"
-      title="פרטי הפרויקט"
-      description="מידע מרכזי, שלב ומסמכים"
+      title="ראשי"
+      description="תמונת מצב ופרטי הפרויקט"
       actions={
         cloudRow && cloudReady ? (
           <MasterProjectV2PrimaryButton onClick={() => setEditing(true)} size="sm">
@@ -479,6 +515,8 @@ export default function MasterProjectV2DetailsTab({
         </MasterProjectV2StatusBanner>
       )}
 
+      <ProjectDashboardKpiGrid buildingId={details.buildingId} cloudRow={cloudRow} />
+
       <ForteV2Panel>
         <ForteV2DetailGrid
           items={detailFields.map(({ label, key, wide }) => ({
@@ -490,19 +528,11 @@ export default function MasterProjectV2DetailsTab({
         />
       </ForteV2Panel>
 
-      {cloudRow && (
-        <ProjectServiceTypePanel cloudRow={cloudRow} onSaved={onSaved} />
-      )}
-
-      {cloudRow && (
-        <ProjectFinancialCard cloudRow={cloudRow} onSaved={onSaved} />
-      )}
-
-      {cloudRow && (
-        <ProjectWorkflowProgress cloudRow={cloudRow} onSaved={onSaved} />
-      )}
-
-      <ProjectDocumentsPanel buildingId={details.buildingId} section="details" />
+      <ProjectDashboardFaultAnalysis
+        buildingId={details.buildingId}
+        buildingName={readDetails.buildingName}
+        cloudRow={cloudRow}
+      />
     </ForteV2TabShell>
   );
 }
@@ -512,12 +542,11 @@ function detailFieldsForProjectType(projectType: ReturnType<typeof normalizeProj
   return [
     { label: projectNumberLabel, key: "projectNumber" as const },
     { label: "סוג פרויקט", key: "projectTypeLabel" as const },
+    { label: "סוג שירות", key: "serviceTypeLabel" as const },
     { label: "שם הבניין", key: "buildingName" as const },
     { label: "לקוח", key: "client" as const },
     { label: "עיר", key: "city" as const },
     { label: "מספר מעליות", key: "elevatorCount" as const },
-    { label: "שלב הפרויקט", key: "projectStage" as const },
-    { label: "התקדמות", key: "projectProgress" as const },
     { label: "כתובת", key: "address" as const },
     { label: "חברת ניהול", key: "managementCompany" as const },
     { label: "יצרן מעליות", key: "elevatorCompany" as const },
@@ -594,6 +623,7 @@ export function emptyMasterProjectV2Details(buildingId: string): MasterProjectV2
     buildingId: buildingId || "—",
     projectNumber: "—",
     projectTypeLabel: getProjectTypeLabel("standard"),
+    serviceTypeLabel: "—",
     buildingName: "—",
     client: "—",
     city: "—",
@@ -622,6 +652,7 @@ export function detailsFromCloudRow(
       buildingId: row.building_id,
     }),
     projectTypeLabel: getProjectTypeLabel(normalizeProjectType(row.project_type)),
+    serviceTypeLabel: formatServiceTypeDisplay(row.service_type, row.service_type_other),
     buildingName: row.name,
     client: row.contact_name?.trim() || "—",
     city: row.city?.trim() || "—",

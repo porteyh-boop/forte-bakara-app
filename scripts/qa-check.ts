@@ -5142,12 +5142,14 @@ assert(
 assert(
   getTabsForProjectType("standard").includes("faults") &&
     getTabsForProjectType("standard").includes("letters") &&
-    !getTabsForProjectType("standard").includes("documents"),
-  "Project Type: standard — כל החוצצים הקיימים"
+    getTabsForProjectType("standard").includes("documents") &&
+    getTabsForProjectType("standard").includes("execution") &&
+    getTabsForProjectType("standard").includes("finances"),
+  "Project Type: standard — טאבים מלאים כולל מסמכים וכספים"
 );
 assert(
   getTabsForProjectType("home_inspection").join(",") ===
-    "details,contacts,documents" &&
+    "details,execution,finances,documents,contacts" &&
     isTabAllowedForProjectType("home_inspection", "contacts") &&
     !isTabAllowedForProjectType("home_inspection", "faults"),
   "Project Type: בדק בית — רק פרטים, אנשי קשר, מסמכים"
@@ -5155,7 +5157,9 @@ assert(
 assert(
   resolveAllowedProjectV2Tab("home_inspection", "faults") === "details" &&
     resolveAllowedProjectV2Tab("standard", "faults") === "faults" &&
-    resolveAllowedProjectV2Tab("home_inspection", "documents") === "documents",
+    resolveAllowedProjectV2Tab("home_inspection", "documents") === "documents" &&
+    resolveAllowedProjectV2Tab("standard", "reports") === "details" &&
+    resolveAllowedProjectV2Tab("standard", "settings") === "details",
   "Project Type: resolveAllowedProjectV2Tab — redirect tabs"
 );
 assert(
@@ -6622,7 +6626,10 @@ assert(
     projectWorkflowSource.includes("standard") &&
     workflowProgressSource.includes("התקדמות הפרויקט") &&
     workflowProgressSource.includes("PROJECT_WORKFLOW_UNCHECK_CONFIRM_MESSAGE") &&
-    detailsTabSource.includes("ProjectWorkflowProgress") &&
+    fs.readFileSync(
+      path.join(process.cwd(), "components/master-v2/project-v2/MasterProjectV2ExecutionTab.tsx"),
+      "utf8"
+    ).includes("ProjectWorkflowProgress") &&
     masterProjectsTableSource.includes('role="progressbar"'),
   "Project Workflow: config מרכזי + UI + confirm ביטול"
 );
@@ -6792,13 +6799,52 @@ assert(
   "Project Financial: API + Master session"
 );
 assert(
-  detailsTabSource.includes("ProjectFinancialCard") &&
+  detailsTabSource.includes("ProjectDashboardKpiGrid") &&
+    !detailsTabSource.includes("ProjectFinancialCard") &&
+    !detailsTabSource.includes("ProjectWorkflowProgress") &&
+    !detailsTabSource.includes("ProjectDocumentsPanel") &&
     projectFinancialCardSource.includes("כספי") &&
     projectFinancialCardSource.includes("הוסף תשלום") &&
     projectFinancialCardSource.includes("היסטוריית תשלומים") &&
     projectFinancialCardSource.includes("window.confirm") === false &&
     projectFinancialCardSource.includes("מחיקת תשלום"),
   "Project Financial: UI כרטיס כספי + היסטוריה + מחיקה עם אישור"
+);
+assert(
+  fs.readFileSync(
+    path.join(process.cwd(), "components/master-v2/project-v2/MasterProjectV2FinancesTab.tsx"),
+    "utf8"
+  ).includes("ProjectFinancialCard") &&
+    getTabsForProjectType("standard").includes("execution") &&
+    getTabsForProjectType("standard").includes("finances") &&
+    getTabsForProjectType("standard").includes("documents") &&
+    !(getTabsForProjectType("standard") as readonly string[]).includes("reports") &&
+    getTabsForProjectType("home_inspection").includes("execution") &&
+    detailsTabSource.includes("ProjectDashboardKpiGrid") &&
+    fs.readFileSync(
+      path.join(process.cwd(), "components/master-v2/project-v2/MasterProjectV2PageContent.tsx"),
+      "utf8"
+    ).includes("isDeprecatedProjectV2Tab"),
+  "Project V2 Dashboard: KPI ב-details + טאבי execution/finances + הסרת reports"
+);
+assert(
+  detailsTabSource.includes("ProjectDashboardFaultAnalysis") &&
+    detailsTabSource.includes('key: "serviceTypeLabel"') &&
+    detailsTabSource.includes("ServiceTypeFields") &&
+    !detailsTabSource.includes("ProjectServiceTypePanel") &&
+    fs.readFileSync(
+      path.join(process.cwd(), "components/master-v2/project-v2/ProjectDashboardFaultAnalysis.tsx"),
+      "utf8"
+    ).includes("StatisticsContent") &&
+    fs.readFileSync(
+      path.join(process.cwd(), "components/statistics/StatisticsContent.tsx"),
+      "utf8"
+    ).includes("showBuildingLabel") &&
+    fs.readFileSync(
+      path.join(process.cwd(), "components/statistics/StatisticsContent.tsx"),
+      "utf8"
+    ).includes("showSummaryCard"),
+  "Project V2 Dashboard: ניתוח תקלות ב-details + סוג שירות בפרטי הפרויקט"
 );
 assert(
   buildingsCloudSource.includes("order_amount") &&

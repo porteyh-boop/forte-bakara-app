@@ -15,9 +15,11 @@ import MasterProjectV2FaultsTab from "@/components/master-v2/project-v2/MasterPr
 import MasterProjectV2InspectionsTab from "@/components/master-v2/project-v2/MasterProjectV2InspectionsTab";
 import MasterProjectV2InspectorFollowUpPopup from "@/components/master-v2/project-v2/MasterProjectV2InspectorFollowUpPopup";
 import MasterProjectV2LettersTab from "@/components/master-v2/project-v2/MasterProjectV2LettersTab";
-import MasterProjectV2ReportsTab from "@/components/master-v2/project-v2/MasterProjectV2ReportsTab";
-import MasterProjectV2PermissionsTab from "@/components/master-v2/project-v2/MasterProjectV2PermissionsTab";
-import MasterProjectV2PlaceholderTab from "@/components/master-v2/project-v2/MasterProjectV2PlaceholderTab";
+import MasterProjectV2DocumentsTab from "@/components/master-v2/project-v2/MasterProjectV2DocumentsTab";
+import MasterProjectV2ExecutionTab from "@/components/master-v2/project-v2/MasterProjectV2ExecutionTab";
+import MasterProjectV2FinancesTab from "@/components/master-v2/project-v2/MasterProjectV2FinancesTab";
+import MasterProjectV2TasksTab from "@/components/master-v2/project-v2/MasterProjectV2TasksTab";
+import { MasterProjectV2NavProvider } from "@/components/master-v2/project-v2/MasterProjectV2NavContext";
 import {
   getAllCloudBuildingsWithMeta,
   getAllCloudElevators,
@@ -37,6 +39,7 @@ import {
   getProjectTypeLabel,
   getProjectNumberLabel,
   getTabsForProjectType,
+  isDeprecatedProjectV2Tab,
   normalizeProjectType,
   PROJECT_V2_TAB_LABELS,
   resolveAllowedProjectV2Tab,
@@ -47,9 +50,7 @@ import {
   getAllDemoBuildingIds,
   getBuildingDataset,
 } from "@/lib/buildings";
-import MasterProjectV2TasksTab from "@/components/master-v2/project-v2/MasterProjectV2TasksTab";
-import MasterProjectV2DocumentsTab from "@/components/master-v2/project-v2/MasterProjectV2DocumentsTab";
-import { MasterProjectV2NavProvider } from "@/components/master-v2/project-v2/MasterProjectV2NavContext";
+import MasterProjectV2PermissionsTab from "@/components/master-v2/project-v2/MasterProjectV2PermissionsTab";
 import { ensureMasterV2SessionsValid } from "@/lib/master-v2-auth";
 import {
   isMasterAuthenticated,
@@ -104,6 +105,7 @@ function resolveDetails(
       buildingId,
       projectNumber: "—",
       projectTypeLabel: getProjectTypeLabel("standard"),
+      serviceTypeLabel: "—",
       buildingName: demo.name,
       client: "—",
       city: demo.city ?? "—",
@@ -240,7 +242,7 @@ export default function MasterProjectV2PageContent() {
     if (!buildingId) return;
     const allowed = resolveInitialTab(tabParam, faultIdParam, projectType);
     if (allowed === activeTab) return;
-    if (tabParam === "documents" && projectType === "standard") {
+    if (tabParam && isDeprecatedProjectV2Tab(tabParam)) {
       skipNavPushRef.current = true;
       router.replace(buildMasterProjectV2Path(buildingId));
       return;
@@ -321,6 +323,20 @@ export default function MasterProjectV2PageContent() {
     );
   }, [activeTab, buildingId, faultIdParam, router]);
 
+  function handleCloudRowSaved(row: CloudBuildingRow) {
+    setCloudRow(row);
+    setDetails(detailsFromCloudRow(row, Number(details.elevatorCount) || null));
+    void loadProject();
+  }
+
+  function renderCloudTabUnavailable(label: string) {
+    return (
+      <p className="text-sm text-forte-text-secondary text-center py-12">
+        {label} — נדרש חיבור Supabase ופרויקט שמור בענן.
+      </p>
+    );
+  }
+
   function renderTabContent() {
     if (loading && activeTab === "details") {
       return <p className="text-sm text-forte-text-secondary py-8 text-center">טוען פרטי פרויקט...</p>;
@@ -340,12 +356,18 @@ export default function MasterProjectV2PageContent() {
           <MasterProjectV2DetailsTab
             details={details}
             cloudRow={cloudRow}
-            onSaved={(row) => {
-              setCloudRow(row);
-              setDetails(detailsFromCloudRow(row, Number(details.elevatorCount) || null));
-              void loadProject();
-            }}
+            onSaved={handleCloudRowSaved}
           />
+        );
+      case "execution":
+        if (!cloudRow) return renderCloudTabUnavailable("שלב ביצוע");
+        return (
+          <MasterProjectV2ExecutionTab cloudRow={cloudRow} onSaved={handleCloudRowSaved} />
+        );
+      case "finances":
+        if (!cloudRow) return renderCloudTabUnavailable("כספים");
+        return (
+          <MasterProjectV2FinancesTab cloudRow={cloudRow} onSaved={handleCloudRowSaved} />
         );
       case "letters":
         return <MasterProjectV2LettersTab buildingId={buildingId} />;
@@ -365,24 +387,10 @@ export default function MasterProjectV2PageContent() {
         return <MasterProjectV2DocumentsTab buildingId={buildingId} />;
       case "tasks":
         return <MasterProjectV2TasksTab buildingId={buildingId} />;
-      case "reports":
-        return (
-          <MasterProjectV2ReportsTab
-            buildingId={buildingId}
-            buildingName={details.buildingName}
-          />
-        );
       case "ai":
         return <MasterProjectV2AiTab />;
       case "permissions":
         return <MasterProjectV2PermissionsTab buildingId={buildingId} />;
-      case "settings":
-        return (
-          <MasterProjectV2PlaceholderTab
-            stationLabel="הגדרות"
-            description="תחנת הגדרות תושלם בשלב הבא."
-          />
-        );
       default:
         return null;
     }

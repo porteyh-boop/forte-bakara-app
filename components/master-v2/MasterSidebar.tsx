@@ -52,20 +52,19 @@ type SidebarItem = {
 };
 
 const STATION_ITEMS: SidebarItem[] = [
+  { id: "execution", label: "שלב ביצוע", icon: "📈", tabId: "execution", section: "project" },
+  { id: "finances", label: "כספים", icon: "💰", tabId: "finances", section: "project" },
+  { id: "documents", label: "מסמכים", icon: "📄", tabId: "documents", section: "project" },
   { id: "letters", label: "מכתבים", icon: "✉", tabId: "letters", section: "project" },
   { id: "inspections", label: "בדיקות", icon: "🔍", tabId: "inspections", section: "project" },
   { id: "faults", label: "תקלות", icon: "⚠", tabId: "faults", section: "project" },
   { id: "contacts", label: "אנשי קשר", icon: "👥", tabId: "contacts", section: "project" },
-  { id: "documents", label: "מסמכים", icon: "📄", tabId: "documents", section: "project" },
   { id: "tasks", label: "משימות", icon: "☑", tabId: "tasks", section: "project" },
-  { id: "reports", label: "דוחות", icon: "📊", tabId: "reports", section: "project" },
   { id: "ai", label: "AI Assistant", icon: "✦", tabId: "ai", section: "project" },
   { id: "permissions", label: "הרשאות", icon: "🔐", tabId: "permissions", section: "project" },
 ];
 
-const BOTTOM_ITEMS: SidebarItem[] = [
-  { id: "settings", label: "הגדרות", icon: "⚙", tabId: "settings", disabled: true, section: "system" },
-];
+const BOTTOM_ITEMS: SidebarItem[] = [];
 
 export interface MasterSidebarProjectNav {
   buildingId: string;
@@ -196,10 +195,14 @@ export default function MasterSidebar({
           <SidebarNavItem key={item.id} item={item} isActive={item.id === resolvedActiveId} />
         ))}
 
-        <p className="fv2-sidebar-section-label">מערכת</p>
-        {BOTTOM_ITEMS.map((item) => (
-          <SidebarNavItem key={item.id} item={item} isActive={item.id === resolvedActiveId} />
-        ))}
+        {BOTTOM_ITEMS.length > 0 ? (
+          <>
+            <p className="fv2-sidebar-section-label">מערכת</p>
+            {BOTTOM_ITEMS.map((item) => (
+              <SidebarNavItem key={item.id} item={item} isActive={item.id === resolvedActiveId} />
+            ))}
+          </>
+        ) : null}
       </nav>
 
       <div className="fv2-sidebar-footer">

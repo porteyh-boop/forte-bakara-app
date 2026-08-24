@@ -36,16 +36,16 @@ export function buildMasterProjectV2LetterPrefillPath(input: {
 
 export const PROJECT_V2_TAB_IDS = [
   "details",
+  "execution",
+  "finances",
   "letters",
   "inspections",
   "faults",
   "contacts",
   "documents",
   "tasks",
-  "reports",
   "ai",
   "permissions",
-  "settings",
 ] as const;
 
 export type ProjectV2TabId = (typeof PROJECT_V2_TAB_IDS)[number];

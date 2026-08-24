@@ -31,6 +31,10 @@ export interface StatisticsContentProps {
     | { ok: true; rows: StatisticsFaultRow[] }
     | { ok: false; reason: "not_configured" | "missing_building" | "fetch_failed" }
   >;
+  /** Hide the building name line (embedded dashboard sections). */
+  showBuildingLabel?: boolean;
+  /** Hide the total-faults summary card (charts only). */
+  showSummaryCard?: boolean;
 }
 
 export default function StatisticsContent({
@@ -38,6 +42,8 @@ export default function StatisticsContent({
   buildingName,
   filterRows,
   loadRows,
+  showBuildingLabel = true,
+  showSummaryCard = true,
 }: StatisticsContentProps) {
   const [period, setPeriod] = useState<StatisticsPeriod>("30d");
   const [rows, setRows] = useState<StatisticsFaultRow[] | null>(null);
@@ -96,7 +102,9 @@ export default function StatisticsContent({
   if (loading) {
     return (
       <div className="space-y-4">
-        <p className="text-xs text-gray-text">בניין: {buildingName}</p>
+        {showBuildingLabel ? (
+          <p className="text-xs text-gray-text">בניין: {buildingName}</p>
+        ) : null}
         <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center">
           <p className="text-sm text-gray-text">טוען סטטיסטיקות...</p>
         </div>
@@ -107,7 +115,9 @@ export default function StatisticsContent({
   if (error || !snapshot) {
     return (
       <div className="space-y-4">
-        <p className="text-xs text-gray-text">בניין: {buildingName}</p>
+        {showBuildingLabel ? (
+          <p className="text-xs text-gray-text">בניין: {buildingName}</p>
+        ) : null}
         <div className="bg-white rounded-2xl border border-red-200 p-6 text-center">
           <p className="text-sm text-red-600">{error ?? "לא ניתן להציג סטטיסטיקות."}</p>
         </div>
@@ -117,9 +127,11 @@ export default function StatisticsContent({
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-xs text-gray-text">בניין: {buildingName}</p>
+      {showBuildingLabel ? (
+        <p className="text-xs text-gray-text">בניין: {buildingName}</p>
+      ) : null}
       <PeriodFilter value={period} onChange={setPeriod} />
-      <SummaryCard totalFaults={snapshot.totalFaults} />
+      {showSummaryCard ? <SummaryCard totalFaults={snapshot.totalFaults} /> : null}
       <MonthlyChart data={snapshot.monthly} />
       <FaultTypeChart data={snapshot.byType} />
       <ElevatorChart data={snapshot.byElevator} />
