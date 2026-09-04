@@ -324,7 +324,7 @@ export default function MasterContactsDirectoryContent() {
               {!loading &&
                 filteredContacts.map((contact, index) => (
                   <tr key={contact.id} className={index % 2 === 1 ? "" : ""}>
-                    <td className="py-2.5 px-2 w-10">
+                    <td className="py-2.5 px-2 w-10" data-label="פעולות">
                       <ContactRowMenu
                         onEdit={() => openEditDialog(contact)}
                         onDelete={() => {
@@ -333,16 +333,16 @@ export default function MasterContactsDirectoryContent() {
                         }}
                       />
                     </td>
-                    <td className="py-2.5 px-2 font-medium text-forte-text">
+                    <td className="py-2.5 px-2 font-medium text-forte-text fv2-card-primary" data-label="שם מלא">
                       {contact.fullName}
                     </td>
-                    <td className="py-2.5 px-2 text-forte-text/85">
+                    <td className="py-2.5 px-2 text-forte-text/85" data-label="חברה / ארגון">
                       {contact.company || "—"}
                     </td>
-                    <td className="py-2.5 px-2 text-forte-text/85">
+                    <td className="py-2.5 px-2 text-forte-text/85" data-label="תפקיד">
                       {contact.roleTitle || "—"}
                     </td>
-                    <td className="py-2.5 px-2" dir="ltr">
+                    <td className="py-2.5 px-2" dir="ltr" data-label="טלפון">
                       {contact.phone ? (
                         <a
                           href={`tel:${contact.phone}`}
@@ -354,7 +354,7 @@ export default function MasterContactsDirectoryContent() {
                         <span className="text-forte-text-secondary">—</span>
                       )}
                     </td>
-                    <td className="py-2.5 px-2" dir="ltr">
+                    <td className="py-2.5 px-2" dir="ltr" data-label='דוא"ל'>
                       {contact.email ? (
                         <a
                           href={`mailto:${contact.email}`}

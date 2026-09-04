@@ -76,6 +76,8 @@ interface MasterSidebarProps {
   activeItemId?: string;
   onLogout: () => void;
   projectNav?: MasterSidebarProjectNav;
+  open?: boolean;
+  onNavigate?: () => void;
 }
 
 const GLOBAL_ITEMS: SidebarItem[] = [
@@ -95,9 +97,11 @@ function resolveActiveItemId(
 function SidebarNavItem({
   item,
   isActive,
+  onNavigate,
 }: {
   item: SidebarItem;
   isActive: boolean;
+  onNavigate?: () => void;
 }) {
   const className = [
     "fv2-sidebar-item",
@@ -125,7 +129,7 @@ function SidebarNavItem({
   }
 
   return (
-    <Link key={item.id} href={item.href} className={className}>
+    <Link key={item.id} href={item.href} className={className} onClick={onNavigate}>
       {content}
     </Link>
   );
@@ -135,6 +139,8 @@ export default function MasterSidebar({
   activeItemId = "projects",
   onLogout,
   projectNav,
+  open = false,
+  onNavigate,
 }: MasterSidebarProps) {
   const inbox = useMasterFaultInbox();
   const [clientReady, setClientReady] = useState(false);
@@ -168,38 +174,76 @@ export default function MasterSidebar({
   const userInitials = BRAND_EDITOR_NAME.slice(0, 2).toUpperCase();
 
   return (
-    <aside className="fv2-sidebar">
+    <aside
+      id="fv2-sidebar"
+      className={`fv2-sidebar${open ? " fv2-sidebar-open" : ""}`}
+    >
       <div className="fv2-sidebar-brand">
-        <div className="fv2-sidebar-brand-mark" aria-hidden>
-          F
+        <div className="fv2-sidebar-brand-row">
+          <div className="fv2-sidebar-brand-text">
+            <div className="fv2-sidebar-brand-mark" aria-hidden>
+              F
+            </div>
+            <p className="fv2-sidebar-brand-title">{BRAND_FORTE}</p>
+            <p className="fv2-sidebar-brand-sub">מערכת ניהול הנדסי</p>
+          </div>
+          <button
+            type="button"
+            className="fv2-sidebar-close"
+            aria-label="סגור תפריט"
+            onClick={onNavigate}
+          >
+            ✕
+          </button>
         </div>
-        <p className="fv2-sidebar-brand-title">{BRAND_FORTE}</p>
-        <p className="fv2-sidebar-brand-sub">מערכת ניהול הנדסי</p>
       </div>
 
       <nav className="fv2-sidebar-nav">
         <p className="fv2-sidebar-section-label">ראשי</p>
         {mainItems.map((item) => (
-          <SidebarNavItem key={item.id} item={item} isActive={item.id === resolvedActiveId} />
+          <SidebarNavItem
+            key={item.id}
+            item={item}
+            isActive={item.id === resolvedActiveId}
+            onNavigate={onNavigate}
+          />
         ))}
         <SidebarNotificationsButton
           unreadCount={inbox?.unreadCount ?? 0}
-          onClick={() => inbox?.togglePanel()}
+          onClick={() => {
+            onNavigate?.();
+            inbox?.togglePanel();
+          }}
         />
         {GLOBAL_ITEMS.map((item) => (
-          <SidebarNavItem key={item.id} item={item} isActive={item.id === resolvedActiveId} />
+          <SidebarNavItem
+            key={item.id}
+            item={item}
+            isActive={item.id === resolvedActiveId}
+            onNavigate={onNavigate}
+          />
         ))}
 
         <p className="fv2-sidebar-section-label">תיק פרויקט</p>
         {projectItems.map((item) => (
-          <SidebarNavItem key={item.id} item={item} isActive={item.id === resolvedActiveId} />
+          <SidebarNavItem
+            key={item.id}
+            item={item}
+            isActive={item.id === resolvedActiveId}
+            onNavigate={onNavigate}
+          />
         ))}
 
         {BOTTOM_ITEMS.length > 0 ? (
           <>
             <p className="fv2-sidebar-section-label">מערכת</p>
             {BOTTOM_ITEMS.map((item) => (
-              <SidebarNavItem key={item.id} item={item} isActive={item.id === resolvedActiveId} />
+              <SidebarNavItem
+                key={item.id}
+                item={item}
+                isActive={item.id === resolvedActiveId}
+                onNavigate={onNavigate}
+              />
             ))}
           </>
         ) : null}
@@ -215,7 +259,14 @@ export default function MasterSidebar({
             <p className="fv2-sidebar-user-role">מנהל מערכת</p>
           </div>
         </div>
-        <button type="button" onClick={onLogout} className="fv2-sidebar-item w-full">
+        <button
+          type="button"
+          onClick={() => {
+            onNavigate?.();
+            onLogout();
+          }}
+          className="fv2-sidebar-item w-full"
+        >
           <span className="fv2-sidebar-icon" aria-hidden>
             ⎋
           </span>

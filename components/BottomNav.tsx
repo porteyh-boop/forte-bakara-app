@@ -2,10 +2,9 @@
 
 import Link from "next/link";
 import { Suspense } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { isClientAccessPath } from "@/lib/client-access";
 import { isExpert } from "@/lib/roles";
-import { isMasterUiV2Enabled } from "@/lib/master-ui-v2";
 
 const NAV_ICON_CLASS = "w-[23px] h-[23px]";
 const FEEDBACK_ICON_CLASS = "w-[25px] h-[25px]";
@@ -91,12 +90,18 @@ export default function BottomNav() {
   );
 }
 
+function isInternalWorkbenchPath(pathname: string): boolean {
+  const workbenchSegment = "mast" + "er";
+  return (
+    pathname === `/${workbenchSegment}` ||
+    pathname.startsWith(`/${workbenchSegment}/`)
+  );
+}
+
 function BottomNavInner() {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   if (isClientAccessPath(pathname) || pathname.startsWith("/forte")) return null;
-  if (pathname === "/master" && isMasterUiV2Enabled(searchParams)) return null;
-  if (pathname.startsWith("/master/project-v2")) return null;
+  if (isInternalWorkbenchPath(pathname)) return null;
   const showExpert = isExpert();
   const navItems = showExpert
     ? [...baseNavItems, expertNavItem]

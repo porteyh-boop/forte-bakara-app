@@ -294,7 +294,7 @@ export default function ProjectDashboardKpiGrid({
   return (
     <ForteV2Panel className="mb-4">
       <h3 className="text-sm font-bold text-forte-text mb-3">תמונת מצב</h3>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
         {showExecution ? (
           <KpiCard label="שלב ביצוע" href={tabHref("execution")}>
             <p className="text-sm font-semibold text-forte-text line-clamp-2">{stageLabel}</p>

@@ -32,9 +32,9 @@ export default function MasterCodeGate({ onSuccess }: { onSuccess: () => void })
 
   return (
     <div
-      className={`min-h-screen bg-forte-background flex items-center justify-center p-6 ${FORTE_V2_ROOT_CLASS}`}
+      className={`min-h-screen bg-forte-background flex items-center justify-center p-6 overflow-x-clip ${FORTE_V2_ROOT_CLASS}`}
     >
-      <div className="w-full max-w-md">
+      <div className="w-full min-w-0 max-w-md">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-forte-primary text-white text-xl font-black mb-4 shadow-lg">
             F

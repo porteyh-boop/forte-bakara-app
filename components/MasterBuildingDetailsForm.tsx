@@ -60,7 +60,7 @@ export default function MasterBuildingDetailsForm({
           required
         />
       </FormField>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
         <FormField label="עיר">
           <input
             className="form-input"
@@ -116,7 +116,7 @@ export default function MasterBuildingDetailsForm({
           </button>
         </div>
       )}
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
         <FormField label="איש קשר תפעולי של הבניין">
           <input
             className="form-input"

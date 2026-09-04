@@ -65,7 +65,7 @@ export default function ExpertPageContent() {
           </ExpertSection>
         )}
 
-        <div className="grid grid-cols-2 gap-3 mb-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
           {analytics.metrics.map((metric, i) => (
             <ExpertMetricCard key={metric.label} metric={metric} index={i} />
           ))}
@@ -244,7 +244,7 @@ export default function ExpertPageContent() {
         )}
 
         <ExpertSection title="ניתוח זמני תגובה">
-          <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm grid grid-cols-2 gap-3 text-sm">
+          <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
             <div>
               <p className="text-xs text-gray-text">ממוצע</p>
               <p className="font-bold text-navy">{analytics.responseTime.averageHours} שעות</p>
@@ -274,7 +274,7 @@ export default function ExpertPageContent() {
 
         <ExpertSection title="ניתוח זמני השבתה">
           <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
-            <div className="grid grid-cols-2 gap-3 text-sm mb-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm mb-3">
               <div>
                 <p className="text-xs text-gray-text">ממוצע</p>
                 <p className="font-bold text-navy">{analytics.downtime.averageHours} שעות</p>

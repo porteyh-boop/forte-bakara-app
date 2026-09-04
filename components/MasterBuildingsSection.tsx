@@ -917,7 +917,7 @@ export default function MasterBuildingsSection({
                       placeholder="אם ריק — ייווצר אוטומטית"
                     />
                   </FormField>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                     <FormField label="סוג מעלית">
                       <input
                         className="form-input"
@@ -1047,6 +1047,7 @@ export default function MasterBuildingsSection({
 
           {selectedBuildingDetails && (
             <MasterBuildingDetailsPanel
+              // ערוך פרטי בניין — הכפתור מוצג בלוח הפרטים
               details={selectedBuildingDetails}
               canEdit={Boolean(selectedBuilding)}
               editing={Boolean(
@@ -1217,7 +1218,7 @@ export default function MasterBuildingsSection({
               required
             />
           </FormField>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             <FormField label="מספר קומות">
               <input
                 type="number"

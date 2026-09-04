@@ -289,7 +289,7 @@ export default function ProjectFinancialCard({
         <MasterProjectV2StatusBanner tone="error">{actionError}</MasterProjectV2StatusBanner>
       )}
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mt-3">
         <FinancialMetric label="סכום הזמנה" value={formatMoney(cloudRow.order_amount)} />
         <FinancialMetric label="שולם" value={formatMoney(summary.paidTotal)} />
         <FinancialMetric
@@ -369,15 +369,17 @@ export default function ProjectFinancialCard({
                 <tbody>
                   {payments.map((payment) => (
                     <tr key={payment.id}>
-                      <td>{formatDisplayDate(payment.paymentDate)}</td>
-                      <td className="text-left font-mono text-sm" dir="ltr">
+                      <td className="fv2-card-primary" data-label="תאריך">
+                        {formatDisplayDate(payment.paymentDate)}
+                      </td>
+                      <td className="text-left font-mono text-sm" dir="ltr" data-label="סכום">
                         {formatMoney(payment.amount)}
                       </td>
-                      <td>{payment.paymentMethod}</td>
-                      <td className="max-w-[200px] truncate">
+                      <td data-label="אמצעי תשלום">{payment.paymentMethod}</td>
+                      <td className="max-w-[200px] truncate" data-label="הערה">
                         {payment.notes.trim() || "—"}
                       </td>
-                      <td>
+                      <td data-label="פעולות">
                         <div className="flex flex-wrap gap-1">
                           <MasterProjectV2SecondaryButton
                             onClick={() => openEditPayment(payment)}

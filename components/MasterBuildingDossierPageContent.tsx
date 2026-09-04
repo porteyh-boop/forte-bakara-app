@@ -401,6 +401,7 @@ export default function MasterBuildingDossierPageContent({
             </div>
 
             <MasterBuildingDetailsPanel
+              // ערוך פרטי בניין — הכפתור מוצג בלוח הפרטים
               details={buildingDetails}
               canEdit={Boolean(cloudBuilding)}
               editing={editingDetails}

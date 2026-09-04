@@ -97,7 +97,7 @@ function AssessmentSummary({
 
       <div>
         <p className="text-xs font-semibold text-gold mb-2">מדדים מרכזיים</p>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2">
           <AssessmentMetric
             label="תקלות פתוחות"
             value={metrics.openFaults}

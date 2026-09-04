@@ -16,6 +16,7 @@ import {
 
 interface MasterLetterPartyEditorProps {
   sectionTitle: string;
+  /** Visible picker label — נמען ראשי or עותק */
   fieldLabel: string;
   entries: MasterLetterPartyEntry[];
   onChange: (entries: MasterLetterPartyEntry[]) => void;

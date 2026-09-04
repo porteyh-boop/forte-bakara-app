@@ -54,7 +54,7 @@ export default function MasterProjectsTable({
       <ForteV2DataTable>
         <thead>
           <tr>
-            <th className="w-10" aria-hidden="true" />
+            <th className="w-10 fv2-card-hide-mobile" aria-hidden="true" />
             <th>
               <button
                 type="button"
@@ -96,25 +96,29 @@ export default function MasterProjectsTable({
               onClick={() => onRowClick(row.buildingId)}
               className="fv2-row-clickable"
             >
-              <td className="text-forte-text-secondary/60 text-center">›</td>
-              <td>
+              <td className="text-forte-text-secondary/60 text-center fv2-card-hide-mobile">›</td>
+              <td data-label="מספר פרויקט">
                 <span className="fv2-cell-id" dir="ltr">
                   {row.projectNumber}
                 </span>
               </td>
-              <td>
+              <td className="fv2-card-primary" data-label="שם הבניין">
                 <span className="fv2-cell-name">{row.buildingName}</span>
               </td>
-              <td className="text-forte-text/85">{row.client}</td>
-              <td className="text-forte-text/85">{row.city}</td>
-              <td className="text-forte-text/85">
+              <td className="text-forte-text/85" data-label="לקוח">
+                {row.client}
+              </td>
+              <td className="text-forte-text/85" data-label="עיר">
+                {row.city}
+              </td>
+              <td className="text-forte-text/85" data-label="סוג שירות">
                 {row.serviceTypeLabel ? (
                   <ForteV2StatusBadge tone="blue">{row.serviceTypeLabel}</ForteV2StatusBadge>
                 ) : (
                   "—"
                 )}
               </td>
-              <td>
+              <td data-label="התקדמות">
                 <div className="min-w-[8rem] space-y-1">
                   <div className="text-xs font-semibold text-forte-primary whitespace-nowrap">
                     {row.progress == null ? "—" : `${row.progress}%`}
@@ -137,7 +141,7 @@ export default function MasterProjectsTable({
                   )}
                 </div>
               </td>
-              <td className="text-forte-text-secondary whitespace-nowrap text-xs">
+              <td className="text-forte-text-secondary whitespace-nowrap text-xs" data-label="עודכן">
                 {formatMasterProjectDate(row.updatedAt)}
               </td>
             </tr>

@@ -11,7 +11,7 @@ function ForteV2TabBackButton({ onClick }: { onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center gap-1 text-[11px] font-semibold text-forte-text-secondary hover:text-forte-primary mb-2 transition-colors"
+      className="fv2-back-link inline-flex items-center gap-1 text-[11px] font-semibold text-forte-text-secondary hover:text-forte-primary mb-2 transition-colors"
     >
       ← חזרה
     </button>
@@ -313,7 +313,7 @@ export function ForteV2TableCard({
           )}
         </div>
       )}
-      <div className="overflow-x-auto">{children}</div>
+      <div className="fv2-table-scroll">{children}</div>
     </div>
   );
 }
@@ -394,7 +394,7 @@ export function ForteV2ProjectHeader({
       <div className="fv2-project-header-top">
         <Link
           href={backHref}
-          className="inline-flex items-center gap-1 text-[11px] font-semibold text-forte-text-secondary hover:text-forte-primary mb-2 transition-colors"
+          className="fv2-back-link inline-flex items-center gap-1 text-[11px] font-semibold text-forte-text-secondary hover:text-forte-primary mb-2 transition-colors"
         >
           ← {backLabel}
         </Link>

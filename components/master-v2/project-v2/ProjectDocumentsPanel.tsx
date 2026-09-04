@@ -300,8 +300,8 @@ export default function ProjectDocumentsPanel({
           {emptyMessage ?? "אין מסמכים באזור זה. ניתן להעלות מסמך חדש."}
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-md border border-forte-border bg-white">
-          <table className="w-full text-xs text-right">
+        <div className="fv2-table-scroll overflow-x-auto rounded-md border border-forte-border bg-white">
+          <table className="fv2-data-table w-full text-xs text-right">
             <thead className="bg-forte-blue-light/40 text-forte-text-secondary">
               <tr>
                 <th className="px-3 py-2 font-medium">שם</th>
@@ -314,13 +314,13 @@ export default function ProjectDocumentsPanel({
             <tbody>
               {sectionDocuments.map((document) => (
                 <tr key={document.id} className="border-t border-forte-border/60">
-                  <td className="px-3 py-2 font-medium text-forte-text">
+                  <td className="px-3 py-2 font-medium text-forte-text fv2-card-primary" data-label="שם">
                     {document.title}
                   </td>
-                  <td className="px-3 py-2 text-forte-text-secondary">
+                  <td className="px-3 py-2 text-forte-text-secondary" data-label="סוג">
                     {getDocumentTypeLabel(document.document_type)}
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="px-3 py-2" data-label="הרשאה">
                     <div className="flex flex-col items-start gap-1">
                       <ProjectDocumentVisibilityBadge
                         visibility={document.visibility}
@@ -334,10 +334,10 @@ export default function ProjectDocumentsPanel({
                       />
                     </div>
                   </td>
-                  <td className="px-3 py-2 text-forte-text-secondary whitespace-nowrap">
+                  <td className="px-3 py-2 text-forte-text-secondary whitespace-nowrap" data-label="תאריך">
                     {formatDocumentDate(document.created_at)}
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="px-3 py-2" data-label="פעולות">
                     <div className="flex flex-wrap gap-2 justify-end">
                       <a
                         href={document.file_url}
@@ -366,14 +366,14 @@ export default function ProjectDocumentsPanel({
 
       {uploadOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-forte-text/30 p-4"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-forte-text/30 p-4 overflow-y-auto"
           role="dialog"
           aria-modal="true"
           aria-labelledby="project-documents-upload-title"
         >
           <form
             onSubmit={(event) => void handleUploadSubmit(event)}
-            className="w-full max-w-md bg-white rounded-lg border border-forte-border shadow-xl p-4 space-y-3"
+            className="w-full max-w-md bg-white rounded-lg border border-forte-border shadow-xl p-4 space-y-3 max-h-[92dvh] overflow-y-auto"
           >
             <h4
               id="project-documents-upload-title"

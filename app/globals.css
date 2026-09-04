@@ -242,3 +242,27 @@ body {
   border-color: var(--gold);
   color: var(--navy);
 }
+
+@media (max-width: 1279px) {
+  html,
+  body {
+    overflow-x: clip;
+    max-width: 100%;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1279px) {
+  .page-content {
+    max-width: 48rem;
+    padding-inline: 1.5rem;
+  }
+}
+
+@media (max-width: 767px) {
+  .form-input,
+  .form-section select,
+  textarea.form-input {
+    min-height: 44px;
+    font-size: 16px;
+  }
+}

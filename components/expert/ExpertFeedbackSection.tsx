@@ -42,7 +42,7 @@ export default function ExpertFeedbackSection() {
 
   return (
     <ExpertSection title="משובי משתמשים">
-      <div className="grid grid-cols-2 gap-3 mb-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
         {metrics.map((metric, i) => (
           <ExpertMetricCard key={metric.label} metric={metric} index={i} />
         ))}

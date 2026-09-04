@@ -56,7 +56,7 @@ export function BuildingDossierPanel({
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-2">
         <DossierKpi label='סה"כ תקלות' value={dossier.totalFaults} />
         <DossierKpi label="תקלות פתוחות" value={dossier.openFaults} />
         <DossierKpi label="תקלות סגורות" value={dossier.closedFaults} />

@@ -242,10 +242,10 @@ export default function MasterProjectV2TasksTab({
       )}
 
       {dialogOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-forte-text/30 p-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-forte-text/30 p-4 overflow-y-auto">
           <form
             onSubmit={(e) => void handleSave(e)}
-            className="w-full max-w-lg bg-white rounded-lg border border-forte-border shadow-xl p-4 space-y-3"
+            className="w-full max-w-lg bg-white rounded-lg border border-forte-border shadow-xl p-4 space-y-3 max-h-[92dvh] overflow-y-auto mb-[max(0.5rem,env(safe-area-inset-bottom))] sm:mb-0"
           >
             <h4 className="text-sm font-bold text-forte-text">
               {editorMode === "create" ? "משימה חדשה" : "עריכת משימה"}
@@ -273,7 +273,7 @@ export default function MasterProjectV2TasksTab({
                 className="form-input text-sm py-2 min-h-[72px]"
               />
             </label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <label className="block space-y-1">
                 <span className="text-xs font-medium text-forte-text">עדיפות</span>
                 <select

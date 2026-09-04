@@ -211,7 +211,7 @@ export function InspectorDocumentCard({
         </span>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 text-xs text-gray-text">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-text">
         <p>תאריך בדיקה: {formatInspectorReportDate(report.report_date)}</p>
         <p>ימים מהתסקיר: {days}</p>
         <p>

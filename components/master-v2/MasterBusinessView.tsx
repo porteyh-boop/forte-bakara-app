@@ -315,7 +315,7 @@ export default function MasterBusinessView() {
                           className="cursor-pointer hover:bg-forte-surface/60"
                           onClick={() => handleRowClick(row.buildingId)}
                         >
-                          <td>
+                          <td className="fv2-card-primary" data-label="פרויקט">
                             <div className="font-medium text-forte-text">{row.projectName}</div>
                             {row.projectNumber !== "—" && (
                               <div className="text-xs text-forte-text-secondary">
@@ -323,18 +323,18 @@ export default function MasterBusinessView() {
                               </div>
                             )}
                           </td>
-                          <td>{row.client}</td>
-                          <td className="text-left font-mono text-sm" dir="ltr">
+                          <td data-label="לקוח">{row.client}</td>
+                          <td className="text-left font-mono text-sm" dir="ltr" data-label="סכום הזמנה">
                             {formatMoney(row.orderAmount)}
                           </td>
-                          <td className="text-left font-mono text-sm" dir="ltr">
+                          <td className="text-left font-mono text-sm" dir="ltr" data-label="התקבל">
                             {formatMoney(row.paidTotal)}
                           </td>
-                          <td className="text-left font-mono text-sm" dir="ltr">
+                          <td className="text-left font-mono text-sm" dir="ltr" data-label="יתרה">
                             {row.balance == null ? "—" : formatMoney(row.balance)}
                           </td>
-                          <td>{formatDisplayDate(row.nextPaymentDate)}</td>
-                          <td>
+                          <td data-label="מועד תשלום צפוי">{formatDisplayDate(row.nextPaymentDate)}</td>
+                          <td data-label="סטטוס גבייה">
                             <ForteV2StatusBadge tone={collectionStatusTone(row.collectionStatus)}>
                               {row.collectionStatus}
                             </ForteV2StatusBadge>
@@ -373,14 +373,16 @@ export default function MasterBusinessView() {
                     <tbody>
                       {dashboard.incomeTypeSummary.map((row) => (
                         <tr key={row.incomeTypeLabel}>
-                          <td>{row.incomeTypeLabel}</td>
-                          <td className="text-left font-mono text-sm" dir="ltr">
+                          <td className="fv2-card-primary" data-label="סוג עבודה">
+                            {row.incomeTypeLabel}
+                          </td>
+                          <td className="text-left font-mono text-sm" dir="ltr" data-label="הזמנות בתקופה">
                             {formatMoney(row.ordersInPeriod)}
                           </td>
-                          <td className="text-left font-mono text-sm" dir="ltr">
+                          <td className="text-left font-mono text-sm" dir="ltr" data-label="התקבל בתקופה">
                             {formatMoney(row.receivedInPeriod)}
                           </td>
-                          <td className="text-left font-mono text-sm" dir="ltr">
+                          <td className="text-left font-mono text-sm" dir="ltr" data-label="יתרה נוכחית">
                             {formatMoney(row.currentBalance)}
                           </td>
                         </tr>

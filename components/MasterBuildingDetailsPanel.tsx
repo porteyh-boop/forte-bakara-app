@@ -101,7 +101,7 @@ export default function MasterBuildingDetailsPanel({
           </div>
         </form>
       ) : (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-2">
           <DossierKpi label="שם בניין" value={details.name} small />
           <DossierKpi label="עיר" value={details.city ?? "—"} small />
           <DossierKpi label="כתובת" value={details.address ?? "—"} small />
