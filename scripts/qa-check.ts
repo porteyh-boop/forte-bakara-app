@@ -3491,10 +3491,6 @@ const masterManifestRoute = path.join(
   process.cwd(),
   "app/master/manifest.webmanifest/route.ts"
 );
-const masterLayoutSource = fs.readFileSync(
-  path.join(process.cwd(), "app/master/layout.tsx"),
-  "utf8"
-);
 const masterPageSwitchSource = fs.readFileSync(
   path.join(process.cwd(), "components/master-v2/MasterPageSwitch.tsx"),
   "utf8"
