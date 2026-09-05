@@ -7298,7 +7298,7 @@ if (masterInspectorReportsSecurityQa.status !== 0) {
   console.log("Master V2 Inspector Reports Security QA עבר");
 }
 
-console.log("\n=== Master Sales Leads display QA ===");
+console.log("\n=== Master Sales Leads persistence QA ===");
 const masterSalesLeadsQa = spawnSync(
   "npx",
   ["tsx", "scripts/qa-master-sales-leads.ts"],
@@ -7310,10 +7310,46 @@ const masterSalesLeadsQa = spawnSync(
 );
 if (masterSalesLeadsQa.status !== 0) {
   failed += 1;
-  console.error("Master Sales Leads display QA נכשל");
+  console.error("Master Sales Leads persistence QA נכשל");
 } else {
   passed += 1;
-  console.log("Master Sales Leads display QA עבר");
+  console.log("Master Sales Leads persistence QA עבר");
+}
+
+console.log("\n=== Master Sales Leads Security QA ===");
+const masterSalesLeadsSecurityQa = spawnSync(
+  "npx",
+  ["tsx", "scripts/qa-master-sales-leads-security.ts"],
+  {
+    stdio: "inherit",
+    shell: true,
+    cwd: process.cwd(),
+  }
+);
+if (masterSalesLeadsSecurityQa.status !== 0) {
+  failed += 1;
+  console.error("Master Sales Leads Security QA נכשל");
+} else {
+  passed += 1;
+  console.log("Master Sales Leads Security QA עבר");
+}
+
+console.log("\n=== Master Sales Leads live persistence QA ===");
+const masterSalesLeadsPersistQa = spawnSync(
+  "npx",
+  ["tsx", "scripts/qa-master-sales-leads-persist.ts"],
+  {
+    stdio: "inherit",
+    shell: true,
+    cwd: process.cwd(),
+  }
+);
+if (masterSalesLeadsPersistQa.status !== 0) {
+  failed += 1;
+  console.error("Master Sales Leads live persistence QA נכשל");
+} else {
+  passed += 1;
+  console.log("Master Sales Leads live persistence QA עבר");
 }
 
 console.log(`\n=== סיכום: ${passed} עברו, ${failed} נכשלו ===`);

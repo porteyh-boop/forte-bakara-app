@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import MasterCodeGate from "@/components/master-v2/MasterCodeGate";
 import MasterShellLayout from "@/components/master-v2/MasterShellLayout";
 import {
@@ -24,8 +24,11 @@ import {
 import { ensureMasterV2SessionsValid } from "@/lib/master-v2-auth";
 import { isMasterAuthenticated, setMasterAuthenticated } from "@/lib/pilot-cloud";
 import {
-  applySalesLeadDraft,
-  createSyntheticSalesLeads,
+  createSalesLead,
+  listSalesLeads,
+  updateSalesLead,
+} from "@/lib/sales-leads-api";
+import {
   emptySalesLeadDraft,
   filterSalesLeads,
   formatSalesLeadDate,
@@ -54,13 +57,16 @@ function KpiCard({ label, value }: { label: string; value: number }) {
 
 export default function MasterSalesLeadsView() {
   const [authed, setAuthed] = useState(false);
-  const [leads, setLeads] = useState<SalesLead[]>(() => createSyntheticSalesLeads());
+  const [leads, setLeads] = useState<SalesLead[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<SalesLeadFilter>("הכול");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<SalesLeadDraft>(emptySalesLeadDraft);
   const [formError, setFormError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -73,6 +79,19 @@ export default function MasterSalesLeadsView() {
       if (!ok) setAuthed(false);
     });
   }, [authed]);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    const result = await listSalesLeads();
+    setLeads(result.leads);
+    if (result.error) setError(result.error);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (authed) void refresh();
+  }, [authed, refresh]);
 
   const today = jerusalemCalendarDate();
   const summary = useMemo(() => summarizeSalesLeads(leads, today), [leads, today]);
@@ -115,25 +134,27 @@ export default function MasterSalesLeadsView() {
     if (formError) setFormError(null);
   }
 
-  function handleSave(event: React.FormEvent) {
+  async function handleSave(event: React.FormEvent) {
     event.preventDefault();
-    const result = applySalesLeadDraft(draft, editingLead);
-    if (result.error) {
-      setFormError(result.error);
+    if (saving) return;
+    setSaving(true);
+    setFormError(null);
+    const result = editingLead
+      ? await updateSalesLead(editingLead.id, draft)
+      : await createSalesLead(draft);
+    setSaving(false);
+    if (result.error || !result.lead) {
+      setFormError(result.error ?? "השמירה נכשלה. נסו שוב.");
       return;
     }
     setLeads((current) => {
-      const index = current.findIndex((lead) => lead.id === result.lead.id);
-      if (index === -1) return [result.lead, ...current];
+      const index = current.findIndex((lead) => lead.id === result.lead!.id);
+      if (index === -1) return [result.lead!, ...current];
       const next = [...current];
-      next[index] = result.lead;
+      next[index] = result.lead!;
       return next;
     });
-    setMessage(
-      editingLead
-        ? "הכרטיס עודכן בזיכרון בלבד. הרענון יאפס את ההדגמה."
-        : "פנייה נוספה בזיכרון בלבד. הרענון יאפס את ההדגמה."
-    );
+    setMessage(editingLead ? "הכרטיס עודכן." : "הפנייה נשמרה.");
     closeDialog();
   }
 
@@ -146,16 +167,16 @@ export default function MasterSalesLeadsView() {
       <div className={fv2.pageBody}>
         <ForteV2PageHeader
           title="מכירות ולידים"
-          subtitle="תור פניות ראשוני לבדיקת מסך — ללא שמירה בענן"
+          subtitle="תור פניות ומעקב מכירות"
           actions={
             <ForteV2PrimaryButton onClick={openCreate}>פנייה חדשה</ForteV2PrimaryButton>
           }
         />
 
         <div className="fv2-workspace-content space-y-4">
-          <ForteV2StatusBanner tone="warning">
-            תצוגת הדגמה — הנתונים אינם נשמרים בענן. השינויים מתאפסים ברענון.
-          </ForteV2StatusBanner>
+          {error ? (
+            <ForteV2StatusBanner tone="error">{error}</ForteV2StatusBanner>
+          ) : null}
 
           {message ? (
             <ForteV2StatusBanner tone="info">{message}</ForteV2StatusBanner>
@@ -195,12 +216,28 @@ export default function MasterSalesLeadsView() {
             </ForteV2ToolbarRow>
           </ForteV2ToolbarCard>
 
-          <ForteV2TableCard title="רשימת לידים" count={visibleLeads.length}>
-            {visibleLeads.length === 0 ? (
+          <ForteV2TableCard
+            title="רשימת לידים"
+            count={loading ? undefined : visibleLeads.length}
+          >
+            {loading ? (
+              <p className="text-sm text-forte-text-secondary py-10 text-center">
+                טוען לידים...
+              </p>
+            ) : visibleLeads.length === 0 ? (
               <ForteV2EmptyState
                 icon="☎"
                 title="אין לידים להצגה"
-                description="נסו מסנן אחר או פתחו פנייה חדשה. הנתונים סינתטיים בלבד."
+                description={
+                  leads.length === 0
+                    ? "עדיין אין פניות. פתחו פנייה חדשה כדי להתחיל."
+                    : "נסו מסנן אחר או פתחו פנייה חדשה."
+                }
+                actions={
+                  <ForteV2PrimaryButton onClick={openCreate}>
+                    פנייה חדשה
+                  </ForteV2PrimaryButton>
+                }
               />
             ) : (
               <ForteV2DataTable>
@@ -264,14 +301,10 @@ export default function MasterSalesLeadsView() {
             onClose={closeDialog}
             size="xl"
           >
-            <form className="space-y-4" onSubmit={handleSave}>
+            <form className="space-y-4" onSubmit={(event) => void handleSave(event)}>
               {formError ? (
                 <ForteV2StatusBanner tone="error">{formError}</ForteV2StatusBanner>
-              ) : (
-                <ForteV2StatusBanner tone="warning">
-                  שמירה בזיכרון בלבד. הרענון יאפס את השינוי.
-                </ForteV2StatusBanner>
-              )}
+              ) : null}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <label className="block space-y-1 sm:col-span-2">
@@ -431,7 +464,7 @@ export default function MasterSalesLeadsView() {
                     className="fv2-input w-full min-h-[72px]"
                     value={draft.note}
                     onChange={(e) => patchDraft("note", e.target.value)}
-                    placeholder="ההערה תישמר בהיסטוריה בזיכרון בלבד"
+                    placeholder="ההערה תישמר בהיסטוריה"
                   />
                 </label>
               </div>
@@ -461,8 +494,12 @@ export default function MasterSalesLeadsView() {
               ) : null}
 
               <div className="flex flex-wrap justify-end gap-2">
-                <ForteV2SecondaryButton onClick={closeDialog}>ביטול</ForteV2SecondaryButton>
-                <ForteV2PrimaryButton type="submit">שמירה בהדגמה</ForteV2PrimaryButton>
+                <ForteV2SecondaryButton onClick={closeDialog} disabled={saving}>
+                  ביטול
+                </ForteV2SecondaryButton>
+                <ForteV2PrimaryButton type="submit" disabled={saving}>
+                  {saving ? "שומר..." : "שמירה"}
+                </ForteV2PrimaryButton>
               </div>
             </form>
           </ForteV2Dialog>
