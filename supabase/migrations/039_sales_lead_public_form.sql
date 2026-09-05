@@ -294,11 +294,12 @@ begin
        set full_name = trim(p_contact_name),
            company = trim(p_client_name),
            phone = trim(p_phone),
-           email = trim(coalesce(p_email, '')),
+           email = coalesce(nullif(trim(coalesce(p_email, '')), ''), email),
            notes = case
-             when v_existing_notes = '' or v_existing_notes like '[מכירות]%'
+             when v_notes <> ''
+              and (v_existing_notes = '' or v_existing_notes like '[מכירות]%')
                then v_notes
-             else v_contact.notes
+             else notes
            end,
            updated_at = v_now
      where id = v_contact_id;

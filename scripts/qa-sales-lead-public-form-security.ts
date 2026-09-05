@@ -144,7 +144,12 @@ async function main(): Promise<void> {
       migration.includes("to service_role") &&
       !migration.includes("grant select, insert, update, delete") &&
       !migration.includes("create_building_atomic") &&
-      !migration.includes("convert_sales_lead_win_to_project"),
+      !migration.includes("convert_sales_lead_win_to_project") &&
+      migration.includes(
+        "email = coalesce(nullif(trim(coalesce(p_email, '')), ''), email)"
+      ) &&
+      migration.includes("when v_notes <> ''") &&
+      migration.includes("else notes"),
     "039: table + atomic RPC locked to service_role; no security-branch RPC"
   );
 

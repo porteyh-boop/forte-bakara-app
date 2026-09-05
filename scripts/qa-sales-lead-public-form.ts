@@ -40,6 +40,7 @@ import { SALES_LEAD_SOURCES, type SalesLead } from "../lib/sales-leads";
 import { SERVICE_TYPE_OTHER } from "../lib/service-type";
 import {
   emptySimulatedPublicFormStore,
+  preserveExistingPublicFormContactFields,
   simulateParallelPublicSalesLeadSubmits,
   simulateSubmitPublicSalesLeadForm,
   PUBLIC_SALES_LEAD_SUBMIT_RPC,
@@ -507,6 +508,49 @@ async function runConcurrencyChecks(): Promise<void> {
       rollbackStore.history.length === 0 &&
       rollbackStore.submissions.length === 0,
     "failed submit rolls back lead, contact, history, and idempotency"
+  );
+
+  const existingNotes = "הערה ידנית — לא למחוק";
+  const existingEmail = "keep@example.com";
+  const preserve = preserveExistingPublicFormContactFields(
+    { email: existingEmail, notes: existingNotes },
+    { email: "", notes: "" }
+  );
+  assert(
+    preserve.email === existingEmail && preserve.notes === existingNotes,
+    "empty incoming email/notes keep existing contact fields"
+  );
+
+  const keepStore = emptySimulatedPublicFormStore();
+  keepStore.contacts.push({
+    id: "contact-existing",
+    phone: "0501234567",
+    email: existingEmail,
+    notes: existingNotes,
+  });
+  await simulateSubmitPublicSalesLeadForm(
+    keepStore,
+    new Map(),
+    "key-keep-contact",
+    "hash-keep-contact",
+    { phone: "0501234567", email: "", address: "", buildingName: "", city: "" }
+  );
+  assert(
+    keepStore.contacts.length === 1 &&
+      keepStore.contacts[0].id === "contact-existing" &&
+      keepStore.contacts[0].email === existingEmail &&
+      keepStore.contacts[0].notes === existingNotes,
+    "form without email/address keeps existing contact email and notes"
+  );
+
+  const salesNotes = "[מכירות] בניין: ישן";
+  const keepSalesNotes = preserveExistingPublicFormContactFields(
+    { email: existingEmail, notes: salesNotes },
+    { email: "", notes: "" }
+  );
+  assert(
+    keepSalesNotes.notes === salesNotes,
+    "empty form notes do not wipe existing [מכירות] notes"
   );
 }
 

@@ -1,3 +1,8 @@
+import { normalizeContactPhoneForLookup } from "@/lib/contacts";
+import {
+  buildSalesContactNotes,
+  SALES_CONTACT_NOTES_PREFIX,
+} from "@/lib/sales-lead-ops";
 import {
   findOpenMatchingSalesLead,
   PUBLIC_SALES_LEAD_FORM_HISTORY_TEXT,
@@ -72,12 +77,67 @@ export type SimulatedPublicFormLead = {
   contactId: string | null;
 };
 
+export type SimulatedPublicFormContact = {
+  id: string;
+  phone: string;
+  email: string;
+  notes: string;
+};
+
+export type SimulatedPublicFormInput = Pick<
+  PublicSalesLeadFormInput,
+  "phone" | "email"
+> &
+  Partial<Pick<PublicSalesLeadFormInput, "buildingName" | "address" | "city">>;
+
 export type SimulatedPublicFormStore = {
   leads: SimulatedPublicFormLead[];
-  contacts: { id: string; phone: string; email: string }[];
+  contacts: SimulatedPublicFormContact[];
   history: { leadId: string; text: string }[];
   submissions: { key: string; payloadHash: string; leadId: string }[];
 };
+
+/** Mirrors submit_public_sales_lead_form contact update: never wipe email/notes. */
+export function preserveExistingPublicFormContactFields(
+  existing: { email: string; notes: string },
+  incoming: { email: string; notes: string }
+): { email: string; notes: string } {
+  const nextEmail = incoming.email.trim();
+  const nextNotes = incoming.notes.trim();
+  const existingNotes = existing.notes.trim();
+  return {
+    email: nextEmail || existing.email,
+    notes:
+      nextNotes !== "" &&
+      (existingNotes === "" ||
+        existingNotes.startsWith(SALES_CONTACT_NOTES_PREFIX))
+        ? incoming.notes
+        : existing.notes,
+  };
+}
+
+function findSimulatedPublicFormContact(
+  store: SimulatedPublicFormStore,
+  form: SimulatedPublicFormInput,
+  linkedContactId: string | null
+): SimulatedPublicFormContact | undefined {
+  if (linkedContactId) {
+    const linked = store.contacts.find((contact) => contact.id === linkedContactId);
+    if (linked) return linked;
+  }
+  const phoneNorm = normalizeContactPhoneForLookup(form.phone);
+  if (phoneNorm) {
+    const byPhone = store.contacts.find(
+      (contact) => normalizeContactPhoneForLookup(contact.phone) === phoneNorm
+    );
+    if (byPhone) return byPhone;
+  }
+  const email = form.email.trim().toLowerCase();
+  if (!email) return undefined;
+  return store.contacts.find(
+    (contact) => contact.email.trim().toLowerCase() === email
+  );
+}
 
 type KeyLock = { tail: Promise<void> };
 
@@ -95,7 +155,7 @@ export async function simulateSubmitPublicSalesLeadForm(
   locks: Map<string, KeyLock>,
   key: string,
   payloadHash: string,
-  form: Pick<PublicSalesLeadFormInput, "phone" | "email">,
+  form: SimulatedPublicFormInput,
   options?: { failAfterLeadInsert?: boolean }
 ): Promise<PublicSalesLeadSubmitRpcResult> {
   const lock = locks.get(key) ?? { tail: Promise.resolve() };
@@ -136,13 +196,36 @@ export async function simulateSubmitPublicSalesLeadForm(
         throw new Error("simulated_failure");
       }
 
-      const contactId = nextId("contact", store);
-      store.contacts.push({
-        id: contactId,
-        phone: form.phone,
-        email: form.email,
-      });
       const lead = store.leads.find((item) => item.id === leadId);
+      const incomingNotes = buildSalesContactNotes({
+        buildingName: form.buildingName ?? "",
+        address: form.address ?? "",
+        city: form.city ?? "",
+      });
+      const existingContact = findSimulatedPublicFormContact(
+        store,
+        form,
+        lead?.contactId ?? null
+      );
+      let contactId: string;
+      if (existingContact) {
+        const preserved = preserveExistingPublicFormContactFields(
+          existingContact,
+          { email: form.email, notes: incomingNotes }
+        );
+        existingContact.phone = form.phone.trim() || existingContact.phone;
+        existingContact.email = preserved.email;
+        existingContact.notes = preserved.notes;
+        contactId = existingContact.id;
+      } else {
+        contactId = nextId("contact", store);
+        store.contacts.push({
+          id: contactId,
+          phone: form.phone,
+          email: form.email,
+          notes: incomingNotes,
+        });
+      }
       if (lead) lead.contactId = contactId;
 
       store.history.push({
@@ -184,7 +267,7 @@ export async function simulateParallelPublicSalesLeadSubmits(
   store: SimulatedPublicFormStore,
   key: string,
   payloadHash: string,
-  form: Pick<PublicSalesLeadFormInput, "phone" | "email">,
+  form: SimulatedPublicFormInput,
   requestCount: number
 ): Promise<PublicSalesLeadSubmitRpcResult[]> {
   const locks = new Map<string, KeyLock>();
