@@ -63,11 +63,24 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
             : result.error === "save_failed"
               ? 502
               : 400;
-    return NextResponse.json({ error: result.error ?? "save_failed" }, { status });
+    return NextResponse.json(
+      {
+        error: result.error ?? "save_failed",
+        lead: result.lead,
+        openedProject: result.openedProject,
+        projectConversion: result.projectConversion,
+      },
+      { status }
+    );
   }
 
   return NextResponse.json(
-    { lead: result.lead, error: null },
+    {
+      lead: result.lead,
+      error: null,
+      openedProject: result.openedProject,
+      projectConversion: result.projectConversion,
+    },
     { headers: { "Cache-Control": "no-store" } }
   );
 }

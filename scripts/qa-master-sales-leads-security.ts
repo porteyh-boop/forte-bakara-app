@@ -206,6 +206,27 @@ async function main(): Promise<void> {
     "037 migration: tables + RLS + revoke public + indexes; no quotes/security-branch RPC"
   );
 
+  const linksMigration = read("supabase/migrations/038_sales_lead_links.sql");
+  assert(
+    linksMigration.includes("add column if not exists contact_id") &&
+      linksMigration.includes("references public.contacts (id)") &&
+      linksMigration.includes("add column if not exists converted_building_id") &&
+      linksMigration.includes("idx_sales_leads_contact_id") &&
+      linksMigration.includes("idx_sales_leads_converted_building_id") &&
+      !linksMigration.includes("create table") &&
+      !linksMigration.includes("create_building_atomic") &&
+      !linksMigration.includes("הצעת מחיר"),
+    "038 migration: only sales lead link columns; no parallel modules or security-branch RPC"
+  );
+
+  const opsServer = read("lib/sales-lead-ops-server.ts");
+  assert(
+    opsServer.includes("getSupabaseServiceClient") &&
+      !opsServer.includes("getPilotSupabaseClient") &&
+      !opsServer.includes("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
+    "sales-lead-ops-server: service_role only"
+  );
+
   const untouched = [
     "components/master-v2/MasterProjectsTable.tsx",
     "lib/project-financial.ts",

@@ -19,11 +19,20 @@ import {
   type SalesLeadDraft,
 } from "../lib/sales-leads";
 import {
+  buildSalesContactInput,
+  findSalesContactByPhoneThenEmail,
+  mergeSalesContactNotes,
+  missingWinProjectFields,
+  salesLeadCanSyncContact,
+  salesWinMissingFieldLabel,
+} from "../lib/sales-lead-ops";
+import {
   mapSalesLeadHistoryRow,
   mapSalesLeadRow,
   parseSalesLeadDraft,
   parseSalesLeadId,
 } from "../lib/sales-leads-server";
+import type { Contact } from "../lib/contacts";
 
 let passed = 0;
 let failed = 0;
@@ -57,6 +66,8 @@ function fixtureLead(
     estimatedValue: overrides.estimatedValue ?? null,
     nextAction: overrides.nextAction ?? "",
     history: overrides.history ?? [],
+    contactId: overrides.contactId ?? null,
+    convertedBuildingId: overrides.convertedBuildingId ?? null,
     createdAt: "2026-08-01T08:00:00.000Z",
     updatedAt: "2026-08-01T08:00:00.000Z",
     ...overrides,
@@ -260,6 +271,8 @@ const mapped = mapSalesLeadRow(
     estimated_value: "1500",
     next_action: "שיחה",
     follow_up_date: "2026-09-05",
+    contact_id: "22222222-2222-4222-8222-222222222222",
+    converted_building_id: "826101",
     created_at: "2026-09-01T00:00:00.000Z",
     updated_at: "2026-09-02T00:00:00.000Z",
   },
@@ -277,13 +290,17 @@ assert(
   mapped.clientName === "ממופה" &&
     mapped.estimatedValue === 1500 &&
     mapped.followUpDate === "2026-09-05" &&
+    mapped.contactId === "22222222-2222-4222-8222-222222222222" &&
+    mapped.convertedBuildingId === "826101" &&
     mapped.history[0]?.text === SALES_LEAD_CREATED_HISTORY_TEXT,
-  "server row mapper uses camelCase + history"
+  "server row mapper uses camelCase + history + link fields"
 );
 
 const productFiles = [
   "lib/sales-leads.ts",
   "lib/sales-leads-api.ts",
+  "lib/sales-lead-ops.ts",
+  "lib/sales-lead-ops-server.ts",
   "components/master-v2/MasterSalesLeadsView.tsx",
   "app/master/sales/page.tsx",
 ];
@@ -333,9 +350,13 @@ assert(
     view.includes("listSalesLeads") &&
     view.includes("createSalesLead") &&
     view.includes("updateSalesLead") &&
+    view.includes("נפתח פרויקט") &&
+    view.includes("פתח כרטיס") &&
+    view.includes("השלמת פרטים לפרויקט") &&
+    view.includes("buildMasterProjectV2Path") &&
     !view.includes("הצעת מחיר") &&
     !view.includes("המרה לפרויקט"),
-  "UI: persistent copy, empty state, no quote/convert"
+  "UI: persistent copy, win-project banner, no quote module"
 );
 assert(
   apiClient.includes("/forte/api/master-sales-leads") &&
@@ -349,6 +370,162 @@ assert(
     !view.includes("SUPABASE_SERVICE_ROLE_KEY") &&
     !view.includes("getSupabaseServiceClient"),
   "browser sales files have no service role"
+);
+
+const linked = applySalesLeadDraft(
+  {
+    ...emptySalesLeadDraft(),
+    clientName: "לקוח דקל",
+    status: "משא ומתן",
+    contactName: "דנה",
+    phone: "050-1111111",
+  },
+  {
+    ...closed.lead,
+    contactId: "33333333-3333-4333-8333-333333333333",
+    convertedBuildingId: "826199",
+  },
+  frozenNow
+);
+assert(
+  linked.error == null &&
+    linked.lead.contactId === "33333333-3333-4333-8333-333333333333" &&
+    linked.lead.convertedBuildingId === "826199" &&
+    linked.lead.status === "משא ומתן",
+  "edit after conversion keeps contact + project ids and does not clear them"
+);
+
+assert(
+  salesLeadCanSyncContact({
+    contactName: "דנה",
+    phone: "050",
+    email: "",
+  }) &&
+    salesLeadCanSyncContact({
+      contactName: "דנה",
+      phone: "",
+      email: "dana@example.com",
+    }) &&
+    !salesLeadCanSyncContact({ contactName: "דנה", phone: "", email: "" }) &&
+    !salesLeadCanSyncContact({ contactName: "", phone: "050", email: "" }),
+  "contact sync requires name and phone or email"
+);
+
+const existingContacts: Contact[] = [
+  {
+    id: "c-email",
+    fullName: "מייל קיים",
+    company: "א",
+    roleTitle: "",
+    phone: "052-9999999",
+    email: "same@example.com",
+    notes: "",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  },
+  {
+    id: "c-phone",
+    fullName: "טלפון קיים",
+    company: "ב",
+    roleTitle: "",
+    phone: "050-1234567",
+    email: "other@example.com",
+    notes: "",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  },
+];
+assert(
+  findSalesContactByPhoneThenEmail(
+    { phone: "0501234567", email: "same@example.com" },
+    existingContacts
+  )?.id === "c-phone",
+  "identify existing contact by phone before email"
+);
+assert(
+  findSalesContactByPhoneThenEmail(
+    { phone: "", email: "same@example.com" },
+    existingContacts
+  )?.id === "c-email",
+  "fall back to email when phone is empty"
+);
+assert(
+  findSalesContactByPhoneThenEmail(
+    { phone: "050-0000000", email: "missing@example.com" },
+    existingContacts
+  ) === null,
+  "no match does not invent a duplicate"
+);
+
+const contactInput = buildSalesContactInput({
+  contactName: "דנה כהן",
+  clientName: "ועד הבית",
+  phone: "050-111",
+  email: "dana@a.com",
+  buildingName: "מגדל הים",
+  address: "הרצל 1",
+  city: "חיפה",
+});
+assert(
+  contactInput.fullName === "דנה כהן" &&
+    contactInput.company === "ועד הבית" &&
+    contactInput.phone === "050-111" &&
+    contactInput.email === "dana@a.com" &&
+    contactInput.notes.includes("בניין: מגדל הים") &&
+    contactInput.notes.includes("כתובת: הרצל 1") &&
+    contactInput.notes.includes("עיר: חיפה"),
+  "contact payload copies name, company, phone, email, building, address, city"
+);
+assert(
+  mergeSalesContactNotes("", "[מכירות] בניין: א") === "[מכירות] בניין: א" &&
+    mergeSalesContactNotes("[מכירות] ישן", "[מכירות] חדש") === "[מכירות] חדש" &&
+    mergeSalesContactNotes("הערה ידנית", "[מכירות] חדש") === "הערה ידנית",
+  "sales notes replace empty/sales notes and keep manual notes"
+);
+
+assert(
+  missingWinProjectFields({
+    status: "זכייה",
+    buildingName: "",
+    convertedBuildingId: null,
+  }).includes("buildingName") &&
+    missingWinProjectFields({
+      status: "זכייה",
+      buildingName: "מגדל",
+      convertedBuildingId: null,
+    }).length === 0 &&
+    missingWinProjectFields({
+      status: "זכייה",
+      buildingName: "",
+      convertedBuildingId: "826101",
+    }).length === 0 &&
+    missingWinProjectFields({
+      status: "חדש",
+      buildingName: "",
+      convertedBuildingId: null,
+    }).length === 0 &&
+    salesWinMissingFieldLabel("buildingName") === "שם בניין",
+  "win conversion requires building name only before the first project exists"
+);
+
+const opsSource = fs.readFileSync(
+  path.join(process.cwd(), "lib/sales-lead-ops-server.ts"),
+  "utf8"
+);
+const serverSource = fs.readFileSync(
+  path.join(process.cwd(), "lib/sales-leads-server.ts"),
+  "utf8"
+);
+assert(
+  opsSource.includes("syncSalesLeadContactServer") &&
+    opsSource.includes("createWonProjectFromLead") &&
+    opsSource.includes("attachContactToProject") &&
+    opsSource.includes("getSupabaseServiceClient") &&
+    !opsSource.includes("getPilotSupabaseClient") &&
+    serverSource.includes("applySalesLeadSideEffects") &&
+    serverSource.includes("contact_id") &&
+    serverSource.includes("converted_building_id"),
+  "server write path: contact sync + win project via service_role only"
 );
 
 console.log(`\n=== סיכום: ${passed} עברו, ${failed} נכשלו ===\n`);

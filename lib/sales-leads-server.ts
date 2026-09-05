@@ -8,6 +8,11 @@ import {
   SALES_LEAD_STATUSES,
 } from "@/lib/sales-leads";
 import {
+  applySalesLeadSideEffects,
+  type OpenedSalesProject,
+} from "@/lib/sales-lead-ops-server";
+import type { SalesWinMissingField } from "@/lib/sales-lead-ops";
+import {
   getSupabaseServiceClient,
   isSupabaseServiceConfigured,
 } from "@/lib/supabase-server";
@@ -16,7 +21,7 @@ export const SALES_LEADS_TABLE = "sales_leads";
 export const SALES_LEAD_HISTORY_TABLE = "sales_lead_history";
 
 const LEAD_COLUMNS =
-  "id, client_name, building_name, address, city, contact_name, phone, email, need_description, service_type, source, source_detail, contact_channel, status, estimated_value, next_action, follow_up_date, created_at, updated_at";
+  "id, client_name, building_name, address, city, contact_name, phone, email, need_description, service_type, source, source_detail, contact_channel, status, estimated_value, next_action, follow_up_date, contact_id, converted_building_id, created_at, updated_at";
 
 const HISTORY_COLUMNS = "id, lead_id, occurred_at, kind, entry_text, status";
 
@@ -29,6 +34,13 @@ export type SalesLeadsServerError =
   | "invalid_lead_id"
   | "not_found"
   | "save_failed";
+
+export type SalesLeadMutationResult = {
+  lead: SalesLead | null;
+  error: SalesLeadsServerError | string | null;
+  openedProject: OpenedSalesProject | null;
+  projectConversion: { required: true; missing: SalesWinMissingField[] } | null;
+};
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value : value == null ? "" : String(value);
@@ -135,6 +147,8 @@ export function mapSalesLeadRow(
     nextAction: asString(row.next_action),
     followUpDate: asFollowUpDate(row.follow_up_date),
     history,
+    contactId: asString(row.contact_id) || null,
+    convertedBuildingId: asString(row.converted_building_id) || null,
     createdAt: asIso(row.created_at),
     updatedAt: asIso(row.updated_at),
   };
@@ -158,6 +172,8 @@ function leadWritePayload(lead: SalesLead): Record<string, unknown> {
     estimated_value: lead.estimatedValue,
     next_action: lead.nextAction,
     follow_up_date: lead.followUpDate,
+    contact_id: lead.contactId,
+    converted_building_id: lead.convertedBuildingId,
     updated_at: lead.updatedAt,
   };
 }
@@ -266,20 +282,127 @@ async function getSalesLeadServer(
   };
 }
 
+async function persistSalesLeadLinks(
+  leadId: string,
+  patch: { contactId?: string | null; convertedBuildingId?: string | null }
+): Promise<string | null> {
+  const client = getSupabaseServiceClient();
+  if (!client) return "supabase_service_unconfigured";
+
+  const update: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
+  if (patch.contactId !== undefined) update.contact_id = patch.contactId;
+  if (patch.convertedBuildingId !== undefined) {
+    update.converted_building_id = patch.convertedBuildingId;
+  }
+
+  const { error } = await client
+    .from(SALES_LEADS_TABLE)
+    .update(update)
+    .eq("id", leadId);
+  if (error) {
+    console.error("[sales-leads-server] persist links failed", error.message);
+    return "save_failed";
+  }
+  return null;
+}
+
+async function finalizeSalesLeadMutation(
+  leadId: string
+): Promise<SalesLeadMutationResult> {
+  const loaded = await getSalesLeadServer(leadId);
+  if (loaded.error || !loaded.lead) {
+    return {
+      lead: null,
+      error: loaded.error ?? "not_found",
+      openedProject: null,
+      projectConversion: null,
+    };
+  }
+
+  const effects = await applySalesLeadSideEffects(loaded.lead, (patch) =>
+    persistSalesLeadLinks(leadId, patch)
+  );
+  if (effects.error && !effects.convertedBuildingId) {
+    return {
+      lead: loaded.lead,
+      error: effects.error,
+      openedProject: null,
+      projectConversion: null,
+    };
+  }
+
+  if (effects.convertedBuildingId || effects.contactId) {
+    await persistSalesLeadLinks(leadId, {
+      ...(effects.contactId ? { contactId: effects.contactId } : {}),
+      ...(effects.convertedBuildingId
+        ? { convertedBuildingId: effects.convertedBuildingId }
+        : {}),
+    });
+  }
+
+  if (effects.openedProject) {
+    const client = getSupabaseServiceClient();
+    if (client) {
+      await client.from(SALES_LEAD_HISTORY_TABLE).insert(
+        historyWritePayload(leadId, {
+          id: `hist-${Date.now()}`,
+          at: new Date().toISOString(),
+          kind: "note",
+          text: `נפתח פרויקט ${effects.openedProject.buildingId}.`,
+        })
+      );
+    }
+  }
+
+  const refreshed = await getSalesLeadServer(leadId);
+  return {
+    lead: refreshed.lead
+      ? {
+          ...refreshed.lead,
+          contactId: effects.contactId ?? refreshed.lead.contactId,
+          convertedBuildingId:
+            effects.convertedBuildingId ?? refreshed.lead.convertedBuildingId,
+        }
+      : refreshed.lead,
+    error: effects.error && !effects.openedProject ? effects.error : refreshed.error,
+    openedProject: effects.openedProject,
+    projectConversion: effects.projectConversion,
+  };
+}
+
 export async function createSalesLeadServer(
   draft: SalesLeadDraft,
   now: Date = new Date()
-): Promise<
-  { lead: SalesLead; error: null } | { lead: null; error: SalesLeadsServerError | string }
-> {
+): Promise<SalesLeadMutationResult> {
   if (!isSupabaseServiceConfigured()) {
-    return { lead: null, error: "supabase_service_unconfigured" };
+    return {
+      lead: null,
+      error: "supabase_service_unconfigured",
+      openedProject: null,
+      projectConversion: null,
+    };
   }
   const client = getSupabaseServiceClient();
-  if (!client) return { lead: null, error: "supabase_service_unconfigured" };
+  if (!client) {
+    return {
+      lead: null,
+      error: "supabase_service_unconfigured",
+      openedProject: null,
+      projectConversion: null,
+    };
+  }
 
   const applied = applySalesLeadDraft(draft, null, now);
-  if (applied.error) return { lead: null, error: applied.error };
+  if (applied.error) {
+    return {
+      lead: null,
+      error: applied.error,
+      openedProject: null,
+      projectConversion: null,
+    };
+  }
 
   const { data: inserted, error: insertError } = await client
     .from(SALES_LEADS_TABLE)
@@ -292,7 +415,12 @@ export async function createSalesLeadServer(
 
   if (insertError || !inserted) {
     console.error("[sales-leads-server] create failed", insertError?.message);
-    return { lead: null, error: "save_failed" };
+    return {
+      lead: null,
+      error: "save_failed",
+      openedProject: null,
+      projectConversion: null,
+    };
   }
 
   const leadId = asString((inserted as Record<string, unknown>).id);
@@ -305,36 +433,70 @@ export async function createSalesLeadServer(
     if (historyError) {
       await client.from(SALES_LEADS_TABLE).delete().eq("id", leadId);
       console.error("[sales-leads-server] create history failed", historyError.message);
-      return { lead: null, error: "save_failed" };
+      return {
+        lead: null,
+        error: "save_failed",
+        openedProject: null,
+        projectConversion: null,
+      };
     }
   }
 
-  return getSalesLeadServer(leadId);
+  return finalizeSalesLeadMutation(leadId);
 }
 
 export async function updateSalesLeadServer(
   leadId: string,
   draft: SalesLeadDraft,
   now: Date = new Date()
-): Promise<
-  { lead: SalesLead; error: null } | { lead: null; error: SalesLeadsServerError | string }
-> {
+): Promise<SalesLeadMutationResult> {
   if (!isSupabaseServiceConfigured()) {
-    return { lead: null, error: "supabase_service_unconfigured" };
+    return {
+      lead: null,
+      error: "supabase_service_unconfigured",
+      openedProject: null,
+      projectConversion: null,
+    };
   }
   const parsedId = parseSalesLeadId(leadId);
-  if (!parsedId) return { lead: null, error: "invalid_lead_id" };
+  if (!parsedId) {
+    return {
+      lead: null,
+      error: "invalid_lead_id",
+      openedProject: null,
+      projectConversion: null,
+    };
+  }
 
   const existing = await getSalesLeadServer(parsedId);
   if (existing.error || !existing.lead) {
-    return { lead: null, error: existing.error ?? "not_found" };
+    return {
+      lead: null,
+      error: existing.error ?? "not_found",
+      openedProject: null,
+      projectConversion: null,
+    };
   }
 
   const client = getSupabaseServiceClient();
-  if (!client) return { lead: null, error: "supabase_service_unconfigured" };
+  if (!client) {
+    return {
+      lead: null,
+      error: "supabase_service_unconfigured",
+      openedProject: null,
+      projectConversion: null,
+    };
+  }
 
   const applied = applySalesLeadDraft(draft, existing.lead, now);
-  if (applied.error) return { lead: null, error: applied.error };
+  if (applied.error) {
+    return {
+      lead: null,
+      error: applied.error,
+      openedProject: null,
+      projectConversion: null,
+    };
+  }
 
   const { error: updateError } = await client
     .from(SALES_LEADS_TABLE)
@@ -343,7 +505,12 @@ export async function updateSalesLeadServer(
 
   if (updateError) {
     console.error("[sales-leads-server] update failed", updateError.message);
-    return { lead: null, error: "save_failed" };
+    return {
+      lead: null,
+      error: "save_failed",
+      openedProject: null,
+      projectConversion: null,
+    };
   }
 
   if (applied.newHistory.length > 0) {
@@ -354,9 +521,14 @@ export async function updateSalesLeadServer(
       );
     if (historyError) {
       console.error("[sales-leads-server] update history failed", historyError.message);
-      return { lead: null, error: "save_failed" };
+      return {
+        lead: null,
+        error: "save_failed",
+        openedProject: null,
+        projectConversion: null,
+      };
     }
   }
 
-  return getSalesLeadServer(parsedId);
+  return finalizeSalesLeadMutation(parsedId);
 }

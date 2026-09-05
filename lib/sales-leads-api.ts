@@ -3,6 +3,7 @@ import {
   parseMasterApiError,
   parseMasterApiJson,
 } from "@/lib/master-api-fetch";
+import type { OpenedSalesProject, SalesWinMissingField } from "@/lib/sales-lead-ops";
 import type { SalesLead, SalesLeadDraft } from "@/lib/sales-leads";
 
 const MASTER_SALES_LEADS_API = "/forte/api/master-sales-leads";
@@ -19,6 +20,24 @@ interface ListResponse {
 interface LeadResponse {
   lead?: SalesLead;
   error?: string | null;
+  openedProject?: OpenedSalesProject | null;
+  projectConversion?: { required: true; missing: SalesWinMissingField[] } | null;
+}
+
+export type SalesLeadSaveClientResult = {
+  lead: SalesLead | null;
+  error: string | null;
+  openedProject: OpenedSalesProject | null;
+  projectConversion: { required: true; missing: SalesWinMissingField[] } | null;
+};
+
+function emptySaveResult(error: string | null): SalesLeadSaveClientResult {
+  return {
+    lead: null,
+    error,
+    openedProject: null,
+    projectConversion: null,
+  };
 }
 
 function hebrewSalesApiError(error: string, status: number): string {
@@ -64,9 +83,24 @@ export async function listSalesLeads(): Promise<{
   }
 }
 
+function saveResultFromPayload(
+  payload: LeadResponse | null,
+  fallbackError: string
+): SalesLeadSaveClientResult {
+  if (!payload?.lead) {
+    return emptySaveResult(payload?.error ?? fallbackError);
+  }
+  return {
+    lead: payload.lead,
+    error: payload.error ?? null,
+    openedProject: payload.openedProject ?? null,
+    projectConversion: payload.projectConversion ?? null,
+  };
+}
+
 export async function createSalesLead(
   draft: SalesLeadDraft
-): Promise<{ lead: SalesLead | null; error: string | null }> {
+): Promise<SalesLeadSaveClientResult> {
   try {
     const response = await masterApiFetch(MASTER_SALES_LEADS_API, {
       method: "POST",
@@ -74,18 +108,18 @@ export async function createSalesLead(
     });
     const payload = await parseMasterApiJson<LeadResponse>(response);
     if (!response.ok) {
-      return { lead: null, error: await readApiError(response) };
+      return emptySaveResult(await readApiError(response));
     }
-    return { lead: payload?.lead ?? null, error: payload?.lead ? null : "השמירה נכשלה. נסו שוב." };
+    return saveResultFromPayload(payload, "השמירה נכשלה. נסו שוב.");
   } catch {
-    return { lead: null, error: "השמירה נכשלה. נסו שוב." };
+    return emptySaveResult("השמירה נכשלה. נסו שוב.");
   }
 }
 
 export async function updateSalesLead(
   leadId: string,
   draft: SalesLeadDraft
-): Promise<{ lead: SalesLead | null; error: string | null }> {
+): Promise<SalesLeadSaveClientResult> {
   try {
     const response = await masterApiFetch(
       `${MASTER_SALES_LEADS_API}/${encodeURIComponent(leadId)}`,
@@ -96,10 +130,10 @@ export async function updateSalesLead(
     );
     const payload = await parseMasterApiJson<LeadResponse>(response);
     if (!response.ok) {
-      return { lead: null, error: await readApiError(response) };
+      return emptySaveResult(await readApiError(response));
     }
-    return { lead: payload?.lead ?? null, error: payload?.lead ? null : "השמירה נכשלה. נסו שוב." };
+    return saveResultFromPayload(payload, "השמירה נכשלה. נסו שוב.");
   } catch {
-    return { lead: null, error: "השמירה נכשלה. נסו שוב." };
+    return emptySaveResult("השמירה נכשלה. נסו שוב.");
   }
 }

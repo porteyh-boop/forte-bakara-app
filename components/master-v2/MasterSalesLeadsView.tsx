@@ -22,7 +22,12 @@ import {
   fv2,
 } from "@/components/master-v2/project-v2/MasterProjectV2Workspace";
 import { ensureMasterV2SessionsValid } from "@/lib/master-v2-auth";
+import { buildMasterProjectV2Path } from "@/lib/master-project-v2-routes";
 import { isMasterAuthenticated, setMasterAuthenticated } from "@/lib/pilot-cloud";
+import {
+  salesWinMissingFieldLabel,
+  type SalesWinMissingField,
+} from "@/lib/sales-lead-ops";
 import {
   createSalesLead,
   listSalesLeads,
@@ -68,6 +73,7 @@ export default function MasterSalesLeadsView() {
   const [formError, setFormError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [winMissing, setWinMissing] = useState<SalesWinMissingField[] | null>(null);
 
   useEffect(() => {
     setAuthed(isMasterAuthenticated());
@@ -127,6 +133,21 @@ export default function MasterSalesLeadsView() {
     setEditingId(null);
     setDraft(emptySalesLeadDraft());
     setFormError(null);
+    setWinMissing(null);
+  }
+
+  function openProjectCard(buildingId: string) {
+    window.location.assign(buildMasterProjectV2Path(buildingId));
+  }
+
+  function upsertLead(next: SalesLead) {
+    setLeads((current) => {
+      const index = current.findIndex((lead) => lead.id === next.id);
+      if (index === -1) return [next, ...current];
+      const copy = [...current];
+      copy[index] = next;
+      return copy;
+    });
   }
 
   function patchDraft<K extends keyof SalesLeadDraft>(key: K, value: SalesLeadDraft[K]) {
@@ -134,28 +155,49 @@ export default function MasterSalesLeadsView() {
     if (formError) setFormError(null);
   }
 
-  async function handleSave(event: React.FormEvent) {
-    event.preventDefault();
-    if (saving) return;
+  async function persistDraft(nextDraft: SalesLeadDraft): Promise<boolean> {
+    if (saving) return false;
     setSaving(true);
     setFormError(null);
-    const result = editingLead
-      ? await updateSalesLead(editingLead.id, draft)
-      : await createSalesLead(draft);
+    const result = editingId
+      ? await updateSalesLead(editingId, nextDraft)
+      : await createSalesLead(nextDraft);
     setSaving(false);
     if (result.error || !result.lead) {
       setFormError(result.error ?? "השמירה נכשלה. נסו שוב.");
-      return;
+      return false;
     }
-    setLeads((current) => {
-      const index = current.findIndex((lead) => lead.id === result.lead!.id);
-      if (index === -1) return [result.lead!, ...current];
-      const next = [...current];
-      next[index] = result.lead!;
-      return next;
-    });
+
+    upsertLead(result.lead);
+    setEditingId(result.lead.id);
+    setDraft({ ...salesLeadToDraft(result.lead), note: "" });
+
+    if (result.projectConversion?.required) {
+      setWinMissing(result.projectConversion.missing);
+      setDialogOpen(false);
+      return true;
+    }
+
+    setWinMissing(null);
+    if (result.openedProject) {
+      closeDialog();
+      openProjectCard(result.openedProject.buildingId);
+      return true;
+    }
+
     setMessage(editingLead ? "הכרטיס עודכן." : "הפנייה נשמרה.");
     closeDialog();
+    return true;
+  }
+
+  async function handleSave(event: React.FormEvent) {
+    event.preventDefault();
+    await persistDraft(draft);
+  }
+
+  async function handleWinCompletion(event: React.FormEvent) {
+    event.preventDefault();
+    await persistDraft(draft);
   }
 
   if (!authed) {
@@ -267,6 +309,20 @@ export default function MasterSalesLeadsView() {
                         <span className="block text-xs text-forte-text-secondary">
                           {lead.buildingName || "ללא בניין"}
                         </span>
+                        {lead.convertedBuildingId ? (
+                          <span
+                            className="mt-1 flex flex-wrap items-center gap-2"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            <span className="text-xs text-emerald-700">נפתח פרויקט</span>
+                            <ForteV2SecondaryButton
+                              size="sm"
+                              onClick={() => openProjectCard(lead.convertedBuildingId!)}
+                            >
+                              פתח כרטיס
+                            </ForteV2SecondaryButton>
+                          </span>
+                        ) : null}
                       </td>
                       <td className="text-forte-text/85" data-label="איש קשר">
                         {lead.contactName || "—"}
@@ -304,6 +360,18 @@ export default function MasterSalesLeadsView() {
             <form className="space-y-4" onSubmit={(event) => void handleSave(event)}>
               {formError ? (
                 <ForteV2StatusBanner tone="error">{formError}</ForteV2StatusBanner>
+              ) : null}
+
+              {editingLead?.convertedBuildingId ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-forte-border bg-forte-background/60 px-3 py-2">
+                  <p className="text-sm text-forte-text">נפתח פרויקט</p>
+                  <ForteV2SecondaryButton
+                    size="sm"
+                    onClick={() => openProjectCard(editingLead.convertedBuildingId!)}
+                  >
+                    פתח כרטיס
+                  </ForteV2SecondaryButton>
+                </div>
               ) : null}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -499,6 +567,50 @@ export default function MasterSalesLeadsView() {
                 </ForteV2SecondaryButton>
                 <ForteV2PrimaryButton type="submit" disabled={saving}>
                   {saving ? "שומר..." : "שמירה"}
+                </ForteV2PrimaryButton>
+              </div>
+            </form>
+          </ForteV2Dialog>
+        </ForteV2DialogOverlay>
+      ) : null}
+
+      {winMissing ? (
+        <ForteV2DialogOverlay onClose={() => setWinMissing(null)}>
+          <ForteV2Dialog
+            title="השלמת פרטים לפרויקט"
+            onClose={() => setWinMissing(null)}
+            size="md"
+          >
+            <form className="space-y-4" onSubmit={(event) => void handleWinCompletion(event)}>
+              <p className="text-sm text-forte-text-secondary">
+                חסר מידע לפתיחת כרטיס הפרויקט. מלאו את השדות הבאים ושמרו.
+              </p>
+              {formError ? (
+                <ForteV2StatusBanner tone="error">{formError}</ForteV2StatusBanner>
+              ) : null}
+              {winMissing.includes("buildingName") ? (
+                <label className="block space-y-1">
+                  <ForteV2FormLabel>שם בניין *</ForteV2FormLabel>
+                  <ForteV2FormInput
+                    value={draft.buildingName}
+                    onChange={(e) => patchDraft("buildingName", e.target.value)}
+                    required
+                    autoFocus
+                  />
+                </label>
+              ) : null}
+              <p className="text-xs text-forte-text-secondary">
+                נדרש: {winMissing.map(salesWinMissingFieldLabel).join(", ")}
+              </p>
+              <div className="flex flex-wrap justify-end gap-2">
+                <ForteV2SecondaryButton
+                  onClick={() => setWinMissing(null)}
+                  disabled={saving}
+                >
+                  ביטול
+                </ForteV2SecondaryButton>
+                <ForteV2PrimaryButton type="submit" disabled={saving}>
+                  {saving ? "שומר..." : "שמירה ופתיחת כרטיס"}
                 </ForteV2PrimaryButton>
               </div>
             </form>

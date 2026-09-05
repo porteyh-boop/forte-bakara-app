@@ -76,6 +76,8 @@ export type SalesLead = {
   nextAction: string;
   followUpDate: string | null;
   history: SalesLeadHistoryEntry[];
+  contactId: string | null;
+  convertedBuildingId: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -339,6 +341,8 @@ export function applySalesLeadDraft(
     nextAction,
     followUpDate,
     history,
+    contactId: existing?.contactId ?? null,
+    convertedBuildingId: existing?.convertedBuildingId ?? null,
     createdAt: existing?.createdAt ?? iso,
     updatedAt: iso,
   };
@@ -367,6 +371,8 @@ function createBlankLead(now: Date): SalesLead {
     nextAction: "",
     followUpDate: null,
     history: [],
+    contactId: null,
+    convertedBuildingId: null,
     createdAt: iso,
     updatedAt: iso,
   };

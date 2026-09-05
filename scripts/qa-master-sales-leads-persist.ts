@@ -13,6 +13,8 @@ import {
   updateSalesLeadServer,
 } from "../lib/sales-leads-server";
 import { emptySalesLeadDraft, jerusalemCalendarDate } from "../lib/sales-leads";
+import { BUILDINGS_TABLE } from "../lib/building-contacts-server";
+import { CONTACTS_TABLE, PROJECT_CONTACTS_TABLE } from "../lib/contacts-server";
 import { getSupabaseServiceClient } from "../lib/supabase-server";
 
 function loadEnvFile(rel: string): void {
@@ -69,11 +71,18 @@ async function main(): Promise<void> {
   }
 
   try {
+    const phone = `050${String(Date.now()).slice(-7)}`;
+    const email = `${marker}@qa.example`;
+
     const created = await createSalesLeadServer({
       ...emptySalesLeadDraft(),
       clientName: marker,
       buildingName: "בניין בדיקה",
+      city: "חיפה",
+      address: "הרצל 1",
       contactName: "איש קשר",
+      phone,
+      email,
       nextAction: "לחזור היום",
       followUpDate: today,
       note: "הערה ראשונה",
@@ -83,6 +92,7 @@ async function main(): Promise<void> {
       Boolean(created.lead?.history.some((entry) => entry.text === "הערה ראשונה")),
       "create persists note history"
     );
+    assert(Boolean(created.lead?.contactId), "create syncs a contact and stores contact_id");
 
     const listed = await listSalesLeadsServer();
     assert(
@@ -95,10 +105,17 @@ async function main(): Promise<void> {
       throw new Error("create returned no lead");
     }
 
+    const firstContactId = created.lead.contactId;
+
     const edited = await updateSalesLeadServer(created.lead.id, {
       ...emptySalesLeadDraft(),
       clientName: marker,
       buildingName: "בניין מעודכן",
+      city: "חיפה",
+      address: "הרצל 1",
+      contactName: "איש קשר מעודכן",
+      phone,
+      email,
       status: "נוצר קשר",
       followUpDate: today,
       note: "שיחת מעקב",
@@ -107,28 +124,115 @@ async function main(): Promise<void> {
       edited.error == null &&
         edited.lead?.buildingName === "בניין מעודכן" &&
         edited.lead.status === "נוצר קשר" &&
-        edited.lead.history.some((entry) => entry.text === "שיחת מעקב"),
-      "edit persists fields + history"
+        edited.lead.history.some((entry) => entry.text === "שיחת מעקב") &&
+        edited.lead.contactId === firstContactId,
+      "edit persists fields + history and updates the same linked contact"
+    );
+
+    const missingWin = await updateSalesLeadServer(created.lead.id, {
+      ...emptySalesLeadDraft(),
+      clientName: marker,
+      buildingName: "",
+      contactName: "איש קשר מעודכן",
+      phone,
+      email,
+      status: "זכייה",
+      followUpDate: today,
+    });
+    assert(
+      missingWin.error == null &&
+        missingWin.lead?.status === "זכייה" &&
+        missingWin.projectConversion?.required === true &&
+        !missingWin.openedProject &&
+        !missingWin.lead.convertedBuildingId,
+      "win without building name asks for completion instead of failing"
     );
 
     const closed = await updateSalesLeadServer(created.lead.id, {
       ...emptySalesLeadDraft(),
       clientName: marker,
       buildingName: "בניין מעודכן",
+      city: "חיפה",
+      address: "הרצל 1",
+      contactName: "איש קשר מעודכן",
+      phone,
+      email,
+      needDescription: "צורך לבדיקה",
+      serviceType: "ייעוץ",
+      estimatedValue: "12000",
       status: "זכייה",
       followUpDate: today,
     });
-    assert(closed.error == null && closed.lead?.status === "זכייה", "close lead persists");
+    assert(
+      closed.error == null &&
+        closed.lead?.status === "זכייה" &&
+        Boolean(closed.lead.convertedBuildingId) &&
+        closed.openedProject?.buildingId === closed.lead.convertedBuildingId,
+      "first win creates one project and returns openedProject"
+    );
+
+    const firstBuildingId = closed.lead?.convertedBuildingId ?? null;
+    const closedAgain = await updateSalesLeadServer(created.lead.id, {
+      ...emptySalesLeadDraft(),
+      clientName: marker,
+      buildingName: "בניין מעודכן",
+      city: "חיפה",
+      address: "הרצל 1",
+      contactName: "איש קשר מעודכן",
+      phone,
+      email,
+      status: "זכייה",
+      followUpDate: today,
+    });
+    assert(
+      closedAgain.error == null &&
+        closedAgain.lead?.convertedBuildingId === firstBuildingId &&
+        !closedAgain.openedProject,
+      "saving זכייה again does not create another project"
+    );
+
+    const afterWin = await updateSalesLeadServer(created.lead.id, {
+      ...emptySalesLeadDraft(),
+      clientName: marker,
+      buildingName: "בניין מעודכן",
+      city: "חיפה",
+      address: "הרצל 1",
+      contactName: "איש קשר מעודכן",
+      phone,
+      email,
+      status: "משא ומתן",
+      followUpDate: today,
+    });
+    assert(
+      afterWin.error == null &&
+        afterWin.lead?.status === "משא ומתן" &&
+        afterWin.lead.convertedBuildingId === firstBuildingId,
+      "status change after conversion keeps the project id"
+    );
   } finally {
     await client.from(SALES_LEAD_HISTORY_TABLE).delete().like("entry_text", "");
     const { data } = await client
       .from(SALES_LEADS_TABLE)
-      .select("id")
+      .select("id, contact_id, converted_building_id")
       .eq("client_name", marker);
-    const ids = (data ?? []).map((row) => row.id);
+    const rows = data ?? [];
+    const ids = rows.map((row) => row.id);
+    const contactIds = rows
+      .map((row) => row.contact_id)
+      .filter((id): id is string => Boolean(id));
+    const buildingIds = rows
+      .map((row) => row.converted_building_id)
+      .filter((id): id is string => Boolean(id));
+    if (buildingIds.length > 0) {
+      await client.from(PROJECT_CONTACTS_TABLE).delete().in("building_id", buildingIds);
+      await client.from(BUILDINGS_TABLE).delete().in("building_id", buildingIds);
+    }
     if (ids.length > 0) {
       await client.from(SALES_LEAD_HISTORY_TABLE).delete().in("lead_id", ids);
       await client.from(SALES_LEADS_TABLE).delete().in("id", ids);
+    }
+    if (contactIds.length > 0) {
+      await client.from(CONTACTS_TABLE).delete().in("id", contactIds);
     }
   }
 
