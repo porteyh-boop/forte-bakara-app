@@ -11,7 +11,7 @@ import {
 } from "@/lib/brand";
 import { isClientAccessPath } from "@/lib/client-access";
 import { isMasterUiV2Enabled } from "@/lib/master-ui-v2";
-import { isPublicSalesLeadFormPath } from "@/lib/sales-lead-public-form";
+import { isPublicCustomerFacingPath } from "@/lib/sales-lead-public-form";
 import { VERSION_DISPLAY_LABEL } from "@/lib/app-version-messages";
 
 function AppFooterInner() {
@@ -19,7 +19,7 @@ function AppFooterInner() {
   const searchParams = useSearchParams();
   const { displayVersion } = useAppVersion();
   if (isClientAccessPath(pathname)) return null;
-  if (isPublicSalesLeadFormPath(pathname)) return null;
+  if (isPublicCustomerFacingPath(pathname)) return null;
   if (pathname === "/master" && isMasterUiV2Enabled(searchParams)) return null;
   if (pathname.startsWith("/master/project-v2")) return null;
 

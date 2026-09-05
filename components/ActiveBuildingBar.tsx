@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { isClientAccessPath } from "@/lib/client-access";
-import { isPublicSalesLeadFormPath } from "@/lib/sales-lead-public-form";
+import { isPublicCustomerFacingPath } from "@/lib/sales-lead-public-form";
 import { useBuilding } from "./BuildingProvider";
 
 export default function ActiveBuildingBar() {
@@ -14,7 +14,7 @@ export default function ActiveBuildingBar() {
     !isReady ||
     pathname === "/buildings" ||
     isClientAccessPath(pathname) ||
-    isPublicSalesLeadFormPath(pathname) ||
+    isPublicCustomerFacingPath(pathname) ||
     pathname.startsWith("/master") ||
     pathname.startsWith("/forte")
   ) {

@@ -7176,6 +7176,7 @@ assert(
     fs.existsSync(path.join(process.cwd(), "app/master/sales/page.tsx")) &&
     fs.existsSync(path.join(process.cwd(), "lib/sales-leads.ts")) &&
     fs.existsSync(path.join(process.cwd(), "app/lead/page.tsx")) &&
+    fs.existsSync(path.join(process.cwd(), "app/privacy/page.tsx")) &&
     fs.existsSync(path.join(process.cwd(), "app/api/public/sales-lead/route.ts")),
   "Sales leads: route + sidebar after projects"
 );

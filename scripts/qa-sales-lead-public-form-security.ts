@@ -101,6 +101,13 @@ async function main(): Promise<void> {
   assert(server.includes("consumeRateLimitBucket"), "in-memory rate limit");
   assert(server.includes("SALES_LEAD_FORM_SUBMISSIONS_TABLE"), "durable idempotency table");
   assert(
+    server.includes("PUBLIC_SALES_LEAD_SUBMIT_RPC") &&
+      server.includes(".rpc(") &&
+      !server.includes("createSalesLeadServer") &&
+      !server.includes("updateSalesLeadServer"),
+    "server submit uses RPC only"
+  );
+  assert(
     route.includes("return json({ ok: true }") && !route.includes("lead:"),
     "success response is ok-only, no lead payload"
   );
@@ -123,10 +130,22 @@ async function main(): Promise<void> {
       migration.includes(
         "grant select, insert on table public.sales_lead_form_submissions to service_role"
       ) &&
+      migration.includes("create or replace function public.submit_public_sales_lead_form") &&
+      migration.includes("pg_advisory_xact_lock") &&
+      migration.includes("set search_path = public") &&
+      migration.includes("security invoker") &&
+      migration.includes(
+        "revoke all on function public.submit_public_sales_lead_form"
+      ) &&
+      migration.includes("from public, anon, authenticated") &&
+      migration.includes(
+        "grant execute on function public.submit_public_sales_lead_form"
+      ) &&
+      migration.includes("to service_role") &&
       !migration.includes("grant select, insert, update, delete") &&
       !migration.includes("create_building_atomic") &&
       !migration.includes("convert_sales_lead_win_to_project"),
-    "039: idempotency table + RLS + revoke; no security-branch / win RPC"
+    "039: table + atomic RPC locked to service_role; no security-branch RPC"
   );
 
   const untouched = [

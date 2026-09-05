@@ -13,6 +13,7 @@ import {
 } from "@/lib/service-type";
 
 export const PUBLIC_SALES_LEAD_FORM_PATH = "/lead";
+export const PUBLIC_SALES_LEAD_PRIVACY_PATH = "/privacy";
 export const PUBLIC_SALES_LEAD_FORM_API_PATH = "/api/public/sales-lead";
 
 export const PUBLIC_SALES_LEAD_SOURCE = "טופס דיגיטלי ללקוח";
@@ -21,6 +22,10 @@ export const PUBLIC_SALES_LEAD_FORM_SUCCESS_TEXT =
   "הפרטים התקבלו בהצלחה. נציג FORTE יחזור אליכם בהקדם.";
 export const PUBLIC_SALES_LEAD_FORM_BADGE = "התקבלה מטופס דיגיטלי";
 export const PUBLIC_SALES_LEAD_FORM_SUBMIT_LABEL = "שליחת הפרטים";
+export const PUBLIC_SALES_LEAD_FORM_CONSENT_TEXT =
+  "בלחיצה על שליחת הפרטים אתם מאשרים שניצור עמכם קשר בנוגע לפנייה.";
+export const PUBLIC_SALES_LEAD_FORM_PRIVACY_LINK_LABEL =
+  "תנאי השימוש ומדיניות הפרטיות";
 
 export const PUBLIC_FORM_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
 export const PUBLIC_FORM_RATE_LIMIT_MAX = 5;
@@ -51,6 +56,13 @@ export type PublicSalesLeadFormParseResult =
 
 export function isPublicSalesLeadFormPath(pathname: string): boolean {
   return pathname === PUBLIC_SALES_LEAD_FORM_PATH;
+}
+
+export function isPublicCustomerFacingPath(pathname: string): boolean {
+  return (
+    pathname === PUBLIC_SALES_LEAD_FORM_PATH ||
+    pathname === PUBLIC_SALES_LEAD_PRIVACY_PATH
+  );
 }
 
 export function emptyPublicSalesLeadFormInput(): PublicSalesLeadFormInput {

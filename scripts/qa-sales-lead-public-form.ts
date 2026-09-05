@@ -22,8 +22,11 @@ import {
   PUBLIC_SALES_LEAD_FORM_BADGE,
   PUBLIC_SALES_LEAD_FORM_HISTORY_TEXT,
   PUBLIC_SALES_LEAD_FORM_PATH,
+  PUBLIC_SALES_LEAD_FORM_CONSENT_TEXT,
+  PUBLIC_SALES_LEAD_FORM_PRIVACY_LINK_LABEL,
   PUBLIC_SALES_LEAD_FORM_SUBMIT_LABEL,
   PUBLIC_SALES_LEAD_FORM_SUCCESS_TEXT,
+  PUBLIC_SALES_LEAD_PRIVACY_PATH,
   PUBLIC_SALES_LEAD_SOURCE,
   publicFormPayloadHash,
   readIdempotencyRecord,
@@ -35,6 +38,12 @@ import {
 } from "../lib/sales-lead-public-form";
 import { SALES_LEAD_SOURCES, type SalesLead } from "../lib/sales-leads";
 import { SERVICE_TYPE_OTHER } from "../lib/service-type";
+import {
+  emptySimulatedPublicFormStore,
+  simulateParallelPublicSalesLeadSubmits,
+  simulateSubmitPublicSalesLeadForm,
+  PUBLIC_SALES_LEAD_SUBMIT_RPC,
+} from "../lib/sales-lead-public-form-submit";
 
 let passed = 0;
 let failed = 0;
@@ -393,9 +402,21 @@ assert(
   "sales screen shows digital badge"
 );
 assert(view.includes("isDigitalFormSalesLead"), "sales screen uses digital detector");
-assert(nav.includes("isPublicSalesLeadFormPath"), "bottom nav hidden on /lead");
-assert(footer.includes("isPublicSalesLeadFormPath"), "footer hidden on /lead");
-assert(masterBtn.includes("isPublicSalesLeadFormPath"), "master return hidden on /lead");
+assert(nav.includes("isPublicCustomerFacingPath"), "bottom nav hidden on public form pages");
+assert(footer.includes("isPublicCustomerFacingPath"), "footer hidden on public form pages");
+assert(masterBtn.includes("isPublicCustomerFacingPath"), "master return hidden on public form pages");
+assert(
+  form.includes("PUBLIC_SALES_LEAD_FORM_CONSENT_TEXT") &&
+    form.includes("PUBLIC_SALES_LEAD_PRIVACY_PATH") &&
+    PUBLIC_SALES_LEAD_PRIVACY_PATH === "/privacy" &&
+    PUBLIC_SALES_LEAD_FORM_CONSENT_TEXT.includes("מאשרים שניצור עמכם קשר") &&
+    PUBLIC_SALES_LEAD_FORM_PRIVACY_LINK_LABEL.includes("פרטיות"),
+  "submit consent + privacy link"
+);
+assert(
+  fs.existsSync(path.join(process.cwd(), "app/privacy/page.tsx")),
+  "privacy page exists"
+);
 assert(api.includes("export async function POST"), "public API has POST");
 assert(!api.includes("export async function GET"), "public API has no GET");
 assert(!api.includes("listSalesLeads"), "public route does not list leads");
@@ -409,5 +430,87 @@ assert(
   "public form has no master links"
 );
 
-console.log(`\n=== סיכום: ${passed} עברו, ${failed} נכשלו ===\n`);
-process.exit(failed > 0 ? 1 : 0);
+const server = read("lib/sales-lead-public-form-server.ts");
+assert(
+  server.includes("PUBLIC_SALES_LEAD_SUBMIT_RPC") &&
+    server.includes(".rpc(") &&
+    !server.includes("createSalesLeadServer") &&
+    !server.includes("listSalesLeadsServer"),
+  "public API writes only through the atomic RPC"
+);
+
+async function runConcurrencyChecks(): Promise<void> {
+  const parallelStore = emptySimulatedPublicFormStore();
+  const formMatch = { phone: "0501234567", email: "a@example.com" };
+  const parallel = await simulateParallelPublicSalesLeadSubmits(
+    parallelStore,
+    "key-same",
+    "hash-a",
+    formMatch,
+    2
+  );
+  assert(
+    parallel.length === 2 &&
+      parallel.every((result) => result.ok) &&
+      parallel.filter((result) => result.already_processed).length === 1 &&
+      parallelStore.leads.length === 1 &&
+      parallelStore.submissions.length === 1 &&
+      parallelStore.contacts.length === 1,
+    "two parallel same-key submits create one lead"
+  );
+
+  const conflictStore = emptySimulatedPublicFormStore();
+  const conflictLocks = new Map();
+  await simulateSubmitPublicSalesLeadForm(
+    conflictStore,
+    conflictLocks,
+    "key-conflict",
+    "hash-a",
+    formMatch
+  );
+  let conflictError = "";
+  try {
+    await simulateSubmitPublicSalesLeadForm(
+      conflictStore,
+      conflictLocks,
+      "key-conflict",
+      "hash-b",
+      formMatch
+    );
+  } catch (error) {
+    conflictError = error instanceof Error ? error.message : String(error);
+  }
+  assert(
+    conflictError === "idempotency_conflict" && conflictStore.leads.length === 1,
+    "same key + different payload is blocked"
+  );
+
+  const rollbackStore = emptySimulatedPublicFormStore();
+  const rollbackLocks = new Map();
+  let rollbackError = "";
+  try {
+    await simulateSubmitPublicSalesLeadForm(
+      rollbackStore,
+      rollbackLocks,
+      "key-fail",
+      "hash-a",
+      formMatch,
+      { failAfterLeadInsert: true }
+    );
+  } catch (error) {
+    rollbackError = error instanceof Error ? error.message : String(error);
+  }
+  assert(
+    rollbackError === "simulated_failure" &&
+      rollbackStore.leads.length === 0 &&
+      rollbackStore.contacts.length === 0 &&
+      rollbackStore.history.length === 0 &&
+      rollbackStore.submissions.length === 0,
+    "failed submit rolls back lead, contact, history, and idempotency"
+  );
+}
+
+void runConcurrencyChecks().then(() => {
+  console.log(`\n=== סיכום: ${passed} עברו, ${failed} נכשלו ===\n`);
+  process.exit(failed > 0 ? 1 : 0);
+});

@@ -5,7 +5,7 @@ import { Suspense } from "react";
 import { usePathname } from "next/navigation";
 import { isClientAccessPath } from "@/lib/client-access";
 import { isExpert } from "@/lib/roles";
-import { isPublicSalesLeadFormPath } from "@/lib/sales-lead-public-form";
+import { isPublicCustomerFacingPath } from "@/lib/sales-lead-public-form";
 
 const NAV_ICON_CLASS = "w-[23px] h-[23px]";
 const FEEDBACK_ICON_CLASS = "w-[25px] h-[25px]";
@@ -102,7 +102,7 @@ function isInternalWorkbenchPath(pathname: string): boolean {
 function BottomNavInner() {
   const pathname = usePathname();
   if (isClientAccessPath(pathname) || pathname.startsWith("/forte")) return null;
-  if (isPublicSalesLeadFormPath(pathname)) return null;
+  if (isPublicCustomerFacingPath(pathname)) return null;
   if (isInternalWorkbenchPath(pathname)) return null;
   const showExpert = isExpert();
   const navItems = showExpert

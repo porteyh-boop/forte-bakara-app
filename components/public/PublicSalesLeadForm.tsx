@@ -1,12 +1,16 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { BRAND_APP, BRAND_EDITOR_TITLE, BRAND_FORTE } from "@/lib/brand";
 import {
   emptyPublicSalesLeadFormInput,
   PUBLIC_SALES_LEAD_FORM_API_PATH,
+  PUBLIC_SALES_LEAD_FORM_CONSENT_TEXT,
+  PUBLIC_SALES_LEAD_FORM_PRIVACY_LINK_LABEL,
   PUBLIC_SALES_LEAD_FORM_SUBMIT_LABEL,
   PUBLIC_SALES_LEAD_FORM_SUCCESS_TEXT,
+  PUBLIC_SALES_LEAD_PRIVACY_PATH,
   type PublicSalesLeadFormInput,
 } from "@/lib/sales-lead-public-form";
 import { SALES_LEAD_SERVICE_TYPES } from "@/lib/sales-leads";
@@ -272,6 +276,16 @@ export default function PublicSalesLeadForm() {
       >
         {saving ? "שולח..." : PUBLIC_SALES_LEAD_FORM_SUBMIT_LABEL}
       </button>
+      <p className="text-center text-[12px] leading-relaxed text-[#5b6b82]">
+        {PUBLIC_SALES_LEAD_FORM_CONSENT_TEXT}{" "}
+        <Link
+          href={PUBLIC_SALES_LEAD_PRIVACY_PATH}
+          className="font-semibold text-[#0d1b3e] underline underline-offset-2"
+        >
+          {PUBLIC_SALES_LEAD_FORM_PRIVACY_LINK_LABEL}
+        </Link>
+        .
+      </p>
       <p className="text-center text-[11px] text-[#5b6b82]">
         {BRAND_FORTE} · {BRAND_APP} · {BRAND_EDITOR_TITLE}
       </p>
