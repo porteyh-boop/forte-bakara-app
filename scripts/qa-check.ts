@@ -3,6 +3,11 @@ import path from "path";
 import { spawnSync } from "child_process";
 import { APP_ROLE } from "../lib/config";
 import {
+  buildMasterManifestDocument,
+  MASTER_PWA_START_URL,
+  resolveMasterStandaloneStartUrl,
+} from "../lib/master-manifest";
+import {
   BRAND_EDITOR_NAME,
   BRAND_EDITOR_TITLE,
   FORBIDDEN_BRAND_TERMS,
@@ -3476,6 +3481,64 @@ const globalManifestSource = fs.readFileSync(globalManifest, "utf8");
 assert(
   globalManifestSource.includes('start_url: "/"'),
   "פורטל PWA: manifest גלובלי נשאר עם start_url /"
+);
+
+const masterManifestLib = fs.readFileSync(
+  path.join(process.cwd(), "lib/master-manifest.ts"),
+  "utf8"
+);
+const masterManifestRoute = path.join(
+  process.cwd(),
+  "app/master/manifest.webmanifest/route.ts"
+);
+const masterPageSwitchSource = fs.readFileSync(
+  path.join(process.cwd(), "components/master-v2/MasterPageSwitch.tsx"),
+  "utf8"
+);
+const masterManifestBinderSource = fs.readFileSync(
+  path.join(process.cwd(), "components/master-v2/MasterManifestBinder.tsx"),
+  "utf8"
+);
+assert(fs.existsSync(masterManifestRoute), "Master PWA: manifest route קיים");
+assert(
+  masterManifestLib.includes('MASTER_PWA_START_URL = "/master?ui=v2"') &&
+    masterManifestLib.includes('MASTER_PWA_SCOPE = "/master"') &&
+    !masterManifestLib.includes('start_url: "/"'),
+  "Master PWA: start_url ו-scope ייעודיים ל-/master"
+);
+assert(
+  masterLayoutSource.includes("MASTER_MANIFEST_PATH") &&
+    masterLayoutSource.includes("MasterManifestBinder") &&
+    masterLayoutSource.includes("appleWebApp") &&
+    masterManifestBinderSource.includes('link[rel="manifest"]') &&
+    masterManifestBinderSource.includes("MASTER_MANIFEST_PATH"),
+  "Master PWA: layout מחבר manifest ייעודי"
+);
+assert(
+  masterPageSwitchSource.includes("masterUiV2Default") &&
+    masterPageSwitchSource.includes("MasterPageContentV2") &&
+    masterPageSwitchSource.includes("NEXT_PUBLIC_MASTER_UI_V2"),
+  "Master PWA: fallback של /master הוא V2 כשהדגל דולק"
+);
+assert(
+  !fs.existsSync(path.join(process.cwd(), "public/sw.js")) &&
+    !fs.existsSync(path.join(process.cwd(), "public/service-worker.js")),
+  "Master PWA: אין service worker שמנתב לכתובת ישנה"
+);
+
+assert(
+  resolveMasterStandaloneStartUrl("/master", "") === MASTER_PWA_START_URL &&
+    resolveMasterStandaloneStartUrl("/master", "?ui=v2") === null &&
+    resolveMasterStandaloneStartUrl("/master", "?legacy=1") === null &&
+    resolveMasterStandaloneStartUrl("/", "") === null,
+  "Master PWA: standalone משחזר ?ui=v2 בלי לפגוע ב-legacy או בדף הבית"
+);
+const masterManifestDoc = buildMasterManifestDocument();
+assert(
+  masterManifestDoc.start_url === "/master?ui=v2" &&
+    masterManifestDoc.scope === "/master" &&
+    masterManifestDoc.display === "standalone",
+  "Master PWA: מסמך manifest פותח Master V2"
 );
 
 const manifestBinderSource = fs.readFileSync(clientPortalManifestBinder, "utf8");

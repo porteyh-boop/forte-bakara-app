@@ -17,9 +17,15 @@ function MasterPageSwitchInner() {
   return <MasterPageContent />;
 }
 
+const masterUiV2Default = process.env.NEXT_PUBLIC_MASTER_UI_V2 === "1";
+
 export default function MasterPageSwitch() {
   return (
-    <Suspense fallback={<MasterPageContent />}>
+    <Suspense
+      fallback={
+        masterUiV2Default ? <MasterPageContentV2 /> : <MasterPageContent />
+      }
+    >
       <MasterPageSwitchInner />
     </Suspense>
   );
