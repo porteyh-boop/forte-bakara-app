@@ -7,6 +7,7 @@ import { BRAND_EDITOR_NAME, BRAND_FORTE } from "@/lib/brand";
 import {
   buildMasterProjectV2Path,
   MASTER_BUSINESS_PATH,
+  MASTER_SALES_PATH,
   type ProjectV2TabId,
 } from "@/lib/master-project-v2-routes";
 import {
@@ -153,6 +154,7 @@ export default function MasterSidebar({
 
   const mainItems: SidebarItem[] = [
     { id: "projects", label: "פרויקטים", icon: "▦", href: "/master?ui=v2", section: "main" },
+    { id: "sales", label: "מכירות", icon: "☎", href: MASTER_SALES_PATH, section: "main" },
     { id: "business", label: "עסקי", icon: "💼", href: MASTER_BUSINESS_PATH, section: "main" },
   ];
 

@@ -426,6 +426,7 @@ import {
 import {
   buildMasterProjectV2Path,
   MASTER_BUSINESS_PATH,
+  MASTER_SALES_PATH,
 } from "../lib/master-project-v2-routes";
 import {
   clearProjectV2NavStack,
@@ -7167,6 +7168,16 @@ assert(
   "Business Dashboard: route + sidebar + UI"
 );
 assert(
+  MASTER_SALES_PATH === "/master/sales" &&
+    masterProjectV2RoutesSource.includes("MASTER_SALES_PATH") &&
+    /label: "פרויקטים"[\s\S]*label: "מכירות"[\s\S]*label: "עסקי"/.test(
+      masterSidebarSource
+    ) &&
+    fs.existsSync(path.join(process.cwd(), "app/master/sales/page.tsx")) &&
+    fs.existsSync(path.join(process.cwd(), "lib/sales-leads.ts")),
+  "Sales leads: route + sidebar after projects"
+);
+assert(
   businessDashboardSource.includes("buildBusinessDashboard") &&
     businessDashboardSource.includes("computeProjectFinancialSummary") &&
     masterBusinessViewSource.includes("צפוי להיכנס") &&
@@ -7285,6 +7296,24 @@ if (masterInspectorReportsSecurityQa.status !== 0) {
 } else {
   passed += 1;
   console.log("Master V2 Inspector Reports Security QA עבר");
+}
+
+console.log("\n=== Master Sales Leads display QA ===");
+const masterSalesLeadsQa = spawnSync(
+  "npx",
+  ["tsx", "scripts/qa-master-sales-leads.ts"],
+  {
+    stdio: "inherit",
+    shell: true,
+    cwd: process.cwd(),
+  }
+);
+if (masterSalesLeadsQa.status !== 0) {
+  failed += 1;
+  console.error("Master Sales Leads display QA נכשל");
+} else {
+  passed += 1;
+  console.log("Master Sales Leads display QA עבר");
 }
 
 console.log(`\n=== סיכום: ${passed} עברו, ${failed} נכשלו ===`);
