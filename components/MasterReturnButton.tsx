@@ -5,13 +5,18 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { isClientAccessPath } from "@/lib/client-access";
 import { isMasterAuthenticated } from "@/lib/pilot-cloud";
+import { isPublicSalesLeadFormPath } from "@/lib/sales-lead-public-form";
 
 export default function MasterReturnButton() {
   const pathname = usePathname();
   const [show, setShow] = useState(false);
 
   useEffect(() => {
-    if (pathname.startsWith("/master") || isClientAccessPath(pathname)) {
+    if (
+      pathname.startsWith("/master") ||
+      isClientAccessPath(pathname) ||
+      isPublicSalesLeadFormPath(pathname)
+    ) {
       setShow(false);
       return;
     }

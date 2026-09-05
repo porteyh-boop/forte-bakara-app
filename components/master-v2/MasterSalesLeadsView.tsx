@@ -29,6 +29,10 @@ import {
   type SalesWinMissingField,
 } from "@/lib/sales-lead-ops";
 import {
+  isDigitalFormSalesLead,
+  PUBLIC_SALES_LEAD_FORM_BADGE,
+} from "@/lib/sales-lead-public-form";
+import {
   createSalesLead,
   listSalesLeads,
   updateSalesLead,
@@ -310,6 +314,11 @@ export default function MasterSalesLeadsView() {
                         <span className="block text-xs text-forte-text-secondary">
                           {lead.buildingName || "ללא בניין"}
                         </span>
+                        {isDigitalFormSalesLead(lead) ? (
+                          <span className="mt-1 inline-block rounded-full bg-sky-50 px-2 py-0.5 text-[11px] text-sky-800">
+                            {PUBLIC_SALES_LEAD_FORM_BADGE}
+                          </span>
+                        ) : null}
                         {lead.convertedBuildingId ? (
                           <span
                             className="mt-1 flex flex-wrap items-center gap-2"
@@ -361,6 +370,12 @@ export default function MasterSalesLeadsView() {
             <form className="space-y-4" onSubmit={(event) => void handleSave(event)}>
               {formError ? (
                 <ForteV2StatusBanner tone="error">{formError}</ForteV2StatusBanner>
+              ) : null}
+
+              {editingLead && isDigitalFormSalesLead(editingLead) ? (
+                <p className="rounded-xl border border-sky-100 bg-sky-50 px-3 py-2 text-sm text-sky-900">
+                  {PUBLIC_SALES_LEAD_FORM_BADGE}
+                </p>
               ) : null}
 
               {editingLead?.convertedBuildingId ? (

@@ -7174,7 +7174,9 @@ assert(
       masterSidebarSource
     ) &&
     fs.existsSync(path.join(process.cwd(), "app/master/sales/page.tsx")) &&
-    fs.existsSync(path.join(process.cwd(), "lib/sales-leads.ts")),
+    fs.existsSync(path.join(process.cwd(), "lib/sales-leads.ts")) &&
+    fs.existsSync(path.join(process.cwd(), "app/lead/page.tsx")) &&
+    fs.existsSync(path.join(process.cwd(), "app/api/public/sales-lead/route.ts")),
   "Sales leads: route + sidebar after projects"
 );
 assert(
@@ -7350,6 +7352,60 @@ if (masterSalesLeadsPersistQa.status !== 0) {
 } else {
   passed += 1;
   console.log("Master Sales Leads live persistence QA עבר");
+}
+
+console.log("\n=== Public sales lead form QA ===");
+const publicSalesLeadFormQa = spawnSync(
+  "npx",
+  ["tsx", "scripts/qa-sales-lead-public-form.ts"],
+  {
+    stdio: "inherit",
+    shell: true,
+    cwd: process.cwd(),
+  }
+);
+if (publicSalesLeadFormQa.status !== 0) {
+  failed += 1;
+  console.error("Public sales lead form QA נכשל");
+} else {
+  passed += 1;
+  console.log("Public sales lead form QA עבר");
+}
+
+console.log("\n=== Public sales lead form live persistence QA ===");
+const publicSalesLeadFormPersistQa = spawnSync(
+  "npx",
+  ["tsx", "scripts/qa-sales-lead-public-form-persist.ts"],
+  {
+    stdio: "inherit",
+    shell: true,
+    cwd: process.cwd(),
+  }
+);
+if (publicSalesLeadFormPersistQa.status !== 0) {
+  failed += 1;
+  console.error("Public sales lead form live persistence QA נכשל");
+} else {
+  passed += 1;
+  console.log("Public sales lead form live persistence QA עבר");
+}
+
+console.log("\n=== Public sales lead form security QA ===");
+const publicSalesLeadFormSecurityQa = spawnSync(
+  "npx",
+  ["tsx", "scripts/qa-sales-lead-public-form-security.ts"],
+  {
+    stdio: "inherit",
+    shell: true,
+    cwd: process.cwd(),
+  }
+);
+if (publicSalesLeadFormSecurityQa.status !== 0) {
+  failed += 1;
+  console.error("Public sales lead form security QA נכשל");
+} else {
+  passed += 1;
+  console.log("Public sales lead form security QA עבר");
 }
 
 console.log(`\n=== סיכום: ${passed} עברו, ${failed} נכשלו ===`);

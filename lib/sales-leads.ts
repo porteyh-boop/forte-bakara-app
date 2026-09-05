@@ -30,6 +30,7 @@ export const SALES_LEAD_SOURCES = [
   "שיחה יזומה",
   "שלט",
   "לקוח חוזר",
+  "טופס דיגיטלי ללקוח",
 ] as const;
 
 export const SALES_LEAD_CHANNELS = [
@@ -192,6 +193,7 @@ export function salesLeadMatchesSearch(lead: SalesLead, query: string): boolean 
     lead.status,
     lead.city,
     lead.phone,
+    lead.source,
     lead.nextAction,
   ]
     .join(" ")
