@@ -13,6 +13,7 @@ import {
   type IdempotencyRecord,
   type RateLimitBucket,
 } from "@/lib/sales-lead-public-form";
+import { notifyPublicSalesLeadFormTelegram } from "@/lib/sales-lead-notifications-telegram";
 import {
   buildPublicSalesLeadSubmitRpcArgs,
   parsePublicSalesLeadSubmitRpcResult,
@@ -160,6 +161,21 @@ export async function submitPublicSalesLeadForm(input: {
   }
 
   rememberIdempotencyRecord(memoryIdempotency, key, payloadHash, nowMs);
+
+  if (!parsedResult.already_processed) {
+    try {
+      await notifyPublicSalesLeadFormTelegram({
+        alreadyProcessed: false,
+        notificationId: parsedResult.notification_id ?? null,
+      });
+    } catch (error) {
+      console.error(
+        "[sales-lead-public-form] telegram notify failed",
+        error instanceof Error ? error.message : error
+      );
+    }
+  }
+
   return { ok: true, status: 200, error: null };
 }
 

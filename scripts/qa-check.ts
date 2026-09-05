@@ -7177,7 +7177,8 @@ assert(
     fs.existsSync(path.join(process.cwd(), "lib/sales-leads.ts")) &&
     fs.existsSync(path.join(process.cwd(), "app/lead/page.tsx")) &&
     fs.existsSync(path.join(process.cwd(), "app/privacy/page.tsx")) &&
-    fs.existsSync(path.join(process.cwd(), "app/api/public/sales-lead/route.ts")),
+    fs.existsSync(path.join(process.cwd(), "app/api/public/sales-lead/route.ts")) &&
+    fs.existsSync(path.join(process.cwd(), "supabase/migrations/040_sales_lead_notifications.sql")),
   "Sales leads: route + sidebar after projects"
 );
 assert(
@@ -7407,6 +7408,42 @@ if (publicSalesLeadFormSecurityQa.status !== 0) {
 } else {
   passed += 1;
   console.log("Public sales lead form security QA עבר");
+}
+
+console.log("\n=== Sales lead notifications QA ===");
+const salesLeadNotificationsQa = spawnSync(
+  "npx",
+  ["tsx", "scripts/qa-sales-lead-notifications.ts"],
+  {
+    stdio: "inherit",
+    shell: true,
+    cwd: process.cwd(),
+  }
+);
+if (salesLeadNotificationsQa.status !== 0) {
+  failed += 1;
+  console.error("Sales lead notifications QA נכשל");
+} else {
+  passed += 1;
+  console.log("Sales lead notifications QA עבר");
+}
+
+console.log("\n=== Sales lead notifications security QA ===");
+const salesLeadNotificationsSecurityQa = spawnSync(
+  "npx",
+  ["tsx", "scripts/qa-sales-lead-notifications-security.ts"],
+  {
+    stdio: "inherit",
+    shell: true,
+    cwd: process.cwd(),
+  }
+);
+if (salesLeadNotificationsSecurityQa.status !== 0) {
+  failed += 1;
+  console.error("Sales lead notifications security QA נכשל");
+} else {
+  passed += 1;
+  console.log("Sales lead notifications security QA עבר");
 }
 
 console.log(`\n=== סיכום: ${passed} עברו, ${failed} נכשלו ===`);

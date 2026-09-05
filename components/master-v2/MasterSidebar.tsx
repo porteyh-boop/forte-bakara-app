@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useMasterFaultInbox } from "@/components/master-v2/MasterFaultInboxProvider";
+import { useMasterSalesLeadNotifications } from "@/components/master-v2/MasterSalesLeadNotificationsProvider";
 import { BRAND_EDITOR_NAME, BRAND_FORTE } from "@/lib/brand";
 import {
   buildMasterProjectV2Path,
@@ -99,10 +100,12 @@ function SidebarNavItem({
   item,
   isActive,
   onNavigate,
+  badgeCount,
 }: {
   item: SidebarItem;
   isActive: boolean;
   onNavigate?: () => void;
+  badgeCount?: number;
 }) {
   const className = [
     "fv2-sidebar-item",
@@ -118,6 +121,11 @@ function SidebarNavItem({
         {item.icon}
       </span>
       <span>{item.label}</span>
+      {badgeCount && badgeCount > 0 ? (
+        <span className="fv2-sidebar-item-badge" aria-label={`${badgeCount} התראות שלא נקראו`}>
+          {badgeCount > 99 ? "99+" : badgeCount}
+        </span>
+      ) : null}
     </>
   );
 
@@ -144,6 +152,7 @@ export default function MasterSidebar({
   onNavigate,
 }: MasterSidebarProps) {
   const inbox = useMasterFaultInbox();
+  const salesNotifications = useMasterSalesLeadNotifications();
   const [clientReady, setClientReady] = useState(false);
 
   useEffect(() => {
@@ -208,6 +217,9 @@ export default function MasterSidebar({
             item={item}
             isActive={item.id === resolvedActiveId}
             onNavigate={onNavigate}
+            badgeCount={
+              item.id === "sales" ? salesNotifications?.unreadCount ?? 0 : 0
+            }
           />
         ))}
         <SidebarNotificationsButton

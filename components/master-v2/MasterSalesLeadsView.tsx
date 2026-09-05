@@ -1,7 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import MasterCodeGate from "@/components/master-v2/MasterCodeGate";
+import { useMasterSalesLeadNotifications } from "@/components/master-v2/MasterSalesLeadNotificationsProvider";
 import MasterShellLayout from "@/components/master-v2/MasterShellLayout";
 import {
   ForteV2DataTable,
@@ -21,6 +23,7 @@ import {
   ForteV2ToolbarRow,
   fv2,
 } from "@/components/master-v2/project-v2/MasterProjectV2Workspace";
+import { parseSalesLeadIdParam } from "@/lib/sales-lead-notifications";
 import { ensureMasterV2SessionsValid } from "@/lib/master-v2-auth";
 import { buildMasterProjectV2Path } from "@/lib/master-project-v2-routes";
 import { isMasterAuthenticated, setMasterAuthenticated } from "@/lib/pilot-cloud";
@@ -65,7 +68,14 @@ function KpiCard({ label, value }: { label: string; value: number }) {
   );
 }
 
-export default function MasterSalesLeadsView() {
+export default function MasterSalesLeadsView({
+  initialLeadId = "",
+}: {
+  initialLeadId?: string;
+}) {
+  const searchParams = useSearchParams();
+  const salesNotifications = useMasterSalesLeadNotifications();
+  const openedLeadIdRef = useRef<string | null>(null);
   const [authed, setAuthed] = useState(false);
   const [leads, setLeads] = useState<SalesLead[]>([]);
   const [loading, setLoading] = useState(false);
@@ -104,6 +114,17 @@ export default function MasterSalesLeadsView() {
     if (authed) void refresh();
   }, [authed, refresh]);
 
+  useEffect(() => {
+    if (!authed || loading) return;
+    const fromQuery = parseSalesLeadIdParam(searchParams.get("leadId"));
+    const leadId = fromQuery ?? parseSalesLeadIdParam(initialLeadId);
+    if (!leadId || openedLeadIdRef.current === leadId) return;
+    const lead = leads.find((item) => item.id === leadId);
+    if (!lead) return;
+    openedLeadIdRef.current = leadId;
+    openLead(lead);
+  }, [authed, loading, leads, initialLeadId, searchParams]);
+
   const today = jerusalemCalendarDate();
   const summary = useMemo(() => summarizeSalesLeads(leads, today), [leads, today]);
   const visibleLeads = useMemo(
@@ -131,6 +152,7 @@ export default function MasterSalesLeadsView() {
     setDraft(salesLeadToDraft(lead));
     setFormError(null);
     setDialogOpen(true);
+    void salesNotifications?.markLeadRead(lead.id);
   }
 
   function closeDialog() {

@@ -9,6 +9,7 @@ import {
   PUBLIC_SALES_LEAD_SOURCE,
   type PublicSalesLeadFormInput,
 } from "@/lib/sales-lead-public-form";
+import type { SalesLeadNotificationEventKind } from "@/lib/sales-lead-notifications";
 
 export const PUBLIC_SALES_LEAD_SUBMIT_RPC = "submit_public_sales_lead_form";
 
@@ -32,6 +33,9 @@ export type PublicSalesLeadSubmitRpcArgs = {
 export type PublicSalesLeadSubmitRpcResult = {
   ok: true;
   already_processed: boolean;
+  lead_created?: boolean;
+  lead_id?: string | null;
+  notification_id?: string | null;
 };
 
 export function buildPublicSalesLeadSubmitRpcArgs(input: {
@@ -65,7 +69,14 @@ export function parsePublicSalesLeadSubmitRpcResult(
   if (!data || typeof data !== "object") return null;
   const row = data as Record<string, unknown>;
   if (row.ok !== true) return null;
-  return { ok: true, already_processed: row.already_processed === true };
+  return {
+    ok: true,
+    already_processed: row.already_processed === true,
+    lead_created: row.lead_created === true,
+    lead_id: typeof row.lead_id === "string" ? row.lead_id : null,
+    notification_id:
+      typeof row.notification_id === "string" ? row.notification_id : null,
+  };
 }
 
 export type SimulatedPublicFormLead = {
@@ -90,11 +101,21 @@ export type SimulatedPublicFormInput = Pick<
 > &
   Partial<Pick<PublicSalesLeadFormInput, "buildingName" | "address" | "city">>;
 
+export type SimulatedPublicFormNotification = {
+  id: string;
+  leadId: string;
+  submissionKey: string;
+  eventKind: SalesLeadNotificationEventKind;
+  telegramStatus: "pending" | "sent" | "failed";
+  telegramAttempts: number;
+};
+
 export type SimulatedPublicFormStore = {
   leads: SimulatedPublicFormLead[];
   contacts: SimulatedPublicFormContact[];
   history: { leadId: string; text: string }[];
   submissions: { key: string; payloadHash: string; leadId: string }[];
+  notifications: SimulatedPublicFormNotification[];
 };
 
 /** Mirrors submit_public_sales_lead_form contact update: never wipe email/notes. */
@@ -167,7 +188,13 @@ export async function simulateSubmitPublicSalesLeadForm(
       if (existing.payloadHash !== payloadHash) {
         throw new Error("idempotency_conflict");
       }
-      return { ok: true as const, already_processed: true };
+      return {
+        ok: true as const,
+        already_processed: true,
+        lead_created: false,
+        lead_id: existing.leadId,
+        notification_id: null,
+      };
     }
 
     const snapshot: SimulatedPublicFormStore = {
@@ -175,6 +202,7 @@ export async function simulateSubmitPublicSalesLeadForm(
       contacts: store.contacts.map((contact) => ({ ...contact })),
       history: store.history.map((entry) => ({ ...entry })),
       submissions: store.submissions.map((row) => ({ ...row })),
+      notifications: store.notifications.map((row) => ({ ...row })),
     };
 
     try {
@@ -242,7 +270,22 @@ export async function simulateSubmitPublicSalesLeadForm(
       }
 
       store.submissions.push({ key, payloadHash, leadId });
-      return { ok: true as const, already_processed: false };
+      const notificationId = nextId("note", store);
+      store.notifications.push({
+        id: notificationId,
+        leadId,
+        submissionKey: key,
+        eventKind: matchId ? "updated_lead" : "new_lead",
+        telegramStatus: "pending",
+        telegramAttempts: 0,
+      });
+      return {
+        ok: true as const,
+        already_processed: false,
+        lead_created: !matchId,
+        lead_id: leadId,
+        notification_id: notificationId,
+      };
     } catch (error) {
       store.leads.length = 0;
       store.leads.push(...snapshot.leads);
@@ -252,6 +295,8 @@ export async function simulateSubmitPublicSalesLeadForm(
       store.history.push(...snapshot.history);
       store.submissions.length = 0;
       store.submissions.push(...snapshot.submissions);
+      store.notifications.length = 0;
+      store.notifications.push(...snapshot.notifications);
       throw error;
     }
   });
@@ -279,7 +324,28 @@ export async function simulateParallelPublicSalesLeadSubmits(
 }
 
 export function emptySimulatedPublicFormStore(): SimulatedPublicFormStore {
-  return { leads: [], contacts: [], history: [], submissions: [] };
+  return {
+    leads: [],
+    contacts: [],
+    history: [],
+    submissions: [],
+    notifications: [],
+  };
+}
+
+export function simulateSendSalesLeadTelegramOnce(
+  store: SimulatedPublicFormStore,
+  notificationId: string,
+  telegramSends: string[]
+): { sent: boolean; skipped: boolean } {
+  const notification = store.notifications.find((row) => row.id === notificationId);
+  if (!notification || notification.telegramStatus !== "pending") {
+    return { sent: false, skipped: true };
+  }
+  notification.telegramAttempts += 1;
+  notification.telegramStatus = "sent";
+  telegramSends.push(notificationId);
+  return { sent: true, skipped: false };
 }
 
 export { PUBLIC_SALES_LEAD_SOURCE };

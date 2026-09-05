@@ -456,7 +456,8 @@ async function runConcurrencyChecks(): Promise<void> {
       parallel.filter((result) => result.already_processed).length === 1 &&
       parallelStore.leads.length === 1 &&
       parallelStore.submissions.length === 1 &&
-      parallelStore.contacts.length === 1,
+      parallelStore.contacts.length === 1 &&
+      parallelStore.notifications.length === 1,
     "two parallel same-key submits create one lead"
   );
 
@@ -506,7 +507,8 @@ async function runConcurrencyChecks(): Promise<void> {
       rollbackStore.leads.length === 0 &&
       rollbackStore.contacts.length === 0 &&
       rollbackStore.history.length === 0 &&
-      rollbackStore.submissions.length === 0,
+      rollbackStore.submissions.length === 0 &&
+      rollbackStore.notifications.length === 0,
     "failed submit rolls back lead, contact, history, and idempotency"
   );
 

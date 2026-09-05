@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import "@/app/forte-v2-design-system.css";
 import { MasterFaultInboxProvider } from "@/components/master-v2/MasterFaultInboxProvider";
+import { MasterSalesLeadNotificationsProvider } from "@/components/master-v2/MasterSalesLeadNotificationsProvider";
 import MasterSidebar, {
   type MasterSidebarProjectNav,
 } from "@/components/master-v2/MasterSidebar";
@@ -56,6 +57,7 @@ export default function MasterShellLayout({
 
   return (
     <MasterFaultInboxProvider>
+    <MasterSalesLeadNotificationsProvider>
       <div
         className={`min-h-screen bg-forte-background flex flex-col ${FORTE_V2_ROOT_CLASS}`}
       >
@@ -92,6 +94,7 @@ export default function MasterShellLayout({
           <main className="flex-1 min-w-0 flex flex-col">{children}</main>
         </div>
       </div>
+    </MasterSalesLeadNotificationsProvider>
     </MasterFaultInboxProvider>
   );
 }

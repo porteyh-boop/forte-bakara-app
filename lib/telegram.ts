@@ -58,13 +58,27 @@ function buildPilotFaultMessage(input: TelegramPilotFaultNotificationInput): str
   ].join("\n");
 }
 
+export type TelegramInlineButton = {
+  text: string;
+  url: string;
+};
+
+export type TelegramReplyMarkup = {
+  inline_keyboard: TelegramInlineButton[][];
+};
+
 async function postTelegramMessage(
   botToken: string,
   chatId: string,
   text: string,
-  signal: AbortSignal
+  signal: AbortSignal,
+  replyMarkup?: TelegramReplyMarkup
 ): Promise<Response> {
-  const body = JSON.stringify({ chat_id: chatId, text });
+  const body = JSON.stringify({
+    chat_id: chatId,
+    text,
+    ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+  });
   const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
 
   return fetch(url, {
@@ -80,7 +94,8 @@ export type TelegramDeliveryResult =
   | { ok: false; error: string };
 
 export async function deliverTelegramMessage(
-  text: string
+  text: string,
+  options?: { replyMarkup?: TelegramReplyMarkup }
 ): Promise<TelegramDeliveryResult> {
   const botToken = process.env.TELEGRAM_BOT_TOKEN?.trim();
   const chatId = process.env.TELEGRAM_CHAT_ID?.trim();
@@ -98,7 +113,8 @@ export async function deliverTelegramMessage(
       botToken,
       chatId,
       text,
-      controller.signal
+      controller.signal,
+      options?.replyMarkup
     );
 
     if (!response.ok) {

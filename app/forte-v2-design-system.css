@@ -1000,6 +1000,20 @@
   }
 }
 
+.forte-v2 .fv2-sidebar-item-badge {
+  margin-right: auto;
+  min-width: 1.125rem;
+  height: 1.125rem;
+  padding: 0 0.25rem;
+  border-radius: 9999px;
+  background: #dc2626;
+  color: #ffffff;
+  font-size: 0.625rem;
+  font-weight: 800;
+  line-height: 1.125rem;
+  text-align: center;
+}
+
 .forte-v2 .fv2-sidebar-bell-badge {
   position: absolute;
   top: 0.35rem;
