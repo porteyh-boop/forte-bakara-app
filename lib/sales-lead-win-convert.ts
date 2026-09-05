@@ -1,7 +1,7 @@
 import { roundMoney } from "@/lib/project-financial";
 import { DEFAULT_PROJECT_TYPE } from "@/lib/project-type-config";
 import type { SalesLead } from "@/lib/sales-leads";
-import { isServiceType } from "@/lib/service-type";
+import { isServiceType, normalizeServiceTypePersistence } from "@/lib/service-type";
 
 export const SALES_WIN_CONVERT_RPC = "convert_sales_lead_win_to_project";
 
@@ -17,6 +17,7 @@ export type SalesWinConvertRpcArgs = {
   p_project_type: string;
   p_order_amount: number | null;
   p_service_type: string | null;
+  p_service_type_other: string | null;
   p_contact_id: string | null;
 };
 
@@ -39,7 +40,10 @@ export function buildSalesWinProjectNotes(
 export function buildSalesWinConvertRpcArgs(
   lead: SalesLead
 ): SalesWinConvertRpcArgs {
-  const serviceType = isServiceType(lead.serviceType) ? lead.serviceType : null;
+  const persisted = normalizeServiceTypePersistence({
+    serviceType: isServiceType(lead.serviceType) ? lead.serviceType : null,
+    serviceTypeOther: lead.serviceTypeOther,
+  });
   const projectType =
     lead.serviceType === "בדק בית / חוות דעת" ? "home_inspection" : DEFAULT_PROJECT_TYPE;
 
@@ -55,7 +59,8 @@ export function buildSalesWinConvertRpcArgs(
     p_project_type: projectType,
     p_order_amount:
       lead.estimatedValue != null ? roundMoney(lead.estimatedValue) : null,
-    p_service_type: serviceType,
+    p_service_type: persisted.serviceType,
+    p_service_type_other: persisted.serviceTypeOther,
     p_contact_id: lead.contactId,
   };
 }

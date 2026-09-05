@@ -33,6 +33,7 @@ import {
   listSalesLeads,
   updateSalesLead,
 } from "@/lib/sales-leads-api";
+import { SERVICE_TYPE_OTHER } from "@/lib/service-type";
 import {
   emptySalesLeadDraft,
   filterSalesLeads,
@@ -439,7 +440,16 @@ export default function MasterSalesLeadsView() {
                   <select
                     className="fv2-input w-full"
                     value={draft.serviceType}
-                    onChange={(e) => patchDraft("serviceType", e.target.value)}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setDraft((current) => ({
+                        ...current,
+                        serviceType: next,
+                        serviceTypeOther:
+                          next === SERVICE_TYPE_OTHER ? current.serviceTypeOther : "",
+                      }));
+                      if (formError) setFormError(null);
+                    }}
                   >
                     <option value="">לא נבחר</option>
                     {SALES_LEAD_SERVICE_TYPES.map((option) => (
@@ -449,6 +459,16 @@ export default function MasterSalesLeadsView() {
                     ))}
                   </select>
                 </label>
+                {draft.serviceType === SERVICE_TYPE_OTHER ? (
+                  <label className="block space-y-1">
+                    <ForteV2FormLabel>הגדר סוג שירות אחר *</ForteV2FormLabel>
+                    <ForteV2FormInput
+                      value={draft.serviceTypeOther}
+                      onChange={(e) => patchDraft("serviceTypeOther", e.target.value)}
+                      placeholder="לדוגמה: בדיקת נזק למעלית"
+                    />
+                  </label>
+                ) : null}
                 <label className="block space-y-1">
                   <ForteV2FormLabel>סטטוס</ForteV2FormLabel>
                   <select

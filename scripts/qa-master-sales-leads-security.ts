@@ -211,16 +211,27 @@ async function main(): Promise<void> {
     linksMigration.includes("add column if not exists contact_id") &&
       linksMigration.includes("references public.contacts (id)") &&
       linksMigration.includes("add column if not exists converted_building_id") &&
+      linksMigration.includes("add column if not exists service_type_other") &&
+      linksMigration.includes("sales_leads_converted_building_id_fkey") &&
+      linksMigration.includes("references public.buildings (building_id)") &&
+      linksMigration.includes("on delete set null") &&
       linksMigration.includes("idx_sales_leads_contact_id") &&
       linksMigration.includes("idx_sales_leads_converted_building_id") &&
       linksMigration.includes("convert_sales_lead_win_to_project") &&
+      linksMigration.includes("p_service_type_other") &&
       linksMigration.includes("for update") &&
       linksMigration.includes("pg_advisory_xact_lock") &&
+      linksMigration.includes(
+        "drop function if exists public.convert_sales_lead_win_to_project"
+      ) &&
       linksMigration.includes(
         "revoke all on function public.convert_sales_lead_win_to_project"
       ) &&
       linksMigration.includes("from public, anon, authenticated") &&
       linksMigration.includes("grant execute on function public.convert_sales_lead_win_to_project") &&
+      linksMigration.includes(
+        "uuid, text, text, text, text, text, text, text, text, numeric, text, text, uuid"
+      ) &&
       linksMigration.includes("to service_role") &&
       !linksMigration.includes("create table") &&
       !linksMigration.includes("create_building_atomic") &&

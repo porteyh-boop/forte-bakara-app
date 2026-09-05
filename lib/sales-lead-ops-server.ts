@@ -109,6 +109,9 @@ async function convertWonProjectFromLead(
     if (error.message.includes("missing_building_name")) {
       return { buildingId: null, alreadyConverted: false, error: null };
     }
+    if (error.message.includes("missing_service_type_other")) {
+      return { buildingId: null, alreadyConverted: false, error: "יש להגדיר סוג שירות אחר." };
+    }
     if (error.message.includes("project_number_sequence_exhausted")) {
       return {
         buildingId: null,

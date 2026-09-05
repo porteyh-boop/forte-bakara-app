@@ -1,5 +1,5 @@
 -- Additive link fields on sales leads + atomic win-to-project conversion.
--- contact_id → existing contacts; converted_building_id → existing buildings.building_id
+-- contact_id → existing contacts; converted_building_id → buildings.building_id
 -- RPC is service_role only. Do not grant execute to public, anon, or authenticated.
 
 alter table public.sales_leads
@@ -7,6 +7,9 @@ alter table public.sales_leads
 
 alter table public.sales_leads
   add column if not exists converted_building_id text;
+
+alter table public.sales_leads
+  add column if not exists service_type_other text;
 
 create index if not exists idx_sales_leads_contact_id
   on public.sales_leads (contact_id);
@@ -18,10 +21,43 @@ create unique index if not exists idx_sales_leads_converted_building_id_unique
   on public.sales_leads (converted_building_id)
   where converted_building_id is not null;
 
+-- Safe if converted_building_id already exists from a partial 038 run.
+update public.sales_leads sl
+   set converted_building_id = null
+ where sl.converted_building_id is not null
+   and not exists (
+     select 1
+       from public.buildings b
+      where b.building_id = sl.converted_building_id
+   );
+
+do $$
+begin
+  if not exists (
+    select 1
+      from pg_constraint
+     where conname = 'sales_leads_converted_building_id_fkey'
+       and conrelid = 'public.sales_leads'::regclass
+  ) then
+    alter table public.sales_leads
+      add constraint sales_leads_converted_building_id_fkey
+      foreign key (converted_building_id)
+      references public.buildings (building_id)
+      on delete set null;
+  end if;
+end $$;
+
 comment on column public.sales_leads.contact_id is
   'Linked contacts.id from Master sales sync. Null if the lead has no syncable contact.';
 comment on column public.sales_leads.converted_building_id is
   'buildings.building_id created on first win conversion. Never cleared if status changes.';
+comment on column public.sales_leads.service_type_other is
+  'Required detail when service_type is אחר. Null otherwise.';
+
+-- Drop the previous 12-argument overload if a partial 038 already created it.
+drop function if exists public.convert_sales_lead_win_to_project(
+  uuid, text, text, text, text, text, text, text, text, numeric, text, uuid
+);
 
 create or replace function public.convert_sales_lead_win_to_project(
   p_lead_id uuid,
@@ -35,6 +71,7 @@ create or replace function public.convert_sales_lead_win_to_project(
   p_project_type text,
   p_order_amount numeric,
   p_service_type text,
+  p_service_type_other text,
   p_contact_id uuid
 )
 returns jsonb
@@ -49,6 +86,8 @@ declare
   v_prefix text;
   v_seq integer;
   v_candidate text;
+  v_service_type text;
+  v_service_type_other text;
   v_now timestamptz := clock_timestamp();
 begin
   if p_lead_id is null then
@@ -57,6 +96,16 @@ begin
 
   if p_name is null or length(trim(p_name)) = 0 then
     raise exception 'missing_building_name';
+  end if;
+
+  v_service_type := nullif(trim(coalesce(p_service_type, '')), '');
+  if v_service_type = 'אחר' then
+    v_service_type_other := nullif(trim(coalesce(p_service_type_other, '')), '');
+    if v_service_type_other is null then
+      raise exception 'missing_service_type_other';
+    end if;
+  else
+    v_service_type_other := null;
   end if;
 
   select *
@@ -143,8 +192,8 @@ begin
     nullif(trim(coalesce(p_project_notes, '')), ''),
     coalesce(nullif(trim(coalesce(p_project_type, '')), ''), 'standard'),
     p_order_amount,
-    nullif(trim(coalesce(p_service_type, '')), ''),
-    null
+    v_service_type,
+    v_service_type_other
   );
 
   update public.sales_leads
@@ -187,14 +236,14 @@ end;
 $$;
 
 comment on function public.convert_sales_lead_win_to_project(
-  uuid, text, text, text, text, text, text, text, text, numeric, text, uuid
+  uuid, text, text, text, text, text, text, text, text, numeric, text, text, uuid
 ) is
   'Atomic sales win conversion: lock lead, reuse converted_building_id if set, else insert buildings row and persist the link in one transaction. service_role only.';
 
 revoke all on function public.convert_sales_lead_win_to_project(
-  uuid, text, text, text, text, text, text, text, text, numeric, text, uuid
+  uuid, text, text, text, text, text, text, text, text, numeric, text, text, uuid
 ) from public, anon, authenticated;
 
 grant execute on function public.convert_sales_lead_win_to_project(
-  uuid, text, text, text, text, text, text, text, text, numeric, text, uuid
+  uuid, text, text, text, text, text, text, text, text, numeric, text, text, uuid
 ) to service_role;

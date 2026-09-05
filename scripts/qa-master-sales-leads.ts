@@ -27,10 +27,12 @@ import {
   salesWinMissingFieldLabel,
 } from "../lib/sales-lead-ops";
 import {
+  buildSalesWinConvertRpcArgs,
   simulateConvertSalesLeadWinToProject,
   simulateParallelSalesLeadWinConverts,
   SALES_WIN_CONVERT_RPC,
 } from "../lib/sales-lead-win-convert";
+import { SERVICE_TYPE_OTHER } from "../lib/service-type";
 import {
   mapSalesLeadHistoryRow,
   mapSalesLeadRow,
@@ -65,6 +67,7 @@ function fixtureLead(
     email: "",
     needDescription: "",
     serviceType: overrides.serviceType ?? "",
+    serviceTypeOther: overrides.serviceTypeOther ?? "",
     source: "",
     sourceDetail: "",
     contactChannel: "",
@@ -171,6 +174,15 @@ assert(
   validateSalesLeadDraft(emptySalesLeadDraft()) === "שם לקוח הוא שדה חובה.",
   "create requires client name"
 );
+assert(
+  validateSalesLeadDraft({
+    ...emptySalesLeadDraft(),
+    clientName: "לקוח",
+    serviceType: SERVICE_TYPE_OTHER,
+    serviceTypeOther: "",
+  }) === "יש להגדיר סוג שירות אחר.",
+  "אחר without detail is blocked on the lead"
+);
 
 const created = applySalesLeadDraft(
   {
@@ -269,6 +281,7 @@ const mapped = mapSalesLeadRow(
     email: "a@b.c",
     need_description: "צורך",
     service_type: "ייעוץ",
+    service_type_other: null,
     source: "אתר",
     source_detail: "",
     contact_channel: "טלפון",
@@ -359,6 +372,8 @@ assert(
     view.includes("נפתח פרויקט") &&
     view.includes("פתח כרטיס") &&
     view.includes("השלמת פרטים לפרויקט") &&
+    view.includes("serviceTypeOther") &&
+    view.includes("הגדר סוג שירות אחר") &&
     view.includes("buildMasterProjectV2Path") &&
     !view.includes("הצעת מחיר") &&
     !view.includes("המרה לפרויקט"),
@@ -514,6 +529,68 @@ assert(
     }).length === 0 &&
     salesWinMissingFieldLabel("buildingName") === "שם בניין",
   "win conversion requires building name only before the first project exists"
+);
+
+const regularWinArgs = buildSalesWinConvertRpcArgs({
+  ...created.lead,
+  buildingName: "מגדל הים",
+  serviceType: "ייעוץ",
+  serviceTypeOther: "לא אמור להישמר",
+});
+assert(
+  regularWinArgs.p_service_type === "ייעוץ" &&
+    regularWinArgs.p_service_type_other === null,
+  "regular service type copies to the project and clears other"
+);
+
+const otherWinArgs = buildSalesWinConvertRpcArgs({
+  ...created.lead,
+  buildingName: "מגדל הים",
+  serviceType: SERVICE_TYPE_OTHER,
+  serviceTypeOther: "  בדיקת נזק למעלית  ",
+});
+assert(
+  otherWinArgs.p_service_type === SERVICE_TYPE_OTHER &&
+    otherWinArgs.p_service_type_other === "בדיקת נזק למעלית",
+  "אחר with detail copies the detail to the project"
+);
+
+const blockedOther = applySalesLeadDraft(
+  {
+    ...emptySalesLeadDraft(),
+    clientName: "לקוח",
+    buildingName: "מגדל",
+    status: "זכייה",
+    serviceType: SERVICE_TYPE_OTHER,
+    serviceTypeOther: "   ",
+  },
+  null,
+  frozenNow
+);
+assert(
+  blockedOther.error === "יש להגדיר סוג שירות אחר.",
+  "win save with אחר and no detail is rejected before conversion"
+);
+
+const migration038 = fs.readFileSync(
+  path.join(process.cwd(), "supabase/migrations/038_sales_lead_links.sql"),
+  "utf8"
+);
+assert(
+  migration038.includes("sales_leads_converted_building_id_fkey") &&
+    migration038.includes("references public.buildings (building_id)") &&
+    migration038.includes("on delete set null") &&
+    migration038.includes("add column if not exists converted_building_id") &&
+    migration038.includes("add column if not exists service_type_other") &&
+    migration038.includes("p_service_type_other") &&
+    migration038.includes("missing_service_type_other") &&
+    migration038.includes(
+      "drop function if exists public.convert_sales_lead_win_to_project"
+    ) &&
+    migration038.includes(
+      "uuid, text, text, text, text, text, text, text, text, numeric, text, text, uuid"
+    ),
+  "038 has a real converted_building_id FK and updated RPC grants"
 );
 
 const opsSource = fs.readFileSync(

@@ -21,7 +21,7 @@ export const SALES_LEADS_TABLE = "sales_leads";
 export const SALES_LEAD_HISTORY_TABLE = "sales_lead_history";
 
 const LEAD_COLUMNS =
-  "id, client_name, building_name, address, city, contact_name, phone, email, need_description, service_type, source, source_detail, contact_channel, status, estimated_value, next_action, follow_up_date, contact_id, converted_building_id, created_at, updated_at";
+  "id, client_name, building_name, address, city, contact_name, phone, email, need_description, service_type, service_type_other, source, source_detail, contact_channel, status, estimated_value, next_action, follow_up_date, contact_id, converted_building_id, created_at, updated_at";
 
 const HISTORY_COLUMNS = "id, lead_id, occurred_at, kind, entry_text, status";
 
@@ -101,6 +101,7 @@ export function parseSalesLeadDraft(body: unknown): SalesLeadDraft | null {
     email: asString(raw.email),
     needDescription: asString(raw.needDescription),
     serviceType: asString(raw.serviceType),
+    serviceTypeOther: asString(raw.serviceTypeOther),
     source: asString(raw.source),
     sourceDetail: asString(raw.sourceDetail),
     contactChannel: asString(raw.contactChannel),
@@ -139,6 +140,7 @@ export function mapSalesLeadRow(
     email: asString(row.email),
     needDescription: asString(row.need_description),
     serviceType: asString(row.service_type),
+    serviceTypeOther: asString(row.service_type_other),
     source: asString(row.source),
     sourceDetail: asString(row.source_detail),
     contactChannel: asString(row.contact_channel),
@@ -165,6 +167,7 @@ function leadWritePayload(lead: SalesLead): Record<string, unknown> {
     email: lead.email,
     need_description: lead.needDescription,
     service_type: lead.serviceType,
+    service_type_other: lead.serviceTypeOther || null,
     source: lead.source,
     source_detail: lead.sourceDetail,
     contact_channel: lead.contactChannel,

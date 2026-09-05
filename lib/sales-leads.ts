@@ -1,4 +1,9 @@
-import { SERVICE_TYPES } from "./service-type";
+import {
+  isServiceType,
+  SERVICE_TYPE_OTHER,
+  SERVICE_TYPES,
+  validateServiceTypeFields,
+} from "./service-type";
 
 export const JERUSALEM_TIME_ZONE = "Asia/Jerusalem";
 
@@ -68,6 +73,7 @@ export type SalesLead = {
   email: string;
   needDescription: string;
   serviceType: string;
+  serviceTypeOther: string;
   source: string;
   sourceDetail: string;
   contactChannel: string;
@@ -92,6 +98,7 @@ export type SalesLeadDraft = {
   email: string;
   needDescription: string;
   serviceType: string;
+  serviceTypeOther: string;
   source: string;
   sourceDetail: string;
   contactChannel: string;
@@ -181,6 +188,7 @@ export function salesLeadMatchesSearch(lead: SalesLead, query: string): boolean 
     lead.buildingName,
     lead.contactName,
     lead.serviceType,
+    lead.serviceTypeOther,
     lead.status,
     lead.city,
     lead.phone,
@@ -217,6 +225,7 @@ export function emptySalesLeadDraft(): SalesLeadDraft {
     email: "",
     needDescription: "",
     serviceType: "",
+    serviceTypeOther: "",
     source: "",
     sourceDetail: "",
     contactChannel: "",
@@ -239,6 +248,7 @@ export function salesLeadToDraft(lead: SalesLead): SalesLeadDraft {
     email: lead.email,
     needDescription: lead.needDescription,
     serviceType: lead.serviceType,
+    serviceTypeOther: lead.serviceTypeOther,
     source: lead.source,
     sourceDetail: lead.sourceDetail,
     contactChannel: lead.contactChannel,
@@ -250,11 +260,25 @@ export function salesLeadToDraft(lead: SalesLead): SalesLeadDraft {
   };
 }
 
+export function normalizeSalesLeadServiceTypeOther(
+  serviceType: string,
+  serviceTypeOther: string
+): string {
+  if (serviceType.trim() !== SERVICE_TYPE_OTHER) return "";
+  return serviceTypeOther.trim();
+}
+
 export function validateSalesLeadDraft(draft: SalesLeadDraft): string | null {
   if (!draft.clientName.trim()) return "שם לקוח הוא שדה חובה.";
   if (draft.status && !SALES_LEAD_STATUSES.includes(draft.status)) {
     return "סטטוס לא תקין.";
   }
+  const serviceType = draft.serviceType.trim();
+  if (serviceType && !isServiceType(serviceType)) return "סוג שירות לא תקין.";
+  const serviceTypeError = isServiceType(serviceType)
+    ? validateServiceTypeFields(serviceType, draft.serviceTypeOther)
+    : null;
+  if (serviceTypeError) return serviceTypeError;
   if (draft.estimatedValue.trim()) {
     const value = Number(draft.estimatedValue);
     if (!Number.isFinite(value) || value < 0) return "שווי משוער אינו תקין.";
@@ -333,6 +357,10 @@ export function applySalesLeadDraft(
     email: draft.email.trim(),
     needDescription: draft.needDescription.trim(),
     serviceType: draft.serviceType.trim(),
+    serviceTypeOther: normalizeSalesLeadServiceTypeOther(
+      draft.serviceType,
+      draft.serviceTypeOther
+    ),
     source: draft.source.trim(),
     sourceDetail: draft.sourceDetail.trim(),
     contactChannel: draft.contactChannel.trim(),
@@ -363,6 +391,7 @@ function createBlankLead(now: Date): SalesLead {
     email: "",
     needDescription: "",
     serviceType: "",
+    serviceTypeOther: "",
     source: "",
     sourceDetail: "",
     contactChannel: "",
