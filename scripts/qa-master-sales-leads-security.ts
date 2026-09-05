@@ -213,10 +213,27 @@ async function main(): Promise<void> {
       linksMigration.includes("add column if not exists converted_building_id") &&
       linksMigration.includes("idx_sales_leads_contact_id") &&
       linksMigration.includes("idx_sales_leads_converted_building_id") &&
+      linksMigration.includes("convert_sales_lead_win_to_project") &&
+      linksMigration.includes("for update") &&
+      linksMigration.includes("pg_advisory_xact_lock") &&
+      linksMigration.includes(
+        "revoke all on function public.convert_sales_lead_win_to_project"
+      ) &&
+      linksMigration.includes("from public, anon, authenticated") &&
+      linksMigration.includes("grant execute on function public.convert_sales_lead_win_to_project") &&
+      linksMigration.includes("to service_role") &&
       !linksMigration.includes("create table") &&
       !linksMigration.includes("create_building_atomic") &&
       !linksMigration.includes("הצעת מחיר"),
-    "038 migration: only sales lead link columns; no parallel modules or security-branch RPC"
+    "038 migration: link columns + atomic win RPC locked to service_role; no security-branch RPC"
+  );
+
+  const winConvertClient = read("lib/sales-lead-win-convert.ts");
+  assert(
+    !winConvertClient.includes("SUPABASE_SERVICE_ROLE_KEY") &&
+      !winConvertClient.includes("getSupabaseServiceClient") &&
+      winConvertClient.includes("simulateParallelSalesLeadWinConverts"),
+    "win-convert helper has no service role and includes parallel simulation"
   );
 
   const opsServer = read("lib/sales-lead-ops-server.ts");

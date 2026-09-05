@@ -27,6 +27,11 @@ import {
   salesWinMissingFieldLabel,
 } from "../lib/sales-lead-ops";
 import {
+  simulateConvertSalesLeadWinToProject,
+  simulateParallelSalesLeadWinConverts,
+  SALES_WIN_CONVERT_RPC,
+} from "../lib/sales-lead-win-convert";
+import {
   mapSalesLeadHistoryRow,
   mapSalesLeadRow,
   parseSalesLeadDraft,
@@ -301,6 +306,7 @@ const productFiles = [
   "lib/sales-leads-api.ts",
   "lib/sales-lead-ops.ts",
   "lib/sales-lead-ops-server.ts",
+  "lib/sales-lead-win-convert.ts",
   "components/master-v2/MasterSalesLeadsView.tsx",
   "app/master/sales/page.tsx",
 ];
@@ -368,8 +374,10 @@ assert(
   !apiClient.includes("SUPABASE_SERVICE_ROLE_KEY") &&
     !apiClient.includes("getSupabaseServiceClient") &&
     !view.includes("SUPABASE_SERVICE_ROLE_KEY") &&
-    !view.includes("getSupabaseServiceClient"),
-  "browser sales files have no service role"
+    !view.includes("getSupabaseServiceClient") &&
+    !apiClient.includes(SALES_WIN_CONVERT_RPC) &&
+    !view.includes(SALES_WIN_CONVERT_RPC),
+  "browser sales files have no service role or win RPC"
 );
 
 const linked = applySalesLeadDraft(
@@ -518,15 +526,70 @@ const serverSource = fs.readFileSync(
 );
 assert(
   opsSource.includes("syncSalesLeadContactServer") &&
-    opsSource.includes("createWonProjectFromLead") &&
-    opsSource.includes("attachContactToProject") &&
+    opsSource.includes("SALES_WIN_CONVERT_RPC") &&
+    opsSource.includes(".rpc(") &&
+    !opsSource.includes("from(BUILDINGS_TABLE).insert") &&
     opsSource.includes("getSupabaseServiceClient") &&
     !opsSource.includes("getPilotSupabaseClient") &&
     serverSource.includes("applySalesLeadSideEffects") &&
     serverSource.includes("contact_id") &&
     serverSource.includes("converted_building_id"),
-  "server write path: contact sync + win project via service_role only"
+  "server write path: contact sync + atomic win RPC via service_role only"
 );
 
-console.log(`\n=== סיכום: ${passed} עברו, ${failed} נכשלו ===\n`);
-process.exit(failed > 0 ? 1 : 0);
+async function runAtomicWinTests(): Promise<void> {
+  const parallelStore = {
+    convertedBuildingIdByLead: { "lead-parallel": null as string | null },
+    buildingIds: [] as string[],
+  };
+  let nextSeq = 101;
+  const parallelResults = await simulateParallelSalesLeadWinConverts(
+    parallelStore,
+    "lead-parallel",
+    2,
+    () => `826${String(nextSeq++).padStart(3, "0")}`
+  );
+  assert(
+    parallelResults.length === 2 &&
+      parallelStore.buildingIds.length === 1 &&
+      parallelStore.convertedBuildingIdByLead["lead-parallel"] === "826101" &&
+      parallelResults.every((result) => result.building_id === "826101") &&
+      parallelResults.filter((result) => result.already_converted).length === 1 &&
+      parallelResults.filter((result) => !result.already_converted).length === 1,
+    "two parallel win conversions create exactly one project"
+  );
+
+  const rollbackStore = {
+    convertedBuildingIdByLead: { "lead-rollback": null as string | null },
+    buildingIds: [] as string[],
+  };
+  const rollbackLocks = new Map();
+  let rollbackFailed = false;
+  try {
+    await simulateConvertSalesLeadWinToProject(
+      rollbackStore,
+      rollbackLocks,
+      "lead-rollback",
+      () => "826777",
+      { failAfterInsert: true }
+    );
+  } catch {
+    rollbackFailed = true;
+  }
+  assert(
+    rollbackFailed &&
+      rollbackStore.buildingIds.length === 0 &&
+      rollbackStore.convertedBuildingIdByLead["lead-rollback"] == null,
+    "failed conversion rolls back the partial project"
+  );
+}
+
+void runAtomicWinTests()
+  .catch((error) => {
+    failed += 1;
+    console.error("  ✗ atomic win tests threw", error);
+  })
+  .then(() => {
+    console.log(`\n=== סיכום: ${passed} עברו, ${failed} נכשלו ===\n`);
+    process.exit(failed > 0 ? 1 : 0);
+  });

@@ -1,6 +1,4 @@
 import { attachContactToProject } from "@/lib/project-contacts-server";
-import { BUILDINGS_TABLE } from "@/lib/building-contacts-server";
-import { normalizeBuildingId } from "@/lib/buildings-cloud";
 import {
   createContact,
   getContactById,
@@ -8,9 +6,6 @@ import {
   updateContact,
 } from "@/lib/contacts-server";
 import { buildMasterProjectV2Path } from "@/lib/master-project-v2-routes";
-import { roundMoney } from "@/lib/project-financial";
-import { generateNextProjectBuildingId } from "@/lib/project-number";
-import { DEFAULT_PROJECT_TYPE } from "@/lib/project-type-config";
 import {
   buildSalesContactInput,
   findSalesContactByPhoneThenEmail,
@@ -20,8 +15,12 @@ import {
   type OpenedSalesProject,
   type SalesWinMissingField,
 } from "@/lib/sales-lead-ops";
+import {
+  buildSalesWinConvertRpcArgs,
+  parseSalesWinConvertRpcResult,
+  SALES_WIN_CONVERT_RPC,
+} from "@/lib/sales-lead-win-convert";
 import type { SalesLead } from "@/lib/sales-leads";
-import { isServiceType } from "@/lib/service-type";
 import {
   getSupabaseServiceClient,
   isSupabaseServiceConfigured,
@@ -36,29 +35,6 @@ export type SalesLeadSideEffects = {
   projectConversion: { required: true; missing: SalesWinMissingField[] } | null;
   error: string | null;
 };
-
-async function listBuildingIdAllocations(): Promise<{
-  buildingIds: string[];
-  projectNumbers: string[];
-}> {
-  const client = getSupabaseServiceClient();
-  if (!client) return { buildingIds: [], projectNumbers: [] };
-
-  const { data, error } = await client
-    .from(BUILDINGS_TABLE)
-    .select("building_id, project_number");
-  if (error || !data) {
-    console.error("[sales-lead-ops-server] list buildings failed", error?.message);
-    return { buildingIds: [], projectNumbers: [] };
-  }
-
-  return {
-    buildingIds: data.map((row) => String(row.building_id ?? "")).filter(Boolean),
-    projectNumbers: data
-      .map((row) => String(row.project_number ?? "").trim())
-      .filter(Boolean),
-  };
-}
 
 export async function syncSalesLeadContactServer(
   lead: SalesLead
@@ -109,59 +85,49 @@ export async function syncSalesLeadContactServer(
   return { contactId: created.contact.id, error: null };
 }
 
-async function createWonProjectFromLead(
+async function convertWonProjectFromLead(
   lead: SalesLead
-): Promise<{ buildingId: string | null; error: string | null }> {
+): Promise<{
+  buildingId: string | null;
+  alreadyConverted: boolean;
+  error: string | null;
+}> {
   if (!isSupabaseServiceConfigured()) {
-    return { buildingId: null, error: "supabase_service_unconfigured" };
+    return { buildingId: null, alreadyConverted: false, error: "supabase_service_unconfigured" };
   }
   const client = getSupabaseServiceClient();
-  if (!client) return { buildingId: null, error: "supabase_service_unconfigured" };
-
-  const allocations = await listBuildingIdAllocations();
-  let buildingId: string;
-  try {
-    buildingId = normalizeBuildingId(
-      generateNextProjectBuildingId(allocations.buildingIds, allocations.projectNumbers)
-    );
-  } catch {
-    return { buildingId: null, error: "לא ניתן להקצות מספר פרויקט." };
+  if (!client) {
+    return { buildingId: null, alreadyConverted: false, error: "supabase_service_unconfigured" };
   }
 
-  const serviceType = isServiceType(lead.serviceType) ? lead.serviceType : null;
-  const projectType =
-    lead.serviceType === "בדק בית / חוות דעת" ? "home_inspection" : DEFAULT_PROJECT_TYPE;
-
-  const { error } = await client.from(BUILDINGS_TABLE).insert({
-    building_id: buildingId,
-    project_number: buildingId,
-    name: lead.buildingName.trim(),
-    city: lead.city.trim() || null,
-    address: lead.address.trim() || null,
-    management_company: lead.clientName.trim() || null,
-    contact_name: lead.contactName.trim() || null,
-    contact_phone: lead.phone.trim() || null,
-    is_active: true,
-    project_stage: "הזמנה",
-    project_notes: [
-      lead.needDescription.trim(),
-      lead.email.trim() ? `דוא״ל: ${lead.email.trim()}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n"),
-    project_type: projectType,
-    order_amount:
-      lead.estimatedValue != null ? roundMoney(lead.estimatedValue) : null,
-    service_type: serviceType,
-    service_type_other: null,
-  });
-
+  const { data, error } = await client.rpc(
+    SALES_WIN_CONVERT_RPC,
+    buildSalesWinConvertRpcArgs(lead)
+  );
   if (error) {
-    console.error("[sales-lead-ops-server] create building failed", error.message);
-    return { buildingId: null, error: "save_failed" };
+    console.error("[sales-lead-ops-server] win convert RPC failed", error.message);
+    if (error.message.includes("missing_building_name")) {
+      return { buildingId: null, alreadyConverted: false, error: null };
+    }
+    if (error.message.includes("project_number_sequence_exhausted")) {
+      return {
+        buildingId: null,
+        alreadyConverted: false,
+        error: "לא ניתן להקצות מספר פרויקט.",
+      };
+    }
+    return { buildingId: null, alreadyConverted: false, error: "save_failed" };
   }
 
-  return { buildingId, error: null };
+  const parsed = parseSalesWinConvertRpcResult(data);
+  if (!parsed) {
+    return { buildingId: null, alreadyConverted: false, error: "save_failed" };
+  }
+  return {
+    buildingId: parsed.building_id,
+    alreadyConverted: parsed.already_converted,
+    error: null,
+  };
 }
 
 export async function applySalesLeadSideEffects(
@@ -236,55 +202,28 @@ export async function applySalesLeadSideEffects(
     };
   }
 
-  const created = await createWonProjectFromLead(withContact);
-  if (!created.buildingId) {
+  const converted = await convertWonProjectFromLead(withContact);
+  if (!converted.buildingId) {
     return {
       contactId,
       convertedBuildingId: null,
       openedProject: null,
-      projectConversion: null,
-      error: created.error ?? "save_failed",
+      projectConversion: converted.error
+        ? null
+        : { required: true, missing: ["buildingName"] },
+      error: converted.error,
     };
-  }
-
-  let linkError = await persistLinks({
-    contactId,
-    convertedBuildingId: created.buildingId,
-  });
-  if (linkError) {
-    linkError = await persistLinks({
-      contactId,
-      convertedBuildingId: created.buildingId,
-    });
-  }
-  if (linkError) {
-    return {
-      contactId,
-      convertedBuildingId: created.buildingId,
-      openedProject: {
-        buildingId: created.buildingId,
-        path: buildMasterProjectV2Path(created.buildingId),
-      },
-      projectConversion: null,
-      error: linkError,
-    };
-  }
-
-  if (contactId) {
-    await attachContactToProject({
-      buildingId: created.buildingId,
-      contactId,
-      isPrimary: true,
-    });
   }
 
   return {
     contactId,
-    convertedBuildingId: created.buildingId,
-    openedProject: {
-      buildingId: created.buildingId,
-      path: buildMasterProjectV2Path(created.buildingId),
-    },
+    convertedBuildingId: converted.buildingId,
+    openedProject: converted.alreadyConverted
+      ? null
+      : {
+          buildingId: converted.buildingId,
+          path: buildMasterProjectV2Path(converted.buildingId),
+        },
     projectConversion: null,
     error: null,
   };
