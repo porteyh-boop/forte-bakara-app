@@ -98,6 +98,9 @@ export async function provisionSalesLeadTrialPortalServer(
     if (error.message.includes("not_found")) {
       return { result: null, error: "not_found" };
     }
+    if (error.message.includes("buildings_service_type_check")) {
+      return { result: null, error: "invalid_building_service_type" };
+    }
     return { result: null, error: "provision_failed" };
   }
 

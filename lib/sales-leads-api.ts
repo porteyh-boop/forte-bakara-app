@@ -71,6 +71,9 @@ function hebrewSalesApiError(error: string, status: number): string {
     return "פתיחת ניסיון זמינה רק לליד QA מסומן.";
   }
   if (error === "provision_failed") return "פתיחת הניסיון נכשלה.";
+  if (error === "invalid_building_service_type") {
+    return "סוג השירות בליד אינו תואם לבניין — עדכנו את סוג השירות או נסו שוב לאחר עדכון המערכת.";
+  }
   return error || "שגיאת שרת.";
 }
 

@@ -40,7 +40,9 @@ function trialErrorStatus(error: string): number {
     error === "missing_elevators" ||
     error === "invalid_expires_at" ||
     error === "expires_at_must_be_future" ||
-    error === "invalid_request"
+    error === "invalid_request" ||
+    error === "invalid_building_service_type" ||
+    error === "qa_lead_required"
   ) {
     return 400;
   }
