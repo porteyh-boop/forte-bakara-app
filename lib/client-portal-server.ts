@@ -47,6 +47,7 @@ import {
 } from "@/lib/pilot-cloud";
 import type { StatisticsFaultRow } from "@/lib/statistics";
 import { deliverTelegramMessage } from "@/lib/telegram";
+import { shouldSuppressOwnerTelegramForSalesTrialQaBuilding } from "@/lib/sales-lead-trial-portal-server";
 import { getSupabaseServiceClient } from "@/lib/supabase-server";
 import type { Elevator, Fault, FaultStatus, FaultType } from "@/lib/types";
 
@@ -304,7 +305,7 @@ async function dispatchFaultCreatedNotificationServer(
   const input = pilotFaultToNotificationInput(fault, "FAULT_CREATED");
   if (!shouldDispatchOwnerTelegram(input.eventType)) return;
 
-  if (await fetchBuildingIsTrialServer(input.buildingId)) {
+  if (await shouldSuppressOwnerTelegramForSalesTrialQaBuilding(input.buildingId)) {
     return;
   }
 

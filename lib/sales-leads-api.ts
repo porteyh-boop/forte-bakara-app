@@ -123,6 +123,7 @@ export async function createSalesLead(
 
 export async function fetchSalesLeadTrialPortalStatus(leadId: string): Promise<{
   status: SalesLeadTrialPortalStatus | null;
+  canProvision: boolean;
   error: string | null;
 }> {
   try {
@@ -130,15 +131,25 @@ export async function fetchSalesLeadTrialPortalStatus(leadId: string): Promise<{
       `${MASTER_SALES_LEADS_API}/${encodeURIComponent(leadId)}/trial-portal`,
       { method: "GET", cache: "no-store" }
     );
-    const payload = await parseMasterApiJson<{ status?: SalesLeadTrialPortalStatus; error?: string }>(
-      response
-    );
+    const payload = await parseMasterApiJson<{
+      status?: SalesLeadTrialPortalStatus;
+      meta?: { canProvision?: boolean };
+      error?: string;
+    }>(response);
     if (!response.ok) {
-      return { status: null, error: await readApiError(response) };
+      return { status: null, canProvision: false, error: await readApiError(response) };
     }
-    return { status: payload?.status ?? null, error: null };
+    return {
+      status: payload?.status ?? null,
+      canProvision: payload?.meta?.canProvision === true,
+      error: null,
+    };
   } catch {
-    return { status: null, error: "לא ניתן לטעון את מצב הניסיון." };
+    return {
+      status: null,
+      canProvision: false,
+      error: "לא ניתן לטעון את מצב הניסיון.",
+    };
   }
 }
 

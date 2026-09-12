@@ -52,6 +52,21 @@ export function salesTrialPortalLeadNotAllowedError(): {
   };
 }
 
+import type { SalesLead } from "@/lib/sales-leads";
+
+/** Master UI: enable “open trial” only for allowlisted synthetic QA leads without a trial building yet. */
+export function canOpenSalesLeadTrialPortalForLead(
+  lead: Pick<
+    SalesLead,
+    "id" | "trialBuildingId" | "clientName" | "email" | "phone"
+  >
+): boolean {
+  if (lead.trialBuildingId?.trim()) return false;
+  if (!isSyntheticSalesTrialQaLead(lead)) return false;
+  if (!isSalesTrialPortalFeatureEnabled()) return false;
+  return isSalesTrialPortalAllowedForLead(lead.id);
+}
+
 export function isSyntheticSalesTrialQaLead(input: {
   clientName: string;
   email?: string;

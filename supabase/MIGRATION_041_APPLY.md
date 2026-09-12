@@ -2,10 +2,12 @@
 
 Additive only: columns `buildings.is_trial`, `sales_leads.trial_*`, RPC `provision_sales_lead_trial_portal`, updated `convert_sales_lead_win_to_project`.
 
+**Production git branch:** `master` (`origin/HEAD` → `master`). Do not merge to `main` unless Vercel is explicitly wired to it.
+
 ## Apply
 
 1. Supabase Dashboard → SQL Editor → New query.
-2. Wrap in a transaction:
+2. Paste **entire** file `migrations/041_sales_lead_trial_portal_SQL_EDITOR.sql` (already wrapped in one transaction), or:
 
 ```sql
 BEGIN;

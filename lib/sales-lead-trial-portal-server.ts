@@ -11,11 +11,40 @@ import {
   isSyntheticSalesTrialQaLead,
 } from "@/lib/sales-lead-trial-portal-feature";
 import type { SalesLead } from "@/lib/sales-leads";
+import { normalizeBuildingId } from "@/lib/buildings-cloud";
 import { getClientUserAccessByIdServer } from "@/lib/master-client-access-server";
 import {
   getSupabaseServiceClient,
   isSupabaseServiceConfigured,
 } from "@/lib/supabase-server";
+
+const SALES_LEADS_TABLE = "sales_leads";
+
+/** Suppress owner Telegram only for trial buildings tied to synthetic QA sales leads. */
+export async function shouldSuppressOwnerTelegramForSalesTrialQaBuilding(
+  buildingId: string
+): Promise<boolean> {
+  if (!isSupabaseServiceConfigured()) return false;
+
+  const client = getSupabaseServiceClient();
+  if (!client) return false;
+
+  const normalized = normalizeBuildingId(buildingId);
+  const { data, error } = await client
+    .from(SALES_LEADS_TABLE)
+    .select("client_name, email, phone")
+    .eq("trial_building_id", normalized)
+    .maybeSingle();
+
+  if (error || !data) return false;
+
+  const row = data as Record<string, unknown>;
+  return isSyntheticSalesTrialQaLead({
+    clientName: String(row.client_name ?? ""),
+    email: row.email ? String(row.email) : undefined,
+    phone: row.phone ? String(row.phone) : undefined,
+  });
+}
 
 export async function provisionSalesLeadTrialPortalServer(
   lead: SalesLead,

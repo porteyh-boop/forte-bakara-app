@@ -14,6 +14,7 @@ import {
   parseSalesLeadId,
 } from "@/lib/sales-leads-server";
 import {
+  canOpenSalesLeadTrialPortalForLead,
   isSalesTrialPortalAllowedForLead,
   isSalesTrialPortalFeatureEnabled,
   salesTrialPortalFeatureDisabledError,
@@ -74,7 +75,11 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
   const status = await loadSalesLeadTrialPortalStatusServer(loaded.lead);
   return NextResponse.json(
-    { status, error: null },
+    {
+      status,
+      meta: { canProvision: canOpenSalesLeadTrialPortalForLead(loaded.lead) },
+      error: null,
+    },
     { headers: { "Cache-Control": "no-store" } }
   );
 }

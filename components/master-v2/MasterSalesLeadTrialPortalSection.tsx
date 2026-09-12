@@ -49,6 +49,7 @@ export default function MasterSalesLeadTrialPortalSection({
   onMessage,
 }: MasterSalesLeadTrialPortalSectionProps) {
   const [status, setStatus] = useState<SalesLeadTrialPortalStatus | null>(null);
+  const [canProvision, setCanProvision] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -58,16 +59,18 @@ export default function MasterSalesLeadTrialPortalSection({
   const [elevatorLines, setElevatorLines] = useState("מעלית 1\nמעלית 2");
 
   const refreshStatus = useCallback(async () => {
-    if (!lead.trialBuildingId && !lead.id) {
+    if (!lead.id) {
       setStatus(null);
+      setCanProvision(false);
       return;
     }
     setLoadingStatus(true);
     const result = await fetchSalesLeadTrialPortalStatus(lead.id);
     setStatus(result.status);
+    setCanProvision(result.canProvision);
     if (result.error) onMessage(result.error);
     setLoadingStatus(false);
-  }, [lead.id, lead.trialBuildingId, onMessage]);
+  }, [lead.id, onMessage]);
 
   useEffect(() => {
     void refreshStatus();
@@ -148,7 +151,7 @@ export default function MasterSalesLeadTrialPortalSection({
             setFormError(null);
             setDialogOpen(true);
           }}
-          disabled={!lead.trialBuildingId}
+          disabled={!lead.trialBuildingId && !canProvision}
         >
           {lead.trialBuildingId ? "פרטי ניסיון" : "פתיחת פורטל ניסיון"}
         </ForteV2SecondaryButton>
@@ -200,10 +203,13 @@ export default function MasterSalesLeadTrialPortalSection({
             </ForteV2SecondaryButton>
           </div>
         </div>
+      ) : canProvision ? (
+        <p className="text-xs text-forte-text-secondary">
+          ליד QA מורשה — ניתן לפתוח פורטל ניסיון. האכיפה (דגל + allowlist + סימון QA) בשרת.
+        </p>
       ) : (
         <p className="text-xs text-forte-text-secondary">
-          פתיחת ניסיון מכל הלידים כבויה בשרת עד סיום בדיקת QA. לאחר הפעלה — רק ללידים
-          מסומנים QA.
+          פתיחת ניסיון זמינה רק ללידים מסומני QA שמופיעים ב-allowlist והמתג פעיל בשרת.
         </p>
       )}
 

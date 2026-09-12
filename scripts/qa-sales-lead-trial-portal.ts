@@ -16,6 +16,12 @@ import {
   type SimulatedWinWithTrialStore,
 } from "../lib/sales-lead-trial-portal";
 import { formatMasterFaultInboxBuildingLabel } from "../lib/master-fault-inbox";
+import {
+  canOpenSalesLeadTrialPortalForLead,
+  isSyntheticSalesTrialQaLead,
+  SALES_TRIAL_PORTAL_ENV_ALLOWED_LEADS,
+  SALES_TRIAL_PORTAL_ENV_ENABLED,
+} from "../lib/sales-lead-trial-portal-feature";
 
 let passed = 0;
 let failed = 0;
@@ -124,6 +130,34 @@ async function main(): Promise<void> {
     is_trial_building: true,
   });
   assert(inboxLabel.includes("ניסיון"), "inbox trial building label");
+
+  assert(
+    isSyntheticSalesTrialQaLead({
+      clientName: "QA-TRIAL-PORTAL Test",
+      email: "x@qa.forte.invalid",
+      phone: "0500000000",
+    }),
+    "synthetic QA lead markers"
+  );
+
+  const qaLead = {
+    id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+    trialBuildingId: null as string | null,
+    clientName: "QA-TRIAL-PORTAL Test",
+    email: "x@qa.forte.invalid",
+    phone: "0500000000",
+  };
+  const prevEnabled = process.env[SALES_TRIAL_PORTAL_ENV_ENABLED];
+  const prevAllowed = process.env[SALES_TRIAL_PORTAL_ENV_ALLOWED_LEADS];
+  process.env[SALES_TRIAL_PORTAL_ENV_ENABLED] = "true";
+  process.env[SALES_TRIAL_PORTAL_ENV_ALLOWED_LEADS] = qaLead.id;
+  assert(canOpenSalesLeadTrialPortalForLead(qaLead), "can open trial when allowlisted QA lead");
+  process.env[SALES_TRIAL_PORTAL_ENV_ENABLED] = "false";
+  assert(!canOpenSalesLeadTrialPortalForLead(qaLead), "cannot open when feature flag off");
+  if (prevEnabled === undefined) delete process.env[SALES_TRIAL_PORTAL_ENV_ENABLED];
+  else process.env[SALES_TRIAL_PORTAL_ENV_ENABLED] = prevEnabled;
+  if (prevAllowed === undefined) delete process.env[SALES_TRIAL_PORTAL_ENV_ALLOWED_LEADS];
+  else process.env[SALES_TRIAL_PORTAL_ENV_ALLOWED_LEADS] = prevAllowed;
 
   console.log(`\nDone: ${passed} passed, ${failed} failed\n`);
   if (failed > 0) process.exit(1);

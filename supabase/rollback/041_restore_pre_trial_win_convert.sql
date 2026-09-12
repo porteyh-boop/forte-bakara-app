@@ -68,6 +68,10 @@ begin
     );
   end if;
 
+  if nullif(trim(coalesce(v_lead.trial_building_id, '')), '') is not null then
+    raise exception 'trial_lead_win_requires_041_function';
+  end if;
+
   perform pg_advisory_xact_lock(hashtext('forte_sales_win_project_id'));
 
   v_year := extract(year from (timezone('Asia/Jerusalem', v_now)))::integer;
