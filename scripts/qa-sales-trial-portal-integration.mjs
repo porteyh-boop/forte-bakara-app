@@ -31,6 +31,8 @@ const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
 const enabled = process.env.FORTE_SALES_TRIAL_PORTAL_ENABLED?.trim().toLowerCase();
 const allowedRaw = process.env.FORTE_SALES_TRIAL_PORTAL_ALLOWED_LEAD_IDS?.trim() ?? "";
+const existingLeadId =
+  process.env.FORTE_QA_TRIAL_EXISTING_LEAD_ID?.trim().toLowerCase() ?? "";
 
 if (!url || !key) {
   console.error("FAIL: missing Supabase URL or service role in env");
@@ -77,27 +79,45 @@ async function main() {
   }
   ok("migration 041 columns visible");
 
-  const { data: leadRow, error: leadErr } = await client
-    .from("sales_leads")
-    .insert({
-      client_name: `${QA_PREFIX} ${new Date().toISOString().slice(0, 10)}`,
-      building_name: `${QA_PREFIX} בניין`,
-      address: "רחוב QA 1",
-      city: "QA",
-      contact_name: "QA וועד",
-      phone: QA_PHONE,
-      email: QA_EMAIL,
-      status: "חדש",
-    })
-    .select("id")
-    .single();
+  let leadId = existingLeadId;
+  if (leadId) {
+    const { data: existing, error: existingErr } = await client
+      .from("sales_leads")
+      .select("id, trial_building_id, client_name")
+      .eq("id", leadId)
+      .maybeSingle();
+    if (existingErr || !existing?.id) {
+      bad("load existing QA lead", existingErr?.message ?? "not_found");
+      process.exit(1);
+    }
+    if (!String(existing.client_name ?? "").startsWith(QA_PREFIX)) {
+      bad("existing lead is not QA-TRIAL-PORTAL synthetic");
+      process.exit(1);
+    }
+    ok(`use existing QA lead ${leadId}`);
+  } else {
+    const { data: leadRow, error: leadErr } = await client
+      .from("sales_leads")
+      .insert({
+        client_name: `${QA_PREFIX} ${new Date().toISOString().slice(0, 10)}`,
+        building_name: `${QA_PREFIX} בניין`,
+        address: "רחוב QA 1",
+        city: "QA",
+        contact_name: "QA וועד",
+        phone: QA_PHONE,
+        email: QA_EMAIL,
+        status: "חדש",
+      })
+      .select("id")
+      .single();
 
-  if (leadErr || !leadRow?.id) {
-    bad("create QA lead", leadErr?.message);
-    process.exit(1);
+    if (leadErr || !leadRow?.id) {
+      bad("create QA lead", leadErr?.message);
+      process.exit(1);
+    }
+    leadId = leadRow.id;
+    ok("create QA lead");
   }
-  const leadId = leadRow.id;
-  ok("create QA lead");
 
   if (allowedRaw && !allowedRaw.toLowerCase().includes(leadId.toLowerCase())) {
     console.log(
