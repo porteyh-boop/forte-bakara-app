@@ -390,6 +390,19 @@ export default function MasterSalesLeadsView({
             onClose={closeDialog}
             size="xl"
           >
+            {editingLead ? (
+              <MasterSalesLeadTrialPortalSection
+                lead={editingLead}
+                onLeadUpdated={(updated) => {
+                  upsertLead(updated);
+                  if (editingId === updated.id) {
+                    setDraft(salesLeadToDraft(updated));
+                  }
+                }}
+                onMessage={setMessage}
+              />
+            ) : null}
+
             <form className="space-y-4" onSubmit={(event) => void handleSave(event)}>
               {formError ? (
                 <ForteV2StatusBanner tone="error">{formError}</ForteV2StatusBanner>
@@ -399,21 +412,6 @@ export default function MasterSalesLeadsView({
                 <p className="rounded-xl border border-sky-100 bg-sky-50 px-3 py-2 text-sm text-sky-900">
                   {PUBLIC_SALES_LEAD_FORM_BADGE}
                 </p>
-              ) : null}
-
-              {editingLead ? (
-                <MasterSalesLeadTrialPortalSection
-                  lead={editingLead}
-                  onLeadUpdated={(updated) => {
-                    setLeads((current) =>
-                      current.map((item) => (item.id === updated.id ? updated : item))
-                    );
-                    if (editingId === updated.id) {
-                      setDraft(salesLeadToDraft(updated));
-                    }
-                  }}
-                  onMessage={setMessage}
-                />
               ) : null}
 
               {editingLead?.convertedBuildingId ? (

@@ -15,6 +15,7 @@ const MASTER_SALES_LEADS_API = "/forte/api/master-sales-leads";
 
 interface ApiErrorPayload {
   error?: string;
+  message?: string;
 }
 
 interface ListResponse {
@@ -60,13 +61,27 @@ function hebrewSalesApiError(error: string, status: number): string {
     return "הנתונים שנשלחו אינם תקינים.";
   }
   if (error === "save_failed") return "השמירה נכשלה. נסו שוב.";
+  if (error === "trial_portal_disabled") {
+    return "פורטל הניסיון אינו פעיל בסביבה זו.";
+  }
+  if (error === "trial_portal_lead_not_allowed") {
+    return "פורטל הניסיון אינו מאושר לליד זה.";
+  }
+  if (error === "qa_lead_required") {
+    return "פתיחת ניסיון זמינה רק לליד QA מסומן.";
+  }
+  if (error === "provision_failed") return "פתיחת הניסיון נכשלה.";
   return error || "שגיאת שרת.";
 }
 
 async function readApiError(response: Response): Promise<string> {
   const payload = await parseMasterApiJson<ApiErrorPayload>(response);
   const raw = parseMasterApiError(payload, response.status);
-  return hebrewSalesApiError(raw, response.status);
+  const hebrew = hebrewSalesApiError(raw, response.status);
+  if (hebrew !== raw && hebrew) return hebrew;
+  const msg = payload?.message?.trim();
+  if (msg) return msg;
+  return hebrew;
 }
 
 export async function listSalesLeads(): Promise<{

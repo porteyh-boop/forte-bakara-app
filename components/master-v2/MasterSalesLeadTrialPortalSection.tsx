@@ -92,8 +92,7 @@ export default function MasterSalesLeadTrialPortalSection({
     }
   }
 
-  async function handleProvision(event: React.FormEvent) {
-    event.preventDefault();
+  async function handleProvision() {
     setFormError(null);
     const elevatorNames = elevatorLines
       .split("\n")
@@ -104,9 +103,21 @@ export default function MasterSalesLeadTrialPortalSection({
       return;
     }
 
+    let expiresIso: string;
+    try {
+      expiresIso = new Date(expiresAt).toISOString();
+      if (Number.isNaN(new Date(expiresAt).getTime())) {
+        setFormError("תאריך התפוגה אינו תקין.");
+        return;
+      }
+    } catch {
+      setFormError("תאריך התפוגה אינו תקין.");
+      return;
+    }
+
     setSaving(true);
     const result = await provisionSalesLeadTrialPortal(lead.id, {
-      expiresAt: new Date(expiresAt).toISOString(),
+      expiresAt: expiresIso,
       elevatorNames,
     });
     setSaving(false);
@@ -117,12 +128,16 @@ export default function MasterSalesLeadTrialPortalSection({
     }
 
     onLeadUpdated(result.lead);
-    setStatus(result.status);
+    if (result.status) {
+      setStatus(result.status);
+    } else {
+      await refreshStatus();
+    }
     setDialogOpen(false);
     onMessage(
       result.result?.alreadyProvisioned
         ? "פורטל הניסיון כבר קיים — הוחזר הקישור הקיים."
-        : "פורטל הניסיון נפתח."
+        : "פורטל הניסיון נפתח — ניתן להעתיק את הקישור למטה."
     );
   }
 
@@ -146,6 +161,7 @@ export default function MasterSalesLeadTrialPortalSection({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h4 className="text-sm font-semibold text-forte-text">פורטל ניסיון</h4>
         <ForteV2SecondaryButton
+          type="button"
           size="sm"
           onClick={() => {
             setFormError(null);
@@ -183,6 +199,9 @@ export default function MasterSalesLeadTrialPortalSection({
                 timeZone: "Asia/Jerusalem",
               })}
             </p>
+          ) : null}
+          {portalUrl ? (
+            <p className="break-all text-xs text-forte-text-secondary">{portalUrl}</p>
           ) : null}
           <div className="flex flex-wrap gap-2">
             <ForteV2SecondaryButton
@@ -233,7 +252,7 @@ export default function MasterSalesLeadTrialPortalSection({
                 </div>
               </div>
             ) : (
-              <form className="space-y-4" onSubmit={(event) => void handleProvision(event)}>
+              <div className="space-y-4">
                 <p className="text-sm text-forte-text-secondary">
                   ייווצרו בניין ניסיון, מעליות וקישור אישי — ללא שינוי סטטוס הליד וללא סכום הזמנה.
                 </p>
@@ -276,11 +295,15 @@ export default function MasterSalesLeadTrialPortalSection({
                   >
                     ביטול
                   </ForteV2SecondaryButton>
-                  <ForteV2PrimaryButton type="submit" disabled={saving}>
+                  <ForteV2PrimaryButton
+                    type="button"
+                    disabled={saving}
+                    onClick={() => void handleProvision()}
+                  >
                     {saving ? "יוצר…" : "פתיחת פורטל"}
                   </ForteV2PrimaryButton>
                 </div>
-              </form>
+              </div>
             )}
           </ForteV2Dialog>
         </ForteV2DialogOverlay>
