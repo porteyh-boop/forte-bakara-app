@@ -14,6 +14,7 @@ export interface MasterFaultInboxRecord {
 
 export interface MasterFaultInboxItem extends MasterFaultInboxRecord {
   building_name: string;
+  is_trial_building: boolean;
   elevator_name: string | null;
   fault_type: string;
   description: string;
@@ -124,6 +125,13 @@ export function formatMasterFaultInboxTimestamp(iso: string): string {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(iso));
+}
+
+export function formatMasterFaultInboxBuildingLabel(
+  item: Pick<MasterFaultInboxItem, "building_name" | "is_trial_building">
+): string {
+  const name = item.building_name.trim() || "—";
+  return item.is_trial_building ? `${name} · ניסיון` : name;
 }
 
 export function summarizeMasterFaultInboxDescription(

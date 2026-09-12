@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import StatisticsContent from "@/components/statistics/StatisticsContent";
 import { fetchClientPortalStatistics } from "@/lib/client-portal-api-client";
 import type { ClientAccessRecord } from "@/lib/client-access";
@@ -12,6 +12,7 @@ interface ClientPortalStatisticsSectionProps {
   buildingName: string;
   access: Pick<ClientAccessRecord, "access_level" | "elevator_id">;
   elevators: Elevator[];
+  isTrial?: boolean;
 }
 
 export default function ClientPortalStatisticsSection({
@@ -20,6 +21,7 @@ export default function ClientPortalStatisticsSection({
   buildingName,
   access,
   elevators,
+  isTrial = false,
 }: ClientPortalStatisticsSectionProps) {
   const filterRows = useCallback(
     (rows: Parameters<NonNullable<Parameters<typeof StatisticsContent>[0]["filterRows"]>>[0]) => {
@@ -41,6 +43,14 @@ export default function ClientPortalStatisticsSection({
     [access.access_level, access.elevator_id, elevators]
   );
 
+  const elevatorFilterOptions = useMemo(
+    () =>
+      access.access_level === "building"
+        ? elevators.map((elevator) => elevator.name).filter(Boolean)
+        : [],
+    [access.access_level, elevators]
+  );
+
   const loadRows = useCallback(async () => {
     const result = await fetchClientPortalStatistics(portalToken);
     if (!result.ok) {
@@ -55,6 +65,11 @@ export default function ClientPortalStatisticsSection({
       buildingName={buildingName}
       filterRows={filterRows}
       loadRows={loadRows}
+      showElevatorFilter={isTrial && access.access_level === "building"}
+      elevatorFilterOptions={elevatorFilterOptions}
+      elevatorCount={elevators.length}
+      portalTrialMode={isTrial}
+      showSummaryCard={!isTrial}
     />
   );
 }

@@ -76,6 +76,8 @@ function fixtureLead(
     history: overrides.history ?? [],
     contactId: overrides.contactId ?? null,
     convertedBuildingId: overrides.convertedBuildingId ?? null,
+    trialBuildingId: overrides.trialBuildingId ?? null,
+    trialClientUserId: overrides.trialClientUserId ?? null,
     createdAt: "2026-08-01T08:00:00.000Z",
     updatedAt: "2026-08-01T08:00:00.000Z",
     ...overrides,

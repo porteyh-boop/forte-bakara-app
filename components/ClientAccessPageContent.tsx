@@ -140,6 +140,7 @@ export default function ClientAccessPageContent({
     }>
   >([]);
   const [dataLastUpdated, setDataLastUpdated] = useState<string | null>(null);
+  const [isTrialBuilding, setIsTrialBuilding] = useState(false);
 
   const loginLoggedRef = useRef(false);
   const faultsViewLoggedRef = useRef(false);
@@ -194,6 +195,7 @@ export default function ClientAccessPageContent({
     setScopeLabel(data.scopeLabel);
     setDocuments(data.documents);
     setDataLastUpdated(data.dataLastUpdated);
+    setIsTrialBuilding(data.building.isTrial);
     setLoading(false);
   }, [token]);
 
@@ -552,6 +554,7 @@ export default function ClientAccessPageContent({
                           fault={fault}
                           compact
                           index={index}
+                          hideResolutionMetrics={isTrialBuilding}
                         />
                       ))}
                     </div>
@@ -612,7 +615,7 @@ export default function ClientAccessPageContent({
                   }
                 />
               )}
-              {permissions.can_view_availability && (
+              {permissions.can_view_availability && !isTrialBuilding && (
                 <InfoCard
                   label="זמינות חודשית"
                   value={`${stats.monthlyAvailabilityPercent}%`}
@@ -635,7 +638,10 @@ export default function ClientAccessPageContent({
         {tab === "history" && permissions.can_view_fault_history && (
           <section className="space-y-3">
             <SectionTitle title="היסטוריית תקלות" />
-            <HistoryList faults={historyFaults} />
+            <HistoryList
+              faults={historyFaults}
+              hideResolutionMetrics={isTrialBuilding}
+            />
           </section>
         )}
 
@@ -683,6 +689,7 @@ export default function ClientAccessPageContent({
             buildingName={buildingResolve.buildingName}
             access={session.access}
             elevators={elevators}
+            isTrial={isTrialBuilding}
           />
         )}
 

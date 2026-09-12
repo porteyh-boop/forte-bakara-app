@@ -21,7 +21,7 @@ export const SALES_LEADS_TABLE = "sales_leads";
 export const SALES_LEAD_HISTORY_TABLE = "sales_lead_history";
 
 const LEAD_COLUMNS =
-  "id, client_name, building_name, address, city, contact_name, phone, email, need_description, service_type, service_type_other, source, source_detail, contact_channel, status, estimated_value, next_action, follow_up_date, contact_id, converted_building_id, created_at, updated_at";
+  "id, client_name, building_name, address, city, contact_name, phone, email, need_description, service_type, service_type_other, source, source_detail, contact_channel, status, estimated_value, next_action, follow_up_date, contact_id, converted_building_id, trial_building_id, trial_client_user_id, created_at, updated_at";
 
 const HISTORY_COLUMNS = "id, lead_id, occurred_at, kind, entry_text, status";
 
@@ -151,6 +151,8 @@ export function mapSalesLeadRow(
     history,
     contactId: asString(row.contact_id) || null,
     convertedBuildingId: asString(row.converted_building_id) || null,
+    trialBuildingId: asString(row.trial_building_id) || null,
+    trialClientUserId: asString(row.trial_client_user_id) || null,
     createdAt: asIso(row.created_at),
     updatedAt: asIso(row.updated_at),
   };
@@ -245,7 +247,7 @@ export async function listSalesLeadsServer(): Promise<
   };
 }
 
-async function getSalesLeadServer(
+export async function getSalesLeadByIdServer(
   leadId: string
 ): Promise<
   { lead: SalesLead; error: null } | { lead: null; error: SalesLeadsServerError }
@@ -314,7 +316,7 @@ async function persistSalesLeadLinks(
 async function finalizeSalesLeadMutation(
   leadId: string
 ): Promise<SalesLeadMutationResult> {
-  const loaded = await getSalesLeadServer(leadId);
+  const loaded = await getSalesLeadByIdServer(leadId);
   if (loaded.error || !loaded.lead) {
     return {
       lead: null,
@@ -359,7 +361,7 @@ async function finalizeSalesLeadMutation(
     }
   }
 
-  const refreshed = await getSalesLeadServer(leadId);
+  const refreshed = await getSalesLeadByIdServer(leadId);
   return {
     lead: refreshed.lead
       ? {
@@ -471,7 +473,7 @@ export async function updateSalesLeadServer(
     };
   }
 
-  const existing = await getSalesLeadServer(parsedId);
+  const existing = await getSalesLeadByIdServer(parsedId);
   if (existing.error || !existing.lead) {
     return {
       lead: null,

@@ -14,6 +14,7 @@ interface FaultCardProps {
   index?: number;
   onClose?: (fault: Fault) => void;
   closing?: boolean;
+  hideResolutionMetrics?: boolean;
 }
 
 const priorityStyles = {
@@ -28,6 +29,7 @@ export default function FaultCard({
   index = 0,
   onClose,
   closing = false,
+  hideResolutionMetrics = false,
 }: FaultCardProps) {
   const lifecycleStatus = getLifecycleStatus(fault);
   const isActive = lifecycleStatus !== "סגורה";
@@ -84,14 +86,14 @@ export default function FaultCard({
       />
       {imageViewer.lightbox}
 
-      {fault.resolvedAt && (
+      {fault.resolvedAt ? (
         <p className="text-xs text-gray-text mt-2">
           נסגרה: {formatDate(fault.resolvedAt)}
-          {fault.durationHours != null && (
+          {!hideResolutionMetrics && fault.durationHours != null ? (
             <span className="mr-2"> · משך טיפול: {fault.durationHours} שעות</span>
-          )}
+          ) : null}
         </p>
-      )}
+      ) : null}
 
       <div
         className={`flex items-center justify-between gap-2 ${compact ? "mt-2" : "mt-3 pt-3 border-t border-gray-100"}`}

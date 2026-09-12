@@ -29,7 +29,7 @@ import type {
   ClientPortalStatisticsDto,
   ClientPortalAuthContext,
 } from "@/lib/client-portal-dto";
-import { normalizeBuildingId } from "@/lib/buildings-cloud";
+import { BUILDINGS_TABLE, normalizeBuildingId } from "@/lib/buildings-cloud";
 import { computePortalDataLastUpdated } from "@/lib/client-profile";
 import { resolveClientWelcomeMessage } from "@/lib/client-access";
 import { buildFaultNotificationTelegramMessage } from "@/lib/fault-notification-messages";
@@ -263,6 +263,20 @@ async function fetchClientDocumentsServer(
   }));
 }
 
+async function fetchBuildingIsTrialServer(buildingId: string): Promise<boolean> {
+  const client = getSupabaseServiceClient();
+  if (!client) return false;
+
+  const normalized = normalizeBuildingId(buildingId);
+  const { data } = await client
+    .from(BUILDINGS_TABLE)
+    .select("is_trial")
+    .eq("building_id", normalized)
+    .maybeSingle();
+
+  return (data as Record<string, unknown> | null)?.is_trial === true;
+}
+
 async function fetchStatisticsRowsServer(
   buildingId: string
 ): Promise<StatisticsFaultRow[]> {
@@ -272,7 +286,7 @@ async function fetchStatisticsRowsServer(
   const normalized = normalizeBuildingId(buildingId);
   const { data, error } = await client
     .from(PILOT_FAULTS_TABLE)
-    .select("created_at, fault_type, elevator_name")
+    .select("created_at, fault_type, elevator_name, status, closed_at")
     .eq("building_id", normalized)
     .order("created_at", { ascending: true });
 
@@ -289,6 +303,10 @@ async function dispatchFaultCreatedNotificationServer(
 ): Promise<void> {
   const input = pilotFaultToNotificationInput(fault, "FAULT_CREATED");
   if (!shouldDispatchOwnerTelegram(input.eventType)) return;
+
+  if (await fetchBuildingIsTrialServer(input.buildingId)) {
+    return;
+  }
 
   const message = buildFaultNotificationTelegramMessage(input);
   const telegram = await deliverTelegramMessage(message);
@@ -343,6 +361,8 @@ export async function buildClientPortalBootstrap(
       ? scopedElevators[0]?.name ?? session.access.elevator_id
       : "כל הבניין";
 
+  const isTrial = await fetchBuildingIsTrialServer(normalizedBuildingId);
+
   const welcomeMessage = resolveClientWelcomeMessage(
     session.user.welcome_message,
     session.user.client_type
@@ -365,6 +385,7 @@ export async function buildClientPortalBootstrap(
       name: resolved.buildingName,
       buildingCode: resolved.ctx.building.buildingCode,
       liveStartedAt: resolved.liveStartedAt,
+      isTrial,
     },
     elevators: scopedElevators,
     faults: scopedFaults,

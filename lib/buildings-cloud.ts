@@ -57,6 +57,7 @@ export interface CloudBuildingRow {
   contact_phone: string | null;
   floors_count: number | null;
   is_active: boolean;
+  is_trial: boolean;
   created_at: string;
   live_started_at?: string | null;
   project_stage: string | null;
@@ -216,6 +217,7 @@ export function mapCloudBuildingRow(
     floors_count:
       typeof raw.floors_count === "number" ? raw.floors_count : null,
     is_active: raw.is_active !== false,
+    is_trial: raw.is_trial === true,
     created_at: String(raw.created_at ?? new Date().toISOString()),
     live_started_at:
       raw.live_started_at != null ? String(raw.live_started_at) : null,

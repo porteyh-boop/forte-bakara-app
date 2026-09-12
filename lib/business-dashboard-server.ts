@@ -81,6 +81,7 @@ export async function loadBusinessDashboardData(): Promise<{
         "building_id, name, project_number, contact_name, management_company, order_amount, order_date, income_type, next_payment_date"
       )
       .eq("is_active", true)
+      .eq("is_trial", false)
       .order("name", { ascending: true }),
     client
       .from(PROJECT_PAYMENTS_TABLE)

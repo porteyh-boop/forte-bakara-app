@@ -4,6 +4,11 @@ import {
   parseMasterApiJson,
 } from "@/lib/master-api-fetch";
 import type { OpenedSalesProject, SalesWinMissingField } from "@/lib/sales-lead-ops";
+import type {
+  SalesLeadTrialPortalStatus,
+  SalesLeadTrialProvisionInput,
+  SalesLeadTrialProvisionResult,
+} from "@/lib/sales-lead-trial-portal";
 import type { SalesLead, SalesLeadDraft } from "@/lib/sales-leads";
 
 const MASTER_SALES_LEADS_API = "/forte/api/master-sales-leads";
@@ -113,6 +118,74 @@ export async function createSalesLead(
     return saveResultFromPayload(payload, "השמירה נכשלה. נסו שוב.");
   } catch {
     return emptySaveResult("השמירה נכשלה. נסו שוב.");
+  }
+}
+
+export async function fetchSalesLeadTrialPortalStatus(leadId: string): Promise<{
+  status: SalesLeadTrialPortalStatus | null;
+  error: string | null;
+}> {
+  try {
+    const response = await masterApiFetch(
+      `${MASTER_SALES_LEADS_API}/${encodeURIComponent(leadId)}/trial-portal`,
+      { method: "GET", cache: "no-store" }
+    );
+    const payload = await parseMasterApiJson<{ status?: SalesLeadTrialPortalStatus; error?: string }>(
+      response
+    );
+    if (!response.ok) {
+      return { status: null, error: await readApiError(response) };
+    }
+    return { status: payload?.status ?? null, error: null };
+  } catch {
+    return { status: null, error: "לא ניתן לטעון את מצב הניסיון." };
+  }
+}
+
+export async function provisionSalesLeadTrialPortal(
+  leadId: string,
+  input: SalesLeadTrialProvisionInput
+): Promise<{
+  result: SalesLeadTrialProvisionResult | null;
+  lead: SalesLead | null;
+  status: SalesLeadTrialPortalStatus | null;
+  error: string | null;
+}> {
+  try {
+    const response = await masterApiFetch(
+      `${MASTER_SALES_LEADS_API}/${encodeURIComponent(leadId)}/trial-portal`,
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      }
+    );
+    const payload = await parseMasterApiJson<{
+      result?: SalesLeadTrialProvisionResult;
+      lead?: SalesLead;
+      status?: SalesLeadTrialPortalStatus;
+      error?: string;
+    }>(response);
+    if (!response.ok) {
+      return {
+        result: null,
+        lead: null,
+        status: null,
+        error: await readApiError(response),
+      };
+    }
+    return {
+      result: payload?.result ?? null,
+      lead: payload?.lead ?? null,
+      status: payload?.status ?? null,
+      error: null,
+    };
+  } catch {
+    return {
+      result: null,
+      lead: null,
+      status: null,
+      error: "פתיחת הניסיון נכשלה.",
+    };
   }
 }
 

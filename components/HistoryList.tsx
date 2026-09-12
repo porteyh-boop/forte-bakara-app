@@ -23,12 +23,14 @@ interface HistoryListProps {
   faults: Fault[];
   onCloseFault?: (fault: Fault) => void;
   closingFaultId?: string | null;
+  hideResolutionMetrics?: boolean;
 }
 
 export default function HistoryList({
   faults,
   onCloseFault,
   closingFaultId,
+  hideResolutionMetrics = false,
 }: HistoryListProps) {
   const [filter, setFilter] = useState<Filter>("הכל");
 
@@ -71,6 +73,7 @@ export default function HistoryList({
               index={i}
               onClose={onCloseFault}
               closing={closingFaultId === fault.id}
+              hideResolutionMetrics={hideResolutionMetrics}
             />
           ))}
         </div>

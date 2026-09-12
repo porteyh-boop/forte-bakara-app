@@ -85,6 +85,8 @@ export type SalesLead = {
   history: SalesLeadHistoryEntry[];
   contactId: string | null;
   convertedBuildingId: string | null;
+  trialBuildingId: string | null;
+  trialClientUserId: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -373,6 +375,8 @@ export function applySalesLeadDraft(
     history,
     contactId: existing?.contactId ?? null,
     convertedBuildingId: existing?.convertedBuildingId ?? null,
+    trialBuildingId: existing?.trialBuildingId ?? null,
+    trialClientUserId: existing?.trialClientUserId ?? null,
     createdAt: existing?.createdAt ?? iso,
     updatedAt: iso,
   };
@@ -404,6 +408,8 @@ function createBlankLead(now: Date): SalesLead {
     history: [],
     contactId: null,
     convertedBuildingId: null,
+    trialBuildingId: null,
+    trialClientUserId: null,
     createdAt: iso,
     updatedAt: iso,
   };

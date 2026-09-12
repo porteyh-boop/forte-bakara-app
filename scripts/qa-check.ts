@@ -6512,6 +6512,7 @@ function sampleInboxItem(
   return {
     building_id: "sl48",
     building_name: "עדי מעליות",
+    is_trial_building: false,
     elevator_name: "מעלית 1",
     fault_type: "רעש חריג",
     description: "תיאור בדיקה",

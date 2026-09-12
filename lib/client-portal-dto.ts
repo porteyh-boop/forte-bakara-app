@@ -28,6 +28,7 @@ export interface ClientPortalBuildingDto {
   name: string;
   buildingCode: string;
   liveStartedAt: string | null;
+  isTrial: boolean;
 }
 
 export interface ClientPortalDocumentDto {

@@ -1,3 +1,4 @@
+import { BUILDINGS_TABLE } from "./buildings-cloud";
 import {
   MASTER_FAULT_INBOX_TABLE,
   mapMasterFaultInboxRow,
@@ -47,6 +48,34 @@ export async function listMasterFaultInboxItemsServer(options?: {
   }
 
   const items: MasterFaultInboxItem[] = [];
+  const buildingIds = new Set<string>();
+
+  for (const row of data ?? []) {
+    const inbox = mapMasterFaultInboxRow(row as Record<string, unknown>);
+    if (inbox) buildingIds.add(inbox.building_id.trim().toLowerCase());
+  }
+
+  const trialBuildingIds = new Set<string>();
+  if (buildingIds.size > 0) {
+    const { data: buildingRows } = await client
+      .from(BUILDINGS_TABLE)
+      .select("building_id, is_trial")
+      .in("building_id", Array.from(buildingIds));
+
+    for (const buildingRow of buildingRows ?? []) {
+      const id = String(
+        (buildingRow as Record<string, unknown>).building_id ?? ""
+      )
+        .trim()
+        .toLowerCase();
+      if (
+        id &&
+        (buildingRow as Record<string, unknown>).is_trial === true
+      ) {
+        trialBuildingIds.add(id);
+      }
+    }
+  }
 
   for (const row of data ?? []) {
     const inbox = mapMasterFaultInboxRow(row as Record<string, unknown>);
@@ -63,6 +92,7 @@ export async function listMasterFaultInboxItemsServer(options?: {
     items.push({
       ...inbox,
       building_name: String(fault.building_name ?? inbox.building_id),
+      is_trial_building: trialBuildingIds.has(inbox.building_id.trim().toLowerCase()),
       elevator_name: fault.elevator_name ? String(fault.elevator_name) : null,
       fault_type: String(fault.fault_type ?? ""),
       description: String(fault.description ?? ""),

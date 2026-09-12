@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import MasterCodeGate from "@/components/master-v2/MasterCodeGate";
 import { useMasterSalesLeadNotifications } from "@/components/master-v2/MasterSalesLeadNotificationsProvider";
+import MasterSalesLeadTrialPortalSection from "@/components/master-v2/MasterSalesLeadTrialPortalSection";
 import MasterShellLayout from "@/components/master-v2/MasterShellLayout";
 import {
   ForteV2DataTable,
@@ -398,6 +399,21 @@ export default function MasterSalesLeadsView({
                 <p className="rounded-xl border border-sky-100 bg-sky-50 px-3 py-2 text-sm text-sky-900">
                   {PUBLIC_SALES_LEAD_FORM_BADGE}
                 </p>
+              ) : null}
+
+              {editingLead ? (
+                <MasterSalesLeadTrialPortalSection
+                  lead={editingLead}
+                  onLeadUpdated={(updated) => {
+                    setLeads((current) =>
+                      current.map((item) => (item.id === updated.id ? updated : item))
+                    );
+                    if (editingId === updated.id) {
+                      setDraft(salesLeadToDraft(updated));
+                    }
+                  }}
+                  onMessage={setMessage}
+                />
               ) : null}
 
               {editingLead?.convertedBuildingId ? (

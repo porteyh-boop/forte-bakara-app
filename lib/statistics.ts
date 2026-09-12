@@ -10,6 +10,40 @@ export interface StatisticsFaultRow {
   created_at: string;
   fault_type: string | null;
   elevator_name: string | null;
+  status?: string | null;
+  closed_at?: string | null;
+}
+
+export function isStatisticsFaultClosed(row: StatisticsFaultRow): boolean {
+  const status = row.status?.trim() ?? "";
+  if (status === "סגורה" || status === "נסגרה") return true;
+  return Boolean(row.closed_at?.trim());
+}
+
+export function computeStatisticsPeriodFaultCounts(
+  rows: StatisticsFaultRow[],
+  period: StatisticsPeriod,
+  now = new Date()
+): { total: number; open: number; closed: number } {
+  const filtered = filterFaultRowsByPeriod(rows, period, now);
+  let open = 0;
+  let closed = 0;
+  for (const row of filtered) {
+    if (isStatisticsFaultClosed(row)) closed += 1;
+    else open += 1;
+  }
+  return { total: filtered.length, open, closed };
+}
+
+export function filterStatisticsRowsByElevatorName(
+  rows: StatisticsFaultRow[],
+  elevatorName: string | null
+): StatisticsFaultRow[] {
+  if (!elevatorName?.trim()) return rows;
+  const target = elevatorName.trim();
+  return rows.filter(
+    (row) => (row.elevator_name?.trim() || "לא צוין") === target
+  );
 }
 
 export interface MonthlyFaultStat {

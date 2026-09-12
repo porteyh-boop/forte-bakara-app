@@ -99,7 +99,7 @@ export default function MasterPageContentV2() {
         getAllCloudBuildingsWithMeta(),
         getAllCloudElevators(),
       ]);
-      rows = cloudResult.rows;
+      rows = cloudResult.rows.filter((row) => !row.is_trial);
       if (cloudResult.error) setCloudLoadError(cloudResult.error);
       for (const elevator of allElevators) {
         if (!grouped[elevator.building_id]) grouped[elevator.building_id] = [];

@@ -6,7 +6,10 @@ import {
   ForteV2PrimaryButton,
   ForteV2SecondaryButton,
 } from "@/components/master-v2/project-v2/MasterProjectV2Workspace";
-import type { MasterFaultInboxItem } from "@/lib/master-fault-inbox";
+import {
+  formatMasterFaultInboxBuildingLabel,
+  type MasterFaultInboxItem,
+} from "@/lib/master-fault-inbox";
 
 interface MasterFaultInboxReentryDialogProps {
   item: MasterFaultInboxItem;
@@ -25,7 +28,7 @@ export default function MasterFaultInboxReentryDialog({
         <div className="space-y-3 text-right">
           <p className="text-sm text-forte-text">התקבל דיווח חדש על תקלה</p>
           <p className="text-sm font-semibold text-forte-text">
-            פרויקט: {item.building_name}
+            פרויקט: {formatMasterFaultInboxBuildingLabel(item)}
           </p>
           {item.elevator_name ? (
             <p className="text-xs text-forte-text-secondary">
