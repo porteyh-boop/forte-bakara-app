@@ -46,7 +46,7 @@ const { error: provisionErr } = await client.rpc(
   {
     p_lead_id: "00000000-0000-4000-8000-000000000000",
     p_expires_at: new Date(Date.now() + 86400000).toISOString(),
-    p_elevator_names: ["x"],
+    p_elevators: [{ name: "x", floors_count: 1 }],
   }
 );
 

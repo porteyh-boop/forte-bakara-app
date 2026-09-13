@@ -4,7 +4,7 @@ import {
   requireMasterApiSession,
   serviceUnavailableResponse,
 } from "@/lib/forte-master-api-auth";
-import { parseSalesLeadTrialProvisionInput } from "@/lib/sales-lead-trial-portal";
+import { parseSalesLeadTrialProvisionBody } from "@/lib/sales-lead-trial-portal";
 import {
   loadSalesLeadTrialPortalStatusServer,
   provisionSalesLeadTrialPortalServer,
@@ -32,6 +32,8 @@ function trialErrorStatus(error: string): number {
   if (
     error === "missing_building_name" ||
     error === "missing_elevators" ||
+    error === "invalid_elevator_name" ||
+    error === "invalid_floors_count" ||
     error === "invalid_expires_at" ||
     error === "expires_at_must_be_future" ||
     error === "invalid_request" ||
@@ -104,10 +106,14 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "invalid_request" }, { status: 400 });
   }
 
-  const input = parseSalesLeadTrialProvisionInput(body);
-  if (!input) {
-    return NextResponse.json({ error: "invalid_request" }, { status: 400 });
+  const parsed = parseSalesLeadTrialProvisionBody(body);
+  if (!parsed.ok) {
+    return NextResponse.json(
+      { error: parsed.error },
+      { status: trialErrorStatus(parsed.error) }
+    );
   }
+  const input = parsed.input;
 
   const loaded = await getSalesLeadByIdServer(leadId);
   if (!loaded.lead) {

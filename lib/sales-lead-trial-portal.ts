@@ -4,10 +4,82 @@ import type { SalesLead } from "@/lib/sales-leads";
 
 export const SALES_LEAD_TRIAL_PROVISION_RPC = "provision_sales_lead_trial_portal";
 
+export type SalesLeadTrialElevatorInput = {
+  name: string;
+  floorsCount: number;
+};
+
 export type SalesLeadTrialProvisionInput = {
   expiresAt: string;
-  elevatorNames: string[];
+  elevators: SalesLeadTrialElevatorInput[];
 };
+
+export type SalesLeadTrialProvisionParseResult =
+  | { ok: true; input: SalesLeadTrialProvisionInput }
+  | { ok: false; error: string };
+
+function parsePositiveIntegerFloorsCount(value: unknown): number | null {
+  if (typeof value === "number") {
+    if (!Number.isFinite(value) || !Number.isInteger(value) || value <= 0) {
+      return null;
+    }
+    return value;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!/^[1-9][0-9]*$/.test(trimmed)) return null;
+    return Number(trimmed);
+  }
+  return null;
+}
+
+export function parseSalesLeadTrialProvisionBody(
+  body: unknown
+): SalesLeadTrialProvisionParseResult {
+  if (!body || typeof body !== "object") {
+    return { ok: false, error: "invalid_request" };
+  }
+
+  const raw = body as Record<string, unknown>;
+  const expiresAt =
+    typeof raw.expiresAt === "string" ? raw.expiresAt.trim() : "";
+  if (!expiresAt) {
+    return { ok: false, error: "invalid_request" };
+  }
+
+  const elevatorsRaw = raw.elevators;
+  if (!Array.isArray(elevatorsRaw) || elevatorsRaw.length === 0) {
+    return { ok: false, error: "missing_elevators" };
+  }
+
+  const elevators: SalesLeadTrialElevatorInput[] = [];
+  for (const item of elevatorsRaw) {
+    if (!item || typeof item !== "object") {
+      return { ok: false, error: "invalid_elevator_name" };
+    }
+    const row = item as Record<string, unknown>;
+    const name = typeof row.name === "string" ? row.name.trim() : "";
+    if (!name) {
+      return { ok: false, error: "invalid_elevator_name" };
+    }
+    const floorsCount = parsePositiveIntegerFloorsCount(row.floorsCount);
+    if (floorsCount === null) {
+      return { ok: false, error: "invalid_floors_count" };
+    }
+    elevators.push({ name, floorsCount });
+  }
+
+  return { ok: true, input: { expiresAt, elevators } };
+}
+
+export function buildTrialProvisionRpcElevatorsJson(
+  elevators: SalesLeadTrialElevatorInput[]
+): Array<{ name: string; floors_count: number }> {
+  return elevators.map((elevator) => ({
+    name: elevator.name,
+    floors_count: elevator.floorsCount,
+  }));
+}
 
 export type SalesLeadTrialProvisionResult = {
   buildingId: string;
@@ -29,24 +101,8 @@ export type SalesLeadTrialPortalStatus = {
 export function parseSalesLeadTrialProvisionInput(
   body: unknown
 ): SalesLeadTrialProvisionInput | null {
-  if (!body || typeof body !== "object") return null;
-  const raw = body as Record<string, unknown>;
-  const expiresAt =
-    typeof raw.expiresAt === "string" ? raw.expiresAt.trim() : "";
-  if (!expiresAt) return null;
-
-  const elevatorNamesRaw = raw.elevatorNames;
-  if (!Array.isArray(elevatorNamesRaw) || elevatorNamesRaw.length === 0) {
-    return null;
-  }
-
-  const elevatorNames = elevatorNamesRaw
-    .map((value) => (typeof value === "string" ? value.trim() : ""))
-    .filter(Boolean);
-
-  if (elevatorNames.length === 0) return null;
-
-  return { expiresAt, elevatorNames };
+  const parsed = parseSalesLeadTrialProvisionBody(body);
+  return parsed.ok ? parsed.input : null;
 }
 
 export function parseTrialProvisionRpcResult(

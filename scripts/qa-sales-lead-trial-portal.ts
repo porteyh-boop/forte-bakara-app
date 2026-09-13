@@ -8,6 +8,7 @@ import {
   type StatisticsFaultRow,
 } from "../lib/statistics";
 import {
+  parseSalesLeadTrialProvisionBody,
   parseSalesLeadTrialProvisionInput,
   parseTrialProvisionRpcResult,
   simulateParallelTrialProvisions,
@@ -37,15 +38,80 @@ function assert(condition: boolean, label: string): void {
 async function main(): Promise<void> {
   console.log("\nSales lead trial portal QA\n");
 
-  const parsed = parseSalesLeadTrialProvisionInput({
+  const parsedOne = parseSalesLeadTrialProvisionBody({
     expiresAt: new Date(Date.now() + 86400000).toISOString(),
-    elevatorNames: [" א ", "ב"],
+    elevators: [{ name: " א ", floorsCount: 10 }],
   });
-  assert(parsed?.elevatorNames.length === 2, "parse provision input trims elevators");
   assert(
-    parseSalesLeadTrialProvisionInput({ expiresAt: "", elevatorNames: ["a"] }) === null,
+    parsedOne.ok && parsedOne.input.elevators[0]?.name === "א",
+    "parse provision trims elevator name"
+  );
+
+  const parsedTwo = parseSalesLeadTrialProvisionBody({
+    expiresAt: new Date(Date.now() + 86400000).toISOString(),
+    elevators: [
+      { name: "מעלית נוסעים", floorsCount: 18 },
+      { name: "מעלית שירות", floorsCount: 20 },
+    ],
+  });
+  assert(
+    parsedTwo.ok &&
+      parsedTwo.input.elevators.length === 2 &&
+      parsedTwo.input.elevators[0]?.floorsCount === 18 &&
+      parsedTwo.input.elevators[1]?.floorsCount === 20,
+    "parse two elevators with distinct floorsCount"
+  );
+
+  assert(
+    parseSalesLeadTrialProvisionInput({ expiresAt: "", elevators: [{ name: "a", floorsCount: 1 }] }) ===
+      null,
     "parse provision rejects empty expiry"
   );
+
+  const missingElevators = parseSalesLeadTrialProvisionBody({
+    expiresAt: new Date(Date.now() + 86400000).toISOString(),
+    elevators: [],
+  });
+  assert(
+    !missingElevators.ok && missingElevators.error === "missing_elevators",
+    "missing elevators array rejected"
+  );
+
+  const zeroFloors = parseSalesLeadTrialProvisionBody({
+    expiresAt: new Date(Date.now() + 86400000).toISOString(),
+    elevators: [{ name: "א", floorsCount: 0 }],
+  });
+  assert(!zeroFloors.ok && zeroFloors.error === "invalid_floors_count", "floorsCount 0 blocked");
+
+  const negativeFloors = parseSalesLeadTrialProvisionBody({
+    expiresAt: new Date(Date.now() + 86400000).toISOString(),
+    elevators: [{ name: "א", floorsCount: -3 }],
+  });
+  assert(
+    !negativeFloors.ok && negativeFloors.error === "invalid_floors_count",
+    "negative floorsCount blocked"
+  );
+
+  const emptyFloors = parseSalesLeadTrialProvisionBody({
+    expiresAt: new Date(Date.now() + 86400000).toISOString(),
+    elevators: [{ name: "א", floorsCount: "" }],
+  });
+  assert(!emptyFloors.ok && emptyFloors.error === "invalid_floors_count", "empty floorsCount blocked");
+
+  const nonIntegerFloors = parseSalesLeadTrialProvisionBody({
+    expiresAt: new Date(Date.now() + 86400000).toISOString(),
+    elevators: [{ name: "א", floorsCount: 1.5 }],
+  });
+  assert(
+    !nonIntegerFloors.ok && nonIntegerFloors.error === "invalid_floors_count",
+    "non-integer floorsCount blocked"
+  );
+
+  const emptyName = parseSalesLeadTrialProvisionBody({
+    expiresAt: new Date(Date.now() + 86400000).toISOString(),
+    elevators: [{ name: "  ", floorsCount: 5 }],
+  });
+  assert(!emptyName.ok && emptyName.error === "invalid_elevator_name", "empty elevator name blocked");
 
   const rpc = parseTrialProvisionRpcResult({
     building_id: "750101",

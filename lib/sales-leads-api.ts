@@ -66,6 +66,9 @@ function hebrewSalesApiError(error: string, status: number): string {
   if (error === "invalid_elevator_name") {
     return "יש להזין שם לכל מעלית.";
   }
+  if (error === "invalid_floors_count") {
+    return "יש להזין מספר תחנות תקין לכל מעלית.";
+  }
   if (error === "invalid_lead_id" || error === "invalid_request") {
     return "הנתונים שנשלחו אינם תקינים.";
   }

@@ -40,8 +40,22 @@ function computeExpiresAtIso(days: number): string {
   return date.toISOString();
 }
 
-function defaultElevatorNames(count: number): string[] {
-  return Array.from({ length: count }, (_, index) => `מעלית ${index + 1}`);
+type TrialElevatorFormRow = {
+  name: string;
+  floorsCount: string;
+};
+
+function defaultElevators(count: number): TrialElevatorFormRow[] {
+  return Array.from({ length: count }, (_, index) => ({
+    name: `מעלית ${index + 1}`,
+    floorsCount: "",
+  }));
+}
+
+function parseFloorsCountInput(value: string): number | null {
+  const trimmed = value.trim();
+  if (!/^[1-9][0-9]*$/.test(trimmed)) return null;
+  return Number(trimmed);
 }
 
 function resolvePortalUrl(
@@ -65,6 +79,8 @@ function formatTrialPortalCreateError(error: string | null | undefined): string 
       return "יש להגדיר לפחות מעלית אחת.";
     case "invalid_elevator_name":
       return "יש להזין שם לכל מעלית.";
+    case "invalid_floors_count":
+      return "יש להזין מספר תחנות תקין לכל מעלית.";
     case "not_found":
       return "הליד לא נמצא.";
     default:
@@ -109,8 +125,8 @@ export default function MasterSalesLeadTrialPortalSection({
   const [formError, setFormError] = useState<string | null>(null);
   const [durationDays, setDurationDays] = useState<number>(30);
   const [elevatorCount, setElevatorCount] = useState(1);
-  const [elevatorNames, setElevatorNames] = useState<string[]>(() =>
-    defaultElevatorNames(1)
+  const [elevators, setElevators] = useState<TrialElevatorFormRow[]>(() =>
+    defaultElevators(1)
   );
   const [alreadyProvisionedBanner, setAlreadyProvisionedBanner] = useState(false);
 
@@ -133,10 +149,10 @@ export default function MasterSalesLeadTrialPortalSection({
   }, [refreshStatus, lead.trialBuildingId, lead.trialClientUserId]);
 
   useEffect(() => {
-    setElevatorNames((prev) => {
+    setElevators((prev) => {
       const next = prev.slice(0, elevatorCount);
       while (next.length < elevatorCount) {
-        next.push(`מעלית ${next.length + 1}`);
+        next.push({ name: `מעלית ${next.length + 1}`, floorsCount: "" });
       }
       return next;
     });
@@ -156,7 +172,7 @@ export default function MasterSalesLeadTrialPortalSection({
     setAlreadyProvisionedBanner(false);
     setDurationDays(30);
     setElevatorCount(1);
-    setElevatorNames(defaultElevatorNames(1));
+    setElevators(defaultElevators(1));
     if (!lead.buildingName?.trim()) {
       onMessage("יש להזין שם בניין לפני פתיחת הפורטל.");
       return;
@@ -200,15 +216,24 @@ export default function MasterSalesLeadTrialPortalSection({
       return;
     }
 
-    if (elevatorNames.length < 1) {
+    if (elevators.length < 1) {
       setFormError("יש להגדיר לפחות מעלית אחת.");
       return;
     }
 
-    const trimmedNames = elevatorNames.map((name) => name.trim());
-    if (trimmedNames.some((name) => !name)) {
-      setFormError("יש להזין שם לכל מעלית.");
-      return;
+    const payloadElevators: { name: string; floorsCount: number }[] = [];
+    for (const row of elevators) {
+      const name = row.name.trim();
+      if (!name) {
+        setFormError("יש להזין שם לכל מעלית.");
+        return;
+      }
+      const floorsCount = parseFloorsCountInput(row.floorsCount);
+      if (floorsCount === null) {
+        setFormError("יש להזין מספר תחנות תקין לכל מעלית.");
+        return;
+      }
+      payloadElevators.push({ name, floorsCount });
     }
 
     const expiresAt = computeExpiresAtIso(durationDays);
@@ -216,7 +241,7 @@ export default function MasterSalesLeadTrialPortalSection({
     setSaving(true);
     const result = await provisionSalesLeadTrialPortal(lead.id, {
       expiresAt,
-      elevatorNames: trimmedNames,
+      elevators: payloadElevators,
     });
     setSaving(false);
 
@@ -382,28 +407,58 @@ export default function MasterSalesLeadTrialPortalSection({
                 </select>
               </label>
 
-              <div className="space-y-2">
-                <p className="fv2-label">שמות מעליות</p>
-                {elevatorNames.map((name, index) => (
-                  <label key={index} className="block space-y-1">
-                    <ForteV2FormLabel htmlFor={`trial-elevator-${index}`}>
-                      שם מעלית {index + 1}
-                    </ForteV2FormLabel>
-                    <ForteV2FormInput
-                      id={`trial-elevator-${index}`}
-                      value={name}
-                      disabled={saving}
-                      className="min-h-[44px]"
-                      onChange={(event) => {
-                        const value = event.target.value;
-                        setElevatorNames((prev) => {
-                          const next = [...prev];
-                          next[index] = value;
-                          return next;
-                        });
-                      }}
-                    />
-                  </label>
+              <div className="space-y-4">
+                {elevators.map((row, index) => (
+                  <div
+                    key={index}
+                    className="space-y-2 rounded-lg border border-forte-border/80 bg-forte-background/30 p-3"
+                  >
+                    <p className="text-sm font-medium text-forte-text">
+                      מעלית {index + 1}
+                    </p>
+                    <label className="block space-y-1">
+                      <ForteV2FormLabel htmlFor={`trial-elevator-name-${index}`}>
+                        שם מעלית
+                      </ForteV2FormLabel>
+                      <ForteV2FormInput
+                        id={`trial-elevator-name-${index}`}
+                        value={row.name}
+                        disabled={saving}
+                        className="min-h-[44px]"
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          setElevators((prev) => {
+                            const next = [...prev];
+                            next[index] = { ...next[index], name: value };
+                            return next;
+                          });
+                        }}
+                      />
+                    </label>
+                    <label className="block space-y-1">
+                      <ForteV2FormLabel htmlFor={`trial-elevator-floors-${index}`}>
+                        מספר תחנות
+                      </ForteV2FormLabel>
+                      <ForteV2FormInput
+                        id={`trial-elevator-floors-${index}`}
+                        type="number"
+                        inputMode="numeric"
+                        min={1}
+                        step={1}
+                        value={row.floorsCount}
+                        disabled={saving}
+                        className="min-h-[44px]"
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          setElevators((prev) => {
+                            const next = [...prev];
+                            next[index] = { ...next[index], floorsCount: value };
+                            return next;
+                          });
+                        }}
+                      />
+                    </label>
+                  </div>
                 ))}
               </div>
 

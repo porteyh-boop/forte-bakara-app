@@ -1,5 +1,6 @@
 import {
   buildTrialPortalStatusFromSession,
+  buildTrialProvisionRpcElevatorsJson,
   buildTrialProvisionResult,
   parseTrialProvisionRpcResult,
   SALES_LEAD_TRIAL_PROVISION_RPC,
@@ -77,7 +78,7 @@ export async function provisionSalesLeadTrialPortalServer(
   const { data, error } = await client.rpc(SALES_LEAD_TRIAL_PROVISION_RPC, {
     p_lead_id: lead.id,
     p_expires_at: expiresAt.toISOString(),
-    p_elevator_names: input.elevatorNames,
+    p_elevators: buildTrialProvisionRpcElevatorsJson(input.elevators),
   });
 
   if (error) {
@@ -93,6 +94,12 @@ export async function provisionSalesLeadTrialPortalServer(
     }
     if (error.message.includes("not_found")) {
       return { result: null, error: "not_found" };
+    }
+    if (error.message.includes("invalid_elevator_name")) {
+      return { result: null, error: "invalid_elevator_name" };
+    }
+    if (error.message.includes("invalid_floors_count")) {
+      return { result: null, error: "invalid_floors_count" };
     }
     if (error.message.includes("buildings_service_type_check")) {
       return { result: null, error: "invalid_building_service_type" };

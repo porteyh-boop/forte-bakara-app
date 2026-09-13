@@ -131,7 +131,10 @@ async function main() {
     {
       p_lead_id: leadId,
       p_expires_at: expiresAt,
-      p_elevator_names: ["QA מעלית 1", "QA מעלית 2"],
+      p_elevators: [
+        { name: "QA מעלית 1", floors_count: 10 },
+        { name: "QA מעלית 2", floors_count: 12 },
+      ],
     }
   );
   if (e1 || !p1?.building_id) {
@@ -146,7 +149,7 @@ async function main() {
     {
       p_lead_id: leadId,
       p_expires_at: expiresAt,
-      p_elevator_names: ["QA מעלית 1"],
+      p_elevators: [{ name: "QA מעלית 1", floors_count: 10 }],
     }
   );
   if (e2 || p2?.building_id !== buildingId || p2?.already_provisioned !== true) {
@@ -203,7 +206,4 @@ async function main() {
   console.log(`\nQA lead id (keep for review): ${leadId}`);
   console.log(`QA building id: ${buildingId}`);
   console.log(`\nDone: ${passed} passed, ${failed} failed\n`);
-  if (failed) process.exit(1);
-}
-
-await main();
+  if (failed) process.exit(1)

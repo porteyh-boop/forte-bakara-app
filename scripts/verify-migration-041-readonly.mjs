@@ -49,7 +49,7 @@ const expiresAt = new Date(Date.now() + 86400000).toISOString();
 const { error: provisionErr } = await client.rpc("provision_sales_lead_trial_portal", {
   p_lead_id: fakeLead,
   p_expires_at: expiresAt,
-  p_elevator_names: ["x"],
+  p_elevators: [{ name: "x", floors_count: 1 }],
 });
 checks.provision_sales_lead_trial_portal = rpcExists(provisionErr);
 
