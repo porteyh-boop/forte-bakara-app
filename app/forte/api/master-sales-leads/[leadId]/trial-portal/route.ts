@@ -13,13 +13,7 @@ import {
   getSalesLeadByIdServer,
   parseSalesLeadId,
 } from "@/lib/sales-leads-server";
-import {
-  canOpenSalesLeadTrialPortalForLead,
-  isSalesTrialPortalAllowedForLead,
-  isSalesTrialPortalFeatureEnabled,
-  salesTrialPortalFeatureDisabledError,
-  salesTrialPortalLeadNotAllowedError,
-} from "@/lib/sales-lead-trial-portal-feature";
+import { canOpenSalesLeadTrialPortalForLead } from "@/lib/sales-lead-trial-portal-feature";
 import { isSupabaseServiceConfigured } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
@@ -41,8 +35,7 @@ function trialErrorStatus(error: string): number {
     error === "invalid_expires_at" ||
     error === "expires_at_must_be_future" ||
     error === "invalid_request" ||
-    error === "invalid_building_service_type" ||
-    error === "qa_lead_required"
+    error === "invalid_building_service_type"
   ) {
     return 400;
   }
@@ -102,16 +95,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
   if (!isSupabaseServiceConfigured()) {
     return serviceUnavailableResponse("supabase_service_unconfigured");
-  }
-
-  if (!isSalesTrialPortalFeatureEnabled()) {
-    const disabled = salesTrialPortalFeatureDisabledError();
-    return NextResponse.json(disabled, { status: 403 });
-  }
-
-  if (!isSalesTrialPortalAllowedForLead(leadId)) {
-    const blocked = salesTrialPortalLeadNotAllowedError();
-    return NextResponse.json(blocked, { status: 403 });
   }
 
   let body: unknown;

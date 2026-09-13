@@ -1,71 +1,9 @@
-/** Server-only feature gate for sales trial portal (default off). */
+import type { SalesLead } from "@/lib/sales-leads";
 
-export const SALES_TRIAL_PORTAL_ENV_ENABLED = "FORTE_SALES_TRIAL_PORTAL_ENABLED";
-export const SALES_TRIAL_PORTAL_ENV_ALLOWED_LEADS =
-  "FORTE_SALES_TRIAL_PORTAL_ALLOWED_LEAD_IDS";
-
-/** Synthetic QA marker — leads with this client name prefix are QA-only flows. */
+/** Synthetic QA marker — used only to suppress owner Telegram for QA trial buildings. */
 export const SALES_TRIAL_QA_CLIENT_NAME_PREFIX = "QA-TRIAL-PORTAL";
 export const SALES_TRIAL_QA_EMAIL_DOMAIN = "qa.forte.invalid";
 export const SALES_TRIAL_QA_PHONE = "0500000000";
-
-export function isSalesTrialPortalFeatureEnabled(): boolean {
-  const raw = process.env[SALES_TRIAL_PORTAL_ENV_ENABLED]?.trim().toLowerCase();
-  return raw === "1" || raw === "true" || raw === "yes";
-}
-
-export function parseSalesTrialPortalAllowedLeadIds(): Set<string> {
-  const raw = process.env[SALES_TRIAL_PORTAL_ENV_ALLOWED_LEADS]?.trim() ?? "";
-  if (!raw) return new Set();
-  return new Set(
-    raw
-      .split(",")
-      .map((part) => part.trim().toLowerCase())
-      .filter(Boolean)
-  );
-}
-
-export function isSalesTrialPortalAllowedForLead(leadId: string): boolean {
-  if (!isSalesTrialPortalFeatureEnabled()) return false;
-  const allowed = parseSalesTrialPortalAllowedLeadIds();
-  if (allowed.size === 0) return false;
-  return allowed.has(leadId.trim().toLowerCase());
-}
-
-export function salesTrialPortalFeatureDisabledError(): {
-  error: string;
-  message: string;
-} {
-  return {
-    error: "trial_portal_disabled",
-    message: "פורטל הניסיון אינו פעיל בסביבה זו.",
-  };
-}
-
-export function salesTrialPortalLeadNotAllowedError(): {
-  error: string;
-  message: string;
-} {
-  return {
-    error: "trial_portal_lead_not_allowed",
-    message: "פורטל הניסיון אינו מאושר לליד זה.",
-  };
-}
-
-import type { SalesLead } from "@/lib/sales-leads";
-
-/** Master UI: enable “open trial” only for allowlisted synthetic QA leads without a trial building yet. */
-export function canOpenSalesLeadTrialPortalForLead(
-  lead: Pick<
-    SalesLead,
-    "id" | "trialBuildingId" | "clientName" | "email" | "phone"
-  >
-): boolean {
-  if (lead.trialBuildingId?.trim()) return false;
-  if (!isSyntheticSalesTrialQaLead(lead)) return false;
-  if (!isSalesTrialPortalFeatureEnabled()) return false;
-  return isSalesTrialPortalAllowedForLead(lead.id);
-}
 
 export function isSyntheticSalesTrialQaLead(input: {
   clientName: string;
@@ -79,4 +17,12 @@ export function isSyntheticSalesTrialQaLead(input: {
   if (email && !email.endsWith(`@${SALES_TRIAL_QA_EMAIL_DOMAIN}`)) return false;
   if (phone && phone !== SALES_TRIAL_QA_PHONE.replace(/\D/g, "")) return false;
   return true;
+}
+
+/** GET meta: may provision when no trial building yet and building name is set. */
+export function canOpenSalesLeadTrialPortalForLead(
+  lead: Pick<SalesLead, "trialBuildingId" | "buildingName">
+): boolean {
+  if (lead.trialBuildingId?.trim()) return false;
+  return Boolean(lead.buildingName?.trim());
 }

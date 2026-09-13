@@ -56,7 +56,16 @@ function hebrewSalesApiError(error: string, status: number): string {
   if (error === "supabase_service_unconfigured" || status === 503) {
     return "שמירת מכירות אינה זמינה כרגע.";
   }
-  if (error === "not_found") return "הפנייה לא נמצאה.";
+  if (error === "not_found") return "הליד לא נמצא.";
+  if (error === "missing_building_name") {
+    return "יש להזין שם בניין לפני פתיחת הפורטל.";
+  }
+  if (error === "missing_elevators") {
+    return "יש להגדיר לפחות מעלית אחת.";
+  }
+  if (error === "invalid_elevator_name") {
+    return "יש להזין שם לכל מעלית.";
+  }
   if (error === "invalid_lead_id" || error === "invalid_request") {
     return "הנתונים שנשלחו אינם תקינים.";
   }
@@ -70,7 +79,9 @@ function hebrewSalesApiError(error: string, status: number): string {
   if (error === "qa_lead_required") {
     return "פתיחת ניסיון זמינה רק לליד QA מסומן.";
   }
-  if (error === "provision_failed") return "פתיחת הניסיון נכשלה.";
+  if (error === "provision_failed") {
+    return "לא ניתן היה לפתוח את הפורטל. נסה שוב.";
+  }
   if (error === "invalid_building_service_type") {
     return "סוג השירות בליד אינו תואם לבניין — עדכנו את סוג השירות או נסו שוב לאחר עדכון המערכת.";
   }

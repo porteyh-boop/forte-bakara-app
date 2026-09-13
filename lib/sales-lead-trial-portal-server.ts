@@ -74,10 +74,6 @@ export async function provisionSalesLeadTrialPortalServer(
     return { result: null, error: "missing_building_name" };
   }
 
-  if (!isSyntheticSalesTrialQaLead(lead)) {
-    return { result: null, error: "qa_lead_required" };
-  }
-
   const { data, error } = await client.rpc(SALES_LEAD_TRIAL_PROVISION_RPC, {
     p_lead_id: lead.id,
     p_expires_at: expiresAt.toISOString(),

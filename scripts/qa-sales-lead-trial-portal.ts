@@ -19,8 +19,6 @@ import { formatMasterFaultInboxBuildingLabel } from "../lib/master-fault-inbox";
 import {
   canOpenSalesLeadTrialPortalForLead,
   isSyntheticSalesTrialQaLead,
-  SALES_TRIAL_PORTAL_ENV_ALLOWED_LEADS,
-  SALES_TRIAL_PORTAL_ENV_ENABLED,
 } from "../lib/sales-lead-trial-portal-feature";
 
 let passed = 0;
@@ -140,24 +138,28 @@ async function main(): Promise<void> {
     "synthetic QA lead markers"
   );
 
-  const qaLead = {
-    id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+  const regularLead = {
     trialBuildingId: null as string | null,
-    clientName: "QA-TRIAL-PORTAL Test",
-    email: "x@qa.forte.invalid",
-    phone: "0500000000",
+    buildingName: "בניין לדוגמה",
   };
-  const prevEnabled = process.env[SALES_TRIAL_PORTAL_ENV_ENABLED];
-  const prevAllowed = process.env[SALES_TRIAL_PORTAL_ENV_ALLOWED_LEADS];
-  process.env[SALES_TRIAL_PORTAL_ENV_ENABLED] = "true";
-  process.env[SALES_TRIAL_PORTAL_ENV_ALLOWED_LEADS] = qaLead.id;
-  assert(canOpenSalesLeadTrialPortalForLead(qaLead), "can open trial when allowlisted QA lead");
-  process.env[SALES_TRIAL_PORTAL_ENV_ENABLED] = "false";
-  assert(!canOpenSalesLeadTrialPortalForLead(qaLead), "cannot open when feature flag off");
-  if (prevEnabled === undefined) delete process.env[SALES_TRIAL_PORTAL_ENV_ENABLED];
-  else process.env[SALES_TRIAL_PORTAL_ENV_ENABLED] = prevEnabled;
-  if (prevAllowed === undefined) delete process.env[SALES_TRIAL_PORTAL_ENV_ALLOWED_LEADS];
-  else process.env[SALES_TRIAL_PORTAL_ENV_ALLOWED_LEADS] = prevAllowed;
+  assert(
+    canOpenSalesLeadTrialPortalForLead(regularLead),
+    "can open trial for regular lead with building name"
+  );
+  assert(
+    !canOpenSalesLeadTrialPortalForLead({
+      trialBuildingId: "750101",
+      buildingName: "בניין לדוגמה",
+    }),
+    "cannot open when trial building already exists"
+  );
+  assert(
+    !canOpenSalesLeadTrialPortalForLead({
+      trialBuildingId: null,
+      buildingName: "",
+    }),
+    "cannot open without building name"
+  );
 
   console.log(`\nDone: ${passed} passed, ${failed} failed\n`);
   if (failed > 0) process.exit(1);

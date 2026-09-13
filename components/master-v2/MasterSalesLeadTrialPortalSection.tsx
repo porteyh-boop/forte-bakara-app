@@ -8,13 +8,10 @@ import {
   ForteV2FormLabel,
   ForteV2PrimaryButton,
   ForteV2SecondaryButton,
+  ForteV2StatusBadge,
   ForteV2StatusBanner,
 } from "@/components/master-v2/project-v2/MasterProjectV2Workspace";
 import { buildClientAccessUrl } from "@/lib/client-access";
-import {
-  deactivateMasterClientAccess,
-  reactivateMasterClientAccess,
-} from "@/lib/master-client-access-api";
 import type { SalesLeadTrialPortalStatus } from "@/lib/sales-lead-trial-portal";
 import {
   fetchSalesLeadTrialPortalStatus,
@@ -22,19 +19,74 @@ import {
 } from "@/lib/sales-leads-api";
 import type { SalesLead } from "@/lib/sales-leads";
 
-function defaultExpiresAtLocal(): string {
-  const date = new Date();
-  date.setDate(date.getDate() + 30);
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+const TRIAL_DURATION_DAYS = [7, 14, 30] as const;
+const MAX_ELEVATORS = 10;
+
+function formatExpiryDate(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString("he-IL", {
+    timeZone: "Asia/Jerusalem",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
 }
 
-function formatTrialGate(status: SalesLeadTrialPortalStatus): string {
-  if (status.gate === "none") return "לא נפתח";
-  if (status.gate === "ok") return "פעיל";
-  if (status.gate === "expired") return "פג תוקף";
-  if (status.gate === "deactivated") return "מושבת";
-  return "לא זמין";
+function computeExpiresAtIso(days: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date.toISOString();
+}
+
+function defaultElevatorNames(count: number): string[] {
+  return Array.from({ length: count }, (_, index) => `מעלית ${index + 1}`);
+}
+
+function resolvePortalUrl(
+  status: SalesLeadTrialPortalStatus | null,
+  accessToken?: string | null
+): string | null {
+  if (accessToken?.trim()) {
+    return buildClientAccessUrl(accessToken.trim());
+  }
+  if (!status?.accessPath) return null;
+  const segment = status.accessPath.split("/").pop();
+  if (!segment) return null;
+  return buildClientAccessUrl(decodeURIComponent(segment));
+}
+
+function formatTrialPortalCreateError(error: string | null | undefined): string {
+  switch (error) {
+    case "missing_building_name":
+      return "יש להזין שם בניין לפני פתיחת הפורטל.";
+    case "missing_elevators":
+      return "יש להגדיר לפחות מעלית אחת.";
+    case "invalid_elevator_name":
+      return "יש להזין שם לכל מעלית.";
+    case "not_found":
+      return "הליד לא נמצא.";
+    default:
+      return "לא ניתן היה לפתוח את הפורטל. נסה שוב.";
+  }
+}
+
+function buildClientMessage(contactName: string | undefined, portalUrl: string): string {
+  const greeting = contactName?.trim()
+    ? `שלום ${contactName.trim()},`
+    : "שלום,";
+
+  return `${greeting}
+
+נפתח עבורך פורטל ניסיון של FORTE לצפייה ובקרה על פעילות המעליות בבניין.
+
+לכניסה לפורטל:
+${portalUrl}
+
+הפורטל פתוח עבורך לתקופת הניסיון.
+
+FORTE`;
 }
 
 interface MasterSalesLeadTrialPortalSectionProps {
@@ -48,263 +100,330 @@ export default function MasterSalesLeadTrialPortalSection({
   onLeadUpdated,
   onMessage,
 }: MasterSalesLeadTrialPortalSectionProps) {
+  const hasPortal = Boolean(lead.trialBuildingId?.trim());
+
   const [status, setStatus] = useState<SalesLeadTrialPortalStatus | null>(null);
-  const [canProvision, setCanProvision] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState(false);
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [actionId, setActionId] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
-  const [expiresAt, setExpiresAt] = useState(defaultExpiresAtLocal);
-  const [elevatorLines, setElevatorLines] = useState("מעלית 1\nמעלית 2");
+  const [durationDays, setDurationDays] = useState<number>(30);
+  const [elevatorCount, setElevatorCount] = useState(1);
+  const [elevatorNames, setElevatorNames] = useState<string[]>(() =>
+    defaultElevatorNames(1)
+  );
+  const [alreadyProvisionedBanner, setAlreadyProvisionedBanner] = useState(false);
 
   const refreshStatus = useCallback(async () => {
-    if (!lead.id) {
+    if (!lead.id || !lead.trialBuildingId?.trim()) {
       setStatus(null);
-      setCanProvision(false);
       return;
     }
     setLoadingStatus(true);
     const result = await fetchSalesLeadTrialPortalStatus(lead.id);
     setStatus(result.status);
-    setCanProvision(result.canProvision);
-    if (result.error) onMessage(result.error);
+    if (result.error) {
+      console.error("[trial-portal] status load failed", result.error);
+    }
     setLoadingStatus(false);
-  }, [lead.id, onMessage]);
+  }, [lead.id, lead.trialBuildingId]);
 
   useEffect(() => {
     void refreshStatus();
   }, [refreshStatus, lead.trialBuildingId, lead.trialClientUserId]);
 
-  const portalUrl = useMemo(() => {
-    if (!status?.accessPath) return null;
-    const token = status.accessPath.split("/").pop();
-    return token ? buildClientAccessUrl(decodeURIComponent(token)) : null;
-  }, [status?.accessPath]);
+  useEffect(() => {
+    setElevatorNames((prev) => {
+      const next = prev.slice(0, elevatorCount);
+      while (next.length < elevatorCount) {
+        next.push(`מעלית ${next.length + 1}`);
+      }
+      return next;
+    });
+  }, [elevatorCount]);
+
+  const portalUrl = useMemo(() => resolvePortalUrl(status), [status]);
+
+  const expiryLabel = useMemo(
+    () => formatExpiryDate(status?.expiresAt),
+    [status?.expiresAt]
+  );
+
+  const buildingLabel = lead.trialBuildingId?.trim() || status?.buildingId || "—";
+
+  function openCreateDialog() {
+    setFormError(null);
+    setAlreadyProvisionedBanner(false);
+    setDurationDays(30);
+    setElevatorCount(1);
+    setElevatorNames(defaultElevatorNames(1));
+    if (!lead.buildingName?.trim()) {
+      onMessage("יש להזין שם בניין לפני פתיחת הפורטל.");
+      return;
+    }
+    setCreateDialogOpen(true);
+  }
 
   async function handleCopyLink() {
     if (!portalUrl) return;
     try {
       await navigator.clipboard.writeText(portalUrl);
-      onMessage("קישור הניסיון הועתק");
-    } catch {
-      onMessage(portalUrl);
+      onMessage("הקישור הועתק");
+    } catch (error) {
+      console.error("[trial-portal] copy link failed", error);
+      onMessage("לא ניתן להעתיק את הקישור.");
     }
+  }
+
+  async function handleCopyClientMessage() {
+    if (!portalUrl) return;
+    const text = buildClientMessage(lead.contactName, portalUrl);
+    try {
+      await navigator.clipboard.writeText(text);
+      onMessage("הודעת הלקוח הועתקה");
+    } catch (error) {
+      console.error("[trial-portal] copy client message failed", error);
+      onMessage("לא ניתן להעתיק את ההודעה.");
+    }
+  }
+
+  function handleOpenPortal() {
+    if (!portalUrl) return;
+    window.open(portalUrl, "_blank", "noopener,noreferrer");
   }
 
   async function handleProvision() {
     setFormError(null);
-    const elevatorNames = elevatorLines
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean);
-    if (elevatorNames.length === 0) {
-      setFormError("יש להזין לפחות מעלית אחת.");
+
+    if (!lead.buildingName?.trim()) {
+      setFormError("יש להזין שם בניין לפני פתיחת הפורטל.");
       return;
     }
 
-    let expiresIso: string;
-    try {
-      expiresIso = new Date(expiresAt).toISOString();
-      if (Number.isNaN(new Date(expiresAt).getTime())) {
-        setFormError("תאריך התפוגה אינו תקין.");
-        return;
-      }
-    } catch {
-      setFormError("תאריך התפוגה אינו תקין.");
+    if (elevatorNames.length < 1) {
+      setFormError("יש להגדיר לפחות מעלית אחת.");
       return;
     }
+
+    const trimmedNames = elevatorNames.map((name) => name.trim());
+    if (trimmedNames.some((name) => !name)) {
+      setFormError("יש להזין שם לכל מעלית.");
+      return;
+    }
+
+    const expiresAt = computeExpiresAtIso(durationDays);
 
     setSaving(true);
     const result = await provisionSalesLeadTrialPortal(lead.id, {
-      expiresAt: expiresIso,
-      elevatorNames,
+      expiresAt,
+      elevatorNames: trimmedNames,
     });
     setSaving(false);
 
-    if (result.error || !result.lead) {
-      setFormError(result.error ?? "פתיחת הניסיון נכשלה");
+    if (result.error) {
+      console.error("[trial-portal] provision failed", result.error);
+      setFormError(formatTrialPortalCreateError(result.error));
       return;
     }
 
-    onLeadUpdated(result.lead);
+    const already = result.result?.alreadyProvisioned === true;
+
+    if (result.lead) {
+      onLeadUpdated(result.lead);
+    }
     if (result.status) {
       setStatus(result.status);
-    } else {
-      await refreshStatus();
+    } else if (result.lead?.trialBuildingId) {
+      const loaded = await fetchSalesLeadTrialPortalStatus(lead.id);
+      setStatus(loaded.status);
     }
-    setDialogOpen(false);
-    onMessage(
-      result.result?.alreadyProvisioned
-        ? "פורטל הניסיון כבר קיים — הוחזר הקישור הקיים."
-        : "פורטל הניסיון נפתח — ניתן להעתיק את הקישור למטה."
-    );
-  }
 
-  async function handleToggleAccess() {
-    const userId = status?.clientUserId ?? lead.trialClientUserId;
-    const buildingId = status?.buildingId ?? lead.trialBuildingId;
-    if (!userId || !buildingId) return;
+    setCreateDialogOpen(false);
+    setAlreadyProvisionedBanner(already);
 
-    setActionId(userId);
-    const deactivate = status?.isActive !== false && status?.gate === "ok";
-    const ok = deactivate
-      ? await deactivateMasterClientAccess(userId, buildingId)
-      : await reactivateMasterClientAccess(userId, buildingId);
-    setActionId(null);
-    onMessage(ok ? (deactivate ? "קישור הניסיון הושבת" : "קישור הניסיון הופעל") : "הפעולה נכשלה");
-    if (ok) await refreshStatus();
+    if (already) {
+      onMessage("הפורטל כבר קיים ונפתח לשימוש.");
+    } else {
+      onMessage(null);
+    }
   }
 
   return (
-    <section className="space-y-2 rounded-xl border border-forte-border bg-forte-background/40 px-3 py-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h4 className="text-sm font-semibold text-forte-text">פורטל ניסיון</h4>
-        <ForteV2SecondaryButton
-          type="button"
-          size="sm"
-          onClick={() => {
-            setFormError(null);
-            setDialogOpen(true);
-          }}
-          disabled={!lead.trialBuildingId && !canProvision}
-        >
-          {lead.trialBuildingId ? "פרטי ניסיון" : "פתיחת פורטל ניסיון"}
-        </ForteV2SecondaryButton>
-      </div>
+    <section
+      className="mb-4 space-y-3 rounded-xl border border-forte-border bg-forte-background/40 px-3 py-3"
+      dir="rtl"
+    >
+      <h4 className="text-sm font-semibold text-forte-text">פורטל ניסיון</h4>
 
-      {lead.trialBuildingId ? (
-        <div className="space-y-2 text-sm text-forte-text">
+      {hasPortal ? (
+        <div className="space-y-3 text-sm text-forte-text">
+          {alreadyProvisionedBanner ? (
+            <ForteV2StatusBanner tone="info">
+              הפורטל כבר קיים ונפתח לשימוש.
+            </ForteV2StatusBanner>
+          ) : null}
+
+          <div className="flex flex-wrap items-center gap-2">
+            <ForteV2StatusBadge tone="success">פורטל ניסיון פעיל</ForteV2StatusBadge>
+            {loadingStatus ? (
+              <span className="text-xs text-forte-text-secondary">טוען פרטים…</span>
+            ) : null}
+          </div>
+
           <p>
-            מצב:{" "}
-            <span className="font-medium">
-              {loadingStatus
-                ? "טוען…"
-                : formatTrialGate(
-                    status ?? {
-                      gate: "invalid",
-                      buildingId: lead.trialBuildingId ?? "",
-                      clientUserId: lead.trialClientUserId,
-                      accessPath: null,
-                      expiresAt: null,
-                      isActive: false,
-                    }
-                  )}
-            </span>
+            מספר פורטל: <span className="font-medium">{buildingLabel}</span>
           </p>
-          {status?.expiresAt ? (
-            <p className="text-xs text-forte-text-secondary">
-              תוקף:{" "}
-              {new Date(status.expiresAt).toLocaleString("he-IL", {
-                timeZone: "Asia/Jerusalem",
-              })}
-            </p>
+
+          {expiryLabel ? (
+            <p className="text-forte-text-secondary">תוקף עד: {expiryLabel}</p>
           ) : null}
-          {portalUrl ? (
-            <p className="break-all text-xs text-forte-text-secondary">{portalUrl}</p>
-          ) : null}
-          <div className="flex flex-wrap gap-2">
+
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap [&_button]:min-h-[44px] [&_button]:w-full sm:[&_button]:w-auto">
+            <ForteV2PrimaryButton
+              type="button"
+              size="sm"
+              onClick={handleOpenPortal}
+              disabled={!portalUrl || loadingStatus}
+            >
+              פתח פורטל
+            </ForteV2PrimaryButton>
             <ForteV2SecondaryButton
+              type="button"
               size="sm"
               onClick={() => void handleCopyLink()}
-              disabled={!portalUrl}
+              disabled={!portalUrl || loadingStatus}
             >
               העתק קישור
             </ForteV2SecondaryButton>
             <ForteV2SecondaryButton
+              type="button"
               size="sm"
-              onClick={() => void handleToggleAccess()}
-              disabled={!status?.clientUserId || Boolean(actionId)}
+              onClick={() => void handleCopyClientMessage()}
+              disabled={!portalUrl || loadingStatus}
             >
-              {status?.isActive === false || status?.gate === "deactivated"
-                ? "הפעל קישור"
-                : "השבת קישור"}
+              העתק הודעה ללקוח
             </ForteV2SecondaryButton>
           </div>
         </div>
-      ) : canProvision ? (
-        <p className="text-xs text-forte-text-secondary">
-          ליד QA מורשה — ניתן לפתוח פורטל ניסיון. האכיפה (דגל + allowlist + סימון QA) בשרת.
-        </p>
       ) : (
-        <p className="text-xs text-forte-text-secondary">
-          פתיחת ניסיון זמינה רק ללידים מסומני QA שמופיעים ב-allowlist והמתג פעיל בשרת.
-        </p>
+        <div className="space-y-2">
+          <p className="text-xs text-forte-text-secondary">
+            יצירת בניין ניסיון, מעליות וקישור אישי לוועד — ללא שינוי סטטוס הליד.
+          </p>
+          <div className="[&_button]:min-h-[44px] [&_button]:w-full sm:[&_button]:w-auto">
+            <ForteV2PrimaryButton
+              type="button"
+              onClick={openCreateDialog}
+              disabled={!lead.buildingName?.trim()}
+            >
+              פתיחת פורטל ניסיון
+            </ForteV2PrimaryButton>
+          </div>
+          {!lead.buildingName?.trim() ? (
+            <p className="text-xs text-amber-800">
+              יש להזין שם בניין בכרטיס הליד לפני פתיחת הפורטל.
+            </p>
+          ) : null}
+        </div>
       )}
 
-      {dialogOpen ? (
-        <ForteV2DialogOverlay onClose={() => setDialogOpen(false)}>
+      {createDialogOpen ? (
+        <ForteV2DialogOverlay onClose={() => !saving && setCreateDialogOpen(false)}>
           <ForteV2Dialog
-            title={lead.trialBuildingId ? "פרטי פורטל ניסיון" : "פתיחת פורטל ניסיון"}
-            onClose={() => setDialogOpen(false)}
-            size="md"
+            title="פתיחת פורטל ניסיון"
+            onClose={() => !saving && setCreateDialogOpen(false)}
+            size="lg"
           >
-            {lead.trialBuildingId ? (
-              <div className="space-y-3 text-sm">
-                <p>בניין ניסיון: {lead.trialBuildingId}</p>
-                <p className="text-forte-text-secondary">
-                  לשינוי מעליות או תאריך תפוגה — פנו לתמיכה או השתמשו בכרטיס הפרויקט לאחר זכייה.
-                </p>
-                <div className="flex justify-end">
-                  <ForteV2SecondaryButton onClick={() => setDialogOpen(false)}>
-                    סגור
-                  </ForteV2SecondaryButton>
-                </div>
+            <div className="space-y-4 px-1 pb-1" dir="rtl">
+              {formError ? (
+                <ForteV2StatusBanner tone="error">{formError}</ForteV2StatusBanner>
+              ) : null}
+
+              <label className="block space-y-1">
+                <ForteV2FormLabel htmlFor="trial-portal-duration">תוקף הפורטל</ForteV2FormLabel>
+                <select
+                  id="trial-portal-duration"
+                  className="fv2-input w-full min-h-[44px]"
+                  value={String(durationDays)}
+                  disabled={saving}
+                  onChange={(event) => setDurationDays(Number(event.target.value))}
+                >
+                  {TRIAL_DURATION_DAYS.map((days) => (
+                    <option key={days} value={days}>
+                      {days} ימים
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block space-y-1">
+                <ForteV2FormLabel htmlFor="trial-portal-elevator-count">
+                  מספר מעליות
+                </ForteV2FormLabel>
+                <select
+                  id="trial-portal-elevator-count"
+                  className="fv2-input w-full min-h-[44px]"
+                  value={String(elevatorCount)}
+                  disabled={saving}
+                  onChange={(event) => {
+                    const next = Number(event.target.value);
+                    if (next >= 1 && next <= MAX_ELEVATORS) {
+                      setElevatorCount(next);
+                    }
+                  }}
+                >
+                  {Array.from({ length: MAX_ELEVATORS }, (_, index) => index + 1).map(
+                    (count) => (
+                      <option key={count} value={count}>
+                        {count}
+                      </option>
+                    )
+                  )}
+                </select>
+              </label>
+
+              <div className="space-y-2">
+                <p className="fv2-label">שמות מעליות</p>
+                {elevatorNames.map((name, index) => (
+                  <label key={index} className="block space-y-1">
+                    <ForteV2FormLabel htmlFor={`trial-elevator-${index}`}>
+                      שם מעלית {index + 1}
+                    </ForteV2FormLabel>
+                    <ForteV2FormInput
+                      id={`trial-elevator-${index}`}
+                      value={name}
+                      disabled={saving}
+                      className="min-h-[44px]"
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setElevatorNames((prev) => {
+                          const next = [...prev];
+                          next[index] = value;
+                          return next;
+                        });
+                      }}
+                    />
+                  </label>
+                ))}
               </div>
-            ) : (
-              <div className="space-y-4">
-                <p className="text-sm text-forte-text-secondary">
-                  ייווצרו בניין ניסיון, מעליות וקישור אישי — ללא שינוי סטטוס הליד וללא סכום הזמנה.
-                </p>
-                {formError ? (
-                  <ForteV2StatusBanner tone="error">{formError}</ForteV2StatusBanner>
-                ) : null}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <p className="text-forte-text-secondary">בניין</p>
-                    <p className="font-medium">{lead.buildingName || "—"}</p>
-                  </div>
-                  <div>
-                    <p className="text-forte-text-secondary">איש קשר</p>
-                    <p className="font-medium">{lead.contactName || "—"}</p>
-                  </div>
-                </div>
-                <label className="block space-y-1">
-                  <ForteV2FormLabel>תאריך תפוגה *</ForteV2FormLabel>
-                  <ForteV2FormInput
-                    type="datetime-local"
-                    value={expiresAt}
-                    onChange={(event) => setExpiresAt(event.target.value)}
-                    required
-                  />
-                </label>
-                <label className="block space-y-1">
-                  <ForteV2FormLabel>מעליות (שורה לכל מעלית) *</ForteV2FormLabel>
-                  <textarea
-                    className="fv2-input w-full min-h-[96px]"
-                    value={elevatorLines}
-                    onChange={(event) => setElevatorLines(event.target.value)}
-                    required
-                  />
-                </label>
-                <div className="flex flex-wrap justify-end gap-2">
-                  <ForteV2SecondaryButton
-                    type="button"
-                    onClick={() => setDialogOpen(false)}
-                    disabled={saving}
-                  >
-                    ביטול
-                  </ForteV2SecondaryButton>
-                  <ForteV2PrimaryButton
-                    type="button"
-                    disabled={saving}
-                    onClick={() => void handleProvision()}
-                  >
-                    {saving ? "יוצר…" : "פתיחת פורטל"}
-                  </ForteV2PrimaryButton>
-                </div>
+
+              <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end [&_button]:min-h-[44px] [&_button]:w-full sm:[&_button]:w-auto">
+                <ForteV2SecondaryButton
+                  type="button"
+                  onClick={() => setCreateDialogOpen(false)}
+                  disabled={saving}
+                >
+                  ביטול
+                </ForteV2SecondaryButton>
+                <ForteV2PrimaryButton
+                  type="button"
+                  disabled={saving}
+                  onClick={() => void handleProvision()}
+                >
+                  {saving ? "יוצר פורטל..." : "צור פורטל"}
+                </ForteV2PrimaryButton>
               </div>
-            )}
+            </div>
           </ForteV2Dialog>
         </ForteV2DialogOverlay>
       ) : null}
