@@ -7,6 +7,7 @@ import {
   findOpenMatchingSalesLead,
   PUBLIC_SALES_LEAD_FORM_HISTORY_TEXT,
   PUBLIC_SALES_LEAD_SOURCE,
+  PUBLIC_SALES_LEAD_TERMS_VERSION,
   type PublicSalesLeadFormInput,
 } from "@/lib/sales-lead-public-form";
 import type { SalesLeadNotificationEventKind } from "@/lib/sales-lead-notifications";
@@ -28,6 +29,7 @@ export type PublicSalesLeadSubmitRpcArgs = {
   p_need_description: string;
   p_next_action: string;
   p_ip_hash: string;
+  p_terms_version: string;
 };
 
 export type PublicSalesLeadSubmitRpcResult = {
@@ -60,6 +62,7 @@ export function buildPublicSalesLeadSubmitRpcArgs(input: {
     p_need_description: input.form.needDescription.trim(),
     p_next_action: input.nextAction.trim(),
     p_ip_hash: input.ipHash,
+    p_terms_version: PUBLIC_SALES_LEAD_TERMS_VERSION,
   };
 }
 

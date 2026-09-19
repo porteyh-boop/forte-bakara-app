@@ -22,17 +22,19 @@ import {
   PUBLIC_SALES_LEAD_FORM_BADGE,
   PUBLIC_SALES_LEAD_FORM_HISTORY_TEXT,
   PUBLIC_SALES_LEAD_FORM_PATH,
-  PUBLIC_SALES_LEAD_FORM_CONSENT_TEXT,
   PUBLIC_SALES_LEAD_FORM_PRIVACY_LINK_LABEL,
   PUBLIC_SALES_LEAD_FORM_SUBMIT_LABEL,
   PUBLIC_SALES_LEAD_FORM_SUCCESS_TEXT,
   PUBLIC_SALES_LEAD_PRIVACY_PATH,
   PUBLIC_SALES_LEAD_SOURCE,
+  PUBLIC_SALES_LEAD_TERMS_VERSION,
+  PUBLIC_SALES_LEAD_TERMS_VALIDATION_ERROR,
   publicFormPayloadHash,
   readIdempotencyRecord,
   rememberIdempotencyRecord,
   shouldCreateNewLeadForClosedMatch,
   validatePublicSalesLeadFormInput,
+  validatePublicSalesLeadTermsAcceptance,
   type IdempotencyRecord,
   type PublicSalesLeadFormInput,
 } from "../lib/sales-lead-public-form";
@@ -106,6 +108,32 @@ function read(rel: string): string {
 }
 
 console.log("\n=== Public sales lead form QA ===\n");
+
+assert(PUBLIC_SALES_LEAD_TERMS_VERSION === "2026-09", "terms version 2026-09");
+assert(
+  validatePublicSalesLeadTermsAcceptance(false) === "terms_not_accepted" &&
+    validatePublicSalesLeadTermsAcceptance(true) === null,
+  "terms acceptance validation"
+);
+const parsedTerms = parsePublicSalesLeadFormBody({
+  clientName: "a",
+  contactName: "b",
+  phone: "0501234567",
+  termsAccepted: true,
+});
+assert(
+  parsedTerms.ok && parsedTerms.termsAccepted === true,
+  "parse body termsAccepted true"
+);
+const parsedNoTerms = parsePublicSalesLeadFormBody({
+  clientName: "a",
+  contactName: "b",
+  phone: "0501234567",
+});
+assert(
+  parsedNoTerms.ok && parsedNoTerms.termsAccepted === false,
+  "parse body termsAccepted default false"
+);
 
 assert(
   PUBLIC_SALES_LEAD_FORM_PATH === "/lead" && isPublicSalesLeadFormPath("/lead"),
@@ -407,16 +435,34 @@ assert(nav.includes("isPublicCustomerFacingPath"), "bottom nav hidden on public 
 assert(footer.includes("isPublicCustomerFacingPath"), "footer hidden on public form pages");
 assert(masterBtn.includes("isPublicCustomerFacingPath"), "master return hidden on public form pages");
 assert(
-  form.includes("PUBLIC_SALES_LEAD_FORM_CONSENT_TEXT") &&
+  form.includes("type=\"checkbox\"") &&
+    form.includes("termsAccepted") &&
+    form.includes("target=\"_blank\"") &&
+    form.includes("PUBLIC_SALES_LEAD_TERMS_VALIDATION_ERROR") &&
     form.includes("PUBLIC_SALES_LEAD_PRIVACY_PATH") &&
     PUBLIC_SALES_LEAD_PRIVACY_PATH === "/privacy" &&
-    PUBLIC_SALES_LEAD_FORM_CONSENT_TEXT.includes("מאשרים שניצור עמכם קשר") &&
-    PUBLIC_SALES_LEAD_FORM_PRIVACY_LINK_LABEL.includes("פרטיות"),
-  "submit consent + privacy link"
+    PUBLIC_SALES_LEAD_FORM_PRIVACY_LINK_LABEL.includes("פרטיות") &&
+    PUBLIC_SALES_LEAD_TERMS_VALIDATION_ERROR.includes("לפני שליחת הפנייה"),
+  "required terms checkbox + privacy link"
 );
 assert(
-  fs.existsSync(path.join(process.cwd(), "app/privacy/page.tsx")),
-  "privacy page exists"
+  fs.existsSync(path.join(process.cwd(), "app/privacy/page.tsx")) &&
+    read("app/privacy/page.tsx").includes("ForteLegalTermsDocument") &&
+    read("components/public/ForteLegalTermsDocument.tsx").includes("מטרת השירות"),
+  "expanded privacy / terms page"
+);
+assert(
+  fs.existsSync(
+    path.join(process.cwd(), "supabase/migrations/045_sales_lead_terms_consent.sql")
+  ) &&
+    read("supabase/migrations/045_sales_lead_terms_consent.sql").includes(
+      "terms_not_accepted"
+    ),
+  "migration 045 terms consent"
+);
+assert(
+  read("lib/sales-lead-public-form-submit.ts").includes("p_terms_version"),
+  "RPC args include p_terms_version"
 );
 assert(api.includes("export async function POST"), "public API has POST");
 assert(!api.includes("export async function GET"), "public API has no GET");

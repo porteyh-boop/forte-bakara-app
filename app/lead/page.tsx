@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 export default function PublicSalesLeadPage() {
   return (
     <div className="min-h-screen bg-[#eef2f7] px-4 py-8">
-      <main className="mx-auto w-full max-w-md space-y-6">
+      <main className="mx-auto w-full max-w-md space-y-6 md:max-w-xl">
         <header className="text-center">
           <div className="mx-auto mb-3 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-[#0d1b3e] text-xl font-black text-white shadow-lg">
             F

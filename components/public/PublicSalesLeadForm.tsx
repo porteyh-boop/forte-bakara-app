@@ -6,13 +6,17 @@ import { BRAND_APP, BRAND_EDITOR_TITLE, BRAND_FORTE } from "@/lib/brand";
 import {
   emptyPublicSalesLeadFormInput,
   PUBLIC_SALES_LEAD_FORM_API_PATH,
-  PUBLIC_SALES_LEAD_FORM_CONSENT_TEXT,
   PUBLIC_SALES_LEAD_FORM_PRIVACY_LINK_LABEL,
   PUBLIC_SALES_LEAD_FORM_SUBMIT_LABEL,
   PUBLIC_SALES_LEAD_FORM_SUCCESS_TEXT,
   PUBLIC_SALES_LEAD_PRIVACY_PATH,
+  PUBLIC_SALES_LEAD_TERMS_VALIDATION_ERROR,
   type PublicSalesLeadFormInput,
 } from "@/lib/sales-lead-public-form";
+import {
+  PUBLIC_SALES_LEAD_TERMS_CHECKBOX_PREFIX,
+  PUBLIC_SALES_LEAD_TERMS_CHECKBOX_SUFFIX,
+} from "@/lib/sales-lead-terms";
 import { SALES_LEAD_SERVICE_TYPES } from "@/lib/sales-leads";
 import { SERVICE_TYPE_OTHER } from "@/lib/service-type";
 
@@ -59,6 +63,8 @@ export default function PublicSalesLeadForm() {
   const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [termsError, setTermsError] = useState<string | null>(null);
 
   function patch<K extends keyof PublicSalesLeadFormInput>(
     key: K,
@@ -71,8 +77,13 @@ export default function PublicSalesLeadForm() {
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (saving || submitted) return;
+    if (!termsAccepted) {
+      setTermsError(PUBLIC_SALES_LEAD_TERMS_VALIDATION_ERROR);
+      return;
+    }
     setSaving(true);
     setError(null);
+    setTermsError(null);
     try {
       const response = await fetch(PUBLIC_SALES_LEAD_FORM_API_PATH, {
         method: "POST",
@@ -85,6 +96,7 @@ export default function PublicSalesLeadForm() {
           companyWebsite: honeypot,
           startedAt,
           idempotencyKey,
+          termsAccepted: true,
         }),
       });
       const payload = (await response.json().catch(() => null)) as {
@@ -96,6 +108,8 @@ export default function PublicSalesLeadForm() {
           setError("נשלחו יותר מדי פניות. נסו שוב בעוד כמה דקות.");
         } else if (payload?.error === "service_unavailable") {
           setError("השליחה אינה זמינה כרגע. נסו שוב בעוד כמה דקות.");
+        } else if (payload?.error === "terms_not_accepted") {
+          setTermsError(PUBLIC_SALES_LEAD_TERMS_VALIDATION_ERROR);
         } else if (payload?.error && payload.error !== "invalid_request" && payload.error !== "save_failed") {
           setError(payload.error);
         } else {
@@ -269,6 +283,43 @@ export default function PublicSalesLeadForm() {
         />
       </Field>
 
+      <div className="rounded-xl border border-[#d7deea] bg-white px-3.5 py-3">
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={termsAccepted}
+            onChange={(event) => {
+              setTermsAccepted(event.target.checked);
+              if (termsError) setTermsError(null);
+            }}
+            className="mt-1 h-5 w-5 shrink-0 rounded border-[#d7deea] text-[#0d1b3e] focus:ring-[#c4a35a]/40"
+            aria-invalid={termsError ? true : undefined}
+            aria-describedby={termsError ? "public-lead-terms-error" : undefined}
+          />
+          <span className="text-sm leading-relaxed text-[#0d1b3e]">
+            {PUBLIC_SALES_LEAD_TERMS_CHECKBOX_PREFIX}
+            <Link
+              href={PUBLIC_SALES_LEAD_PRIVACY_PATH}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold text-[#0d1b3e] underline underline-offset-2"
+            >
+              {PUBLIC_SALES_LEAD_FORM_PRIVACY_LINK_LABEL}
+            </Link>
+            {PUBLIC_SALES_LEAD_TERMS_CHECKBOX_SUFFIX}
+          </span>
+        </label>
+        {termsError ? (
+          <p
+            id="public-lead-terms-error"
+            className="mt-2 text-sm text-red-700"
+            role="alert"
+          >
+            {termsError}
+          </p>
+        ) : null}
+      </div>
+
       <button
         type="submit"
         disabled={saving || submitted}
@@ -276,16 +327,6 @@ export default function PublicSalesLeadForm() {
       >
         {saving ? "שולח..." : PUBLIC_SALES_LEAD_FORM_SUBMIT_LABEL}
       </button>
-      <p className="text-center text-[12px] leading-relaxed text-[#5b6b82]">
-        {PUBLIC_SALES_LEAD_FORM_CONSENT_TEXT}{" "}
-        <Link
-          href={PUBLIC_SALES_LEAD_PRIVACY_PATH}
-          className="font-semibold text-[#0d1b3e] underline underline-offset-2"
-        >
-          {PUBLIC_SALES_LEAD_FORM_PRIVACY_LINK_LABEL}
-        </Link>
-        .
-      </p>
       <p className="text-center text-[11px] text-[#5b6b82]">
         {BRAND_FORTE} · {BRAND_APP} · {BRAND_EDITOR_TITLE}
       </p>

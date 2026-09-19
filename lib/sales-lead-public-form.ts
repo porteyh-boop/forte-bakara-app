@@ -6,6 +6,7 @@ import {
   type SalesLead,
   type SalesLeadDraft,
 } from "@/lib/sales-leads";
+import { isPublicSalesLeadTermsAccepted } from "@/lib/sales-lead-terms";
 import {
   isServiceType,
   SERVICE_TYPE_OTHER,
@@ -22,10 +23,13 @@ export const PUBLIC_SALES_LEAD_FORM_SUCCESS_TEXT =
   "הפרטים התקבלו בהצלחה. נציג FORTE יחזור אליכם בהקדם.";
 export const PUBLIC_SALES_LEAD_FORM_BADGE = "התקבלה מטופס דיגיטלי";
 export const PUBLIC_SALES_LEAD_FORM_SUBMIT_LABEL = "שליחת הפרטים";
-export const PUBLIC_SALES_LEAD_FORM_CONSENT_TEXT =
-  "בלחיצה על שליחת הפרטים אתם מאשרים שניצור עמכם קשר בנוגע לפנייה.";
-export const PUBLIC_SALES_LEAD_FORM_PRIVACY_LINK_LABEL =
-  "תנאי השימוש ומדיניות הפרטיות";
+
+export {
+  PUBLIC_SALES_LEAD_TERMS_LINK_LABEL as PUBLIC_SALES_LEAD_FORM_PRIVACY_LINK_LABEL,
+  PUBLIC_SALES_LEAD_TERMS_VALIDATION_ERROR,
+  PUBLIC_SALES_LEAD_TERMS_VERSION,
+  isPublicSalesLeadTermsAccepted,
+} from "@/lib/sales-lead-terms";
 
 export const PUBLIC_FORM_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
 export const PUBLIC_FORM_RATE_LIMIT_MAX = 5;
@@ -51,7 +55,12 @@ export type PublicSalesLeadFormInput = {
 };
 
 export type PublicSalesLeadFormParseResult =
-  | { ok: true; input: PublicSalesLeadFormInput; honeypotFilled: boolean }
+  | {
+      ok: true;
+      input: PublicSalesLeadFormInput;
+      honeypotFilled: boolean;
+      termsAccepted: boolean;
+    }
   | { ok: false; error: string };
 
 export function isPublicSalesLeadFormPath(pathname: string): boolean {
@@ -137,7 +146,14 @@ export function parsePublicSalesLeadFormBody(
     needDescription: asFormString(raw.needDescription, 2000),
     preferredContactAt: asFormString(raw.preferredContactAt, 160),
   };
-  return { ok: true, input, honeypotFilled };
+  const termsAccepted = isPublicSalesLeadTermsAccepted(raw.termsAccepted);
+  return { ok: true, input, honeypotFilled, termsAccepted };
+}
+
+export function validatePublicSalesLeadTermsAcceptance(
+  termsAccepted: boolean
+): "terms_not_accepted" | null {
+  return termsAccepted ? null : "terms_not_accepted";
 }
 
 export function validatePublicSalesLeadFormInput(

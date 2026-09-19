@@ -10,6 +10,7 @@ import {
   readIdempotencyRecord,
   rememberIdempotencyRecord,
   validatePublicSalesLeadFormInput,
+  validatePublicSalesLeadTermsAcceptance,
   type IdempotencyRecord,
   type RateLimitBucket,
 } from "@/lib/sales-lead-public-form";
@@ -91,6 +92,11 @@ export async function submitPublicSalesLeadForm(input: {
     return { ok: false, status: 400, error: "invalid_request" };
   }
 
+  const termsError = validatePublicSalesLeadTermsAcceptance(parsed.termsAccepted);
+  if (termsError) {
+    return { ok: false, status: 400, error: termsError };
+  }
+
   const validationError = validatePublicSalesLeadFormInput(parsed.input);
   if (validationError) {
     return { ok: false, status: 400, error: validationError };
@@ -147,9 +153,16 @@ export async function submitPublicSalesLeadForm(input: {
       message.includes("missing_contact_name") ||
       message.includes("missing_phone") ||
       message.includes("missing_service_type_other") ||
-      message.includes("invalid_request")
+      message.includes("invalid_request") ||
+      message.includes("terms_not_accepted")
     ) {
-      return { ok: false, status: 400, error: "invalid_request" };
+      return {
+        ok: false,
+        status: 400,
+        error: message.includes("terms_not_accepted")
+          ? "terms_not_accepted"
+          : "invalid_request",
+      };
     }
     console.error("[sales-lead-public-form] submit RPC failed", error.message);
     return { ok: false, status: 502, error: "save_failed" };
