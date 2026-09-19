@@ -24,6 +24,7 @@ export default function PageHeader({
   portalViewMode,
 }: PageHeaderProps) {
   const isHome = title === BRAND_APP;
+  const isClientPortal = portalViewMode != null;
   const contentWidthClass =
     portalViewMode === "mobile"
       ? "max-w-lg"
@@ -40,17 +41,27 @@ export default function PageHeader({
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(201,169,98,0.15),transparent_60%)]" />
       <div className="absolute -top-20 -left-20 w-64 h-64 bg-gold/5 rounded-full blur-3xl" />
       <div
-        className={`relative ${contentWidthClass} mx-auto px-5 pt-10 pb-8 md:pt-12 md:pb-10`}
+        className={`relative ${contentWidthClass} mx-auto px-5 pt-10 pb-8 md:pt-12 md:pb-10${
+          isClientPortal ? " lg:px-6 lg:pt-7 lg:pb-5" : ""
+        }`}
       >
         {badge && (
-          <div className="flex justify-end mb-4 md:mb-5">
+          <div
+            className={`flex justify-end mb-4 md:mb-5${
+              isClientPortal ? " lg:mb-2.5" : ""
+            }`}
+          >
             <span className="text-[10px] md:text-xs font-medium bg-white/10 text-gold-light px-2.5 py-1 rounded-full">
               {badge}
             </span>
           </div>
         )}
 
-        <div className="flex flex-col gap-2.5 md:gap-3.5">
+        <div
+          className={`flex flex-col gap-2.5 md:gap-3.5${
+            isClientPortal ? " lg:gap-2" : ""
+          }`}
+        >
           <p className="text-gold text-xs md:text-sm font-semibold tracking-wide leading-none">
             {BRAND_EDITOR_NAME}
           </p>
@@ -63,7 +74,11 @@ export default function PageHeader({
         </div>
 
         {!isHome && (
-          <div className="mt-5 md:mt-7 pt-4 md:pt-5 border-t border-white/10">
+          <div
+            className={`mt-5 md:mt-7 pt-4 md:pt-5 border-t border-white/10${
+              isClientPortal ? " lg:mt-4 lg:pt-3" : ""
+            }`}
+          >
             <h2 className="text-lg md:text-xl font-bold leading-tight text-white">
               {title}
             </h2>
@@ -75,7 +90,11 @@ export default function PageHeader({
           </div>
         )}
       </div>
-      <div className="h-6 bg-gray-light rounded-t-3xl" />
+      <div
+        className={`h-6 bg-gray-light rounded-t-3xl${
+          isClientPortal ? " lg:h-4 lg:rounded-t-2xl" : ""
+        }`}
+      />
     </header>
   );
 }

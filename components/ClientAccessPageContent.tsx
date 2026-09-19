@@ -433,11 +433,11 @@ export default function ClientAccessPageContent({
       />
 
       <main className="client-portal-main space-y-4 -mt-2 lg:space-y-6">
-        <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-2 lg:p-5 lg:flex lg:items-start lg:justify-between lg:gap-6 lg:space-y-0">
-          <p className="text-sm text-gray-text whitespace-pre-line lg:text-base lg:flex-1">
+        <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-2 lg:p-3 lg:flex lg:items-center lg:justify-between lg:gap-5 lg:space-y-0">
+          <p className="text-sm text-gray-text whitespace-pre-line lg:text-sm lg:leading-snug lg:flex-1">
             {welcomeMessage}
           </p>
-          <p className="text-xs text-gray-text lg:text-sm lg:shrink-0 lg:text-left">
+          <p className="text-xs text-gray-text lg:text-xs lg:shrink-0 lg:text-left lg:leading-snug">
             עודכן לאחרונה: {formatClientPortalLastUpdated(dataLastUpdated)}
           </p>
         </div>

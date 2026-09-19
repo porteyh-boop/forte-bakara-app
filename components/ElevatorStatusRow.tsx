@@ -14,12 +14,21 @@ export default function ElevatorStatusRow({
   faultCounts,
   responsiveGrid = false,
 }: ElevatorStatusRowProps) {
+  const count = elevators.length;
+  const desktopGridClass = !responsiveGrid
+    ? ""
+    : count <= 1
+      ? "lg:grid-cols-1 lg:gap-4"
+      : count === 2
+        ? "lg:grid-cols-2 lg:gap-5"
+        : "lg:grid-cols-2 lg:gap-4 xl:grid-cols-3 xl:gap-4";
+
   const containerClass = responsiveGrid
-    ? "animate-fade-up animation-delay-100 bg-white rounded-2xl border border-gray-200 shadow-sm divide-y divide-gray-100 lg:divide-y-0 lg:border-0 lg:bg-transparent lg:shadow-none lg:grid lg:grid-cols-2 lg:gap-4 xl:grid-cols-3"
+    ? `animate-fade-up animation-delay-100 bg-white rounded-2xl border border-gray-200 shadow-sm divide-y divide-gray-100 lg:divide-y-0 lg:border-0 lg:bg-transparent lg:shadow-none lg:grid lg:w-full lg:min-w-0 ${desktopGridClass}`
     : "bg-white rounded-2xl border border-gray-200 shadow-sm divide-y divide-gray-100 animate-fade-up animation-delay-100";
 
   const itemClass = responsiveGrid
-    ? "px-4 py-3.5 animate-fade-up lg:bg-white lg:rounded-2xl lg:border lg:border-gray-200 lg:shadow-sm lg:py-4"
+    ? "px-4 py-3.5 animate-fade-up lg:bg-white lg:rounded-2xl lg:border lg:border-gray-200 lg:shadow-sm lg:px-5 lg:py-4 lg:min-h-[5.25rem] lg:h-full"
     : "px-4 py-3.5 animate-fade-up";
 
   return (
@@ -34,7 +43,7 @@ export default function ElevatorStatusRow({
           >
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-lg bg-navy/5 flex items-center justify-center shrink-0">
+                <div className="w-9 h-9 rounded-lg bg-navy/5 flex items-center justify-center shrink-0 lg:w-10 lg:h-10">
                   <svg
                     viewBox="0 0 24 24"
                     fill="none"
