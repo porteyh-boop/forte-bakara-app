@@ -1,7 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
+  ForteV2Dialog,
+  ForteV2DialogOverlay,
   ForteV2Panel,
   ForteV2TabShell,
   MasterProjectV2EmptyState,
@@ -28,7 +31,11 @@ import {
   listMasterBuildingClientUpdates,
   patchMasterBuildingClientUpdate,
 } from "@/lib/master-building-client-updates-api";
-import { listMasterClientAccessRecords } from "@/lib/master-client-access-api";
+import {
+  getMasterClientPermissionsOrDefaults,
+  listMasterClientAccessRecords,
+} from "@/lib/master-client-access-api";
+import { buildMasterProjectV2Path } from "@/lib/master-project-v2-routes";
 import {
   listMasterDocumentsByBuilding,
   uploadMasterDocument,
@@ -41,6 +48,7 @@ import type { ProjectContactWithDetails } from "@/lib/contacts";
 import { getBuildingDataset } from "@/lib/buildings";
 
 type EditorMode = "create" | "edit";
+type ShareBlockReason = "no_portal" | "no_permission";
 
 function formatUpdateDateTime(iso: string): string {
   return new Intl.DateTimeFormat("he-IL", {
@@ -77,6 +85,7 @@ interface MasterProjectV2ClientUpdatesTabProps {
 export default function MasterProjectV2ClientUpdatesTab({
   buildingId,
 }: MasterProjectV2ClientUpdatesTabProps) {
+  const router = useRouter();
   const [updates, setUpdates] = useState<MasterBuildingClientUpdateDto[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -98,6 +107,8 @@ export default function MasterProjectV2ClientUpdatesTab({
   const [contacts, setContacts] = useState<ProjectContactWithDetails[]>([]);
   const [shareRecipientKey, setShareRecipientKey] = useState<string>("");
   const [copyHint, setCopyHint] = useState<string | null>(null);
+  const [shareBlockDialog, setShareBlockDialog] =
+    useState<ShareBlockReason | null>(null);
 
   const buildingLabel = useMemo(() => {
     const ds = getBuildingDataset(buildingId);
@@ -183,13 +194,51 @@ export default function MasterProjectV2ClientUpdatesTab({
     setShareRecipientKey(shareRecipients[0].key);
   }, [shareRecipients, shareRecipientKey]);
 
+  /** User whose access token is embedded in the shared portal / WhatsApp link. */
+  const portalLinkAccess = useMemo(
+    () =>
+      accessRecords.find(
+        (r) => r.user.is_active && r.user.access_token?.trim()
+      ) ?? null,
+    [accessRecords]
+  );
+
   const activePortalUrl = useMemo(() => {
-    const active = accessRecords.find(
-      (r) => r.user.is_active && r.user.access_token?.trim()
+    if (!portalLinkAccess?.user.access_token) return null;
+    return buildClientUpdatePortalUrl(portalLinkAccess.user.access_token);
+  }, [portalLinkAccess]);
+
+  const goToPermissionsTab = useCallback(() => {
+    setShareBlockDialog(null);
+    router.replace(buildMasterProjectV2Path(buildingId, "permissions"));
+  }, [buildingId, router]);
+
+  const resolveShareGate = useCallback(async (): Promise<
+    "ok" | ShareBlockReason
+  > => {
+    if (!portalLinkAccess?.user.access_token?.trim()) {
+      return "no_portal";
+    }
+    const flags = await getMasterClientPermissionsOrDefaults(
+      portalLinkAccess.user.id
     );
-    if (!active?.user.access_token) return null;
-    return buildClientUpdatePortalUrl(active.user.access_token);
-  }, [accessRecords]);
+    if (!flags.can_view_client_updates) {
+      return "no_permission";
+    }
+    return "ok";
+  }, [portalLinkAccess]);
+
+  const runGatedShareAction = useCallback(
+    async (action: () => void) => {
+      const gate = await resolveShareGate();
+      if (gate === "ok") {
+        action();
+        return;
+      }
+      setShareBlockDialog(gate);
+    },
+    [resolveShareGate]
+  );
 
   function openCreate() {
     setEditorMode("create");
@@ -409,14 +458,17 @@ export default function MasterProjectV2ClientUpdatesTab({
 
         <div className="flex flex-wrap gap-2">
           {waUrl && phoneOk ? (
-            <a
-              href={waUrl}
-              target="_blank"
-              rel="noopener noreferrer"
+            <button
+              type="button"
               className="rounded-md bg-[#25D366] px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90"
+              onClick={() => {
+                void runGatedShareAction(() => {
+                  window.open(waUrl, "_blank", "noopener,noreferrer");
+                });
+              }}
             >
               שלח WhatsApp
-            </a>
+            </button>
           ) : (
             <span
               className="text-xs text-forte-text-secondary"
@@ -430,30 +482,33 @@ export default function MasterProjectV2ClientUpdatesTab({
             disabled={!message}
             onClick={() => {
               if (!message) return;
-              void navigator.clipboard.writeText(message).then(() => {
-                setCopyHint("ההודעה הועתקה.");
-                window.setTimeout(() => setCopyHint(null), 2500);
+              void runGatedShareAction(() => {
+                void navigator.clipboard.writeText(message).then(() => {
+                  setCopyHint("ההודעה הועתקה.");
+                  window.setTimeout(() => setCopyHint(null), 2500);
+                });
               });
             }}
           >
             העתק הודעה
           </MasterProjectV2SecondaryButton>
 
-          {activePortalUrl ? (
-            <a
-              href={activePortalUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center rounded-md border border-forte-border bg-white px-3 py-1.5 text-xs font-semibold text-forte-text hover:bg-forte-blue-light/40"
-            >
-              פתח פורטל
-            </a>
-          ) : (
-            <span className="text-xs text-amber-800">
-              אין קישור פעיל לפורטל — צרו גישת לקוח בטאב הרשאות.
-            </span>
-          )}
+          <MasterProjectV2SecondaryButton
+            onClick={() => {
+              void runGatedShareAction(() => {
+                if (!activePortalUrl) return;
+                window.open(activePortalUrl, "_blank", "noopener,noreferrer");
+              });
+            }}
+          >
+            פתח פורטל
+          </MasterProjectV2SecondaryButton>
         </div>
+        {!activePortalUrl ? (
+          <p className="text-xs text-amber-800">
+            אין קישור פעיל לפורטל — צרו גישת לקוח בטאב הרשאות.
+          </p>
+        ) : null}
         {copyHint ? (
           <p className="text-xs text-green-800">{copyHint}</p>
         ) : null}
@@ -716,6 +771,42 @@ export default function MasterProjectV2ClientUpdatesTab({
             </div>
           </form>
         </div>
+      ) : null}
+
+      {shareBlockDialog ? (
+        <ForteV2DialogOverlay onClose={() => setShareBlockDialog(null)}>
+          <ForteV2Dialog
+            title={
+              shareBlockDialog === "no_portal"
+                ? "גישת פורטל חסרה"
+                : "הרשאת צפייה חסרה"
+            }
+            onClose={() => setShareBlockDialog(null)}
+            size="md"
+          >
+            <div className="space-y-4" dir="rtl">
+              <p className="text-sm text-forte-text whitespace-pre-line">
+                {shareBlockDialog === "no_portal"
+                  ? "לא נמצא משתמש פורטל פעיל ללקוח.\nיש להגדיר גישה לפורטל לפני שליחת ההודעה."
+                  : "ללקוח אין הרשאה לצפות בעדכונים והודעות.\nיש להפעיל את ההרשאה לפני שליחת ההודעה."}
+              </p>
+              <div className="flex flex-wrap justify-start gap-2">
+                <MasterProjectV2PrimaryButton
+                  type="button"
+                  onClick={goToPermissionsTab}
+                >
+                  עבור להרשאות
+                </MasterProjectV2PrimaryButton>
+                <MasterProjectV2SecondaryButton
+                  type="button"
+                  onClick={() => setShareBlockDialog(null)}
+                >
+                  ביטול
+                </MasterProjectV2SecondaryButton>
+              </div>
+            </div>
+          </ForteV2Dialog>
+        </ForteV2DialogOverlay>
       ) : null}
     </ForteV2TabShell>
   );

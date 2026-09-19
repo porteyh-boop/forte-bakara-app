@@ -108,6 +108,18 @@ async function main(): Promise<void> {
   if (uiSource.includes("!update.visibleToClient") && uiSource.includes("renderShareActions"))
     ok("UI: share actions gated on visibleToClient");
   else bad("UI share gate", "check renderShareActions");
+  if (
+    uiSource.includes("getMasterClientPermissionsOrDefaults") &&
+    uiSource.includes("can_view_client_updates") &&
+    uiSource.includes("runGatedShareAction") &&
+    uiSource.includes('buildMasterProjectV2Path(buildingId, "permissions")') &&
+    uiSource.includes("shareBlockDialog") &&
+    !uiSource.includes('href={waUrl}')
+  ) {
+    ok("UI: share actions gate can_view_client_updates before WhatsApp/copy/portal");
+  } else {
+    bad("UI share permission gate", "expected gated share + permissions tab navigation");
+  }
 
   const tabConfig = fs.readFileSync(path.join(process.cwd(), "lib/project-type-config.ts"), "utf8");
   if (tabConfig.includes('clientUpdates: "עדכונים ללקוח"'))

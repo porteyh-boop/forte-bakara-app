@@ -167,6 +167,11 @@ const masterTab = fs.readFileSync(
 );
 assert(masterTab.includes("visibleToClient: false"), "Master UI: default not visible");
 assert(masterTab.includes("buildClientUpdateShareMessage"), "Master UI: shared message helper");
+assert(
+  masterTab.includes("can_view_client_updates") &&
+    masterTab.includes("runGatedShareAction"),
+  "Master UI: permission gate before client share actions"
+);
 
 const v2RoutesSource = fs.readFileSync(
   path.join(process.cwd(), "lib/master-project-v2-routes.ts"),
