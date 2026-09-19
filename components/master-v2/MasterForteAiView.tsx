@@ -22,6 +22,7 @@ import {
   type AiAgentKey,
   type ForteAiMarketingDashboardDto,
 } from "@/lib/forte-ai-marketing";
+import MasterForteAiScoutSection from "@/components/master-v2/MasterForteAiScoutSection";
 import {
   fetchForteAiMarketingDashboard,
   patchForteAiApproval,
@@ -286,6 +287,8 @@ export default function MasterForteAiView() {
                 )}
               </ForteV2TableCard>
             </div>
+
+            <MasterForteAiScoutSection />
 
             <ForteV2TableCard title="אישורים הממתינים ליהודה">
               {dashboard.pendingApprovals.length === 0 ? (

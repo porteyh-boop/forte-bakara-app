@@ -31,6 +31,7 @@ export const SALES_LEAD_SOURCES = [
   "שלט",
   "לקוח חוזר",
   "טופס דיגיטלי ללקוח",
+  "סוכן SCOUT",
 ] as const;
 
 export const SALES_LEAD_CHANNELS = [
