@@ -5,20 +5,31 @@ import type { Elevator } from "@/lib/types";
 interface ElevatorStatusRowProps {
   elevators: Elevator[];
   faultCounts?: Record<string, ElevatorFaultCounts>;
+  /** On lg+ (desktop) show a multi-column card grid instead of a single stacked list */
+  responsiveGrid?: boolean;
 }
 
 export default function ElevatorStatusRow({
   elevators,
   faultCounts,
+  responsiveGrid = false,
 }: ElevatorStatusRowProps) {
+  const containerClass = responsiveGrid
+    ? "animate-fade-up animation-delay-100 bg-white rounded-2xl border border-gray-200 shadow-sm divide-y divide-gray-100 lg:divide-y-0 lg:border-0 lg:bg-transparent lg:shadow-none lg:grid lg:grid-cols-2 lg:gap-4 xl:grid-cols-3"
+    : "bg-white rounded-2xl border border-gray-200 shadow-sm divide-y divide-gray-100 animate-fade-up animation-delay-100";
+
+  const itemClass = responsiveGrid
+    ? "px-4 py-3.5 animate-fade-up lg:bg-white lg:rounded-2xl lg:border lg:border-gray-200 lg:shadow-sm lg:py-4"
+    : "px-4 py-3.5 animate-fade-up";
+
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm divide-y divide-gray-100 animate-fade-up animation-delay-100">
+    <div className={containerClass}>
       {elevators.map((elevator, i) => {
         const counts = faultCounts?.[elevator.id];
         return (
           <div
             key={elevator.id}
-            className="px-4 py-3.5 animate-fade-up"
+            className={itemClass}
             style={{ animationDelay: `${(i + 1) * 60}ms` }}
           >
             <div className="flex items-center justify-between gap-3">

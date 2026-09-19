@@ -3,6 +3,7 @@ import {
   BRAND_EDITOR_NAME,
   BRAND_TAGLINE,
 } from "@/lib/brand";
+import type { ClientPortalViewMode } from "@/lib/client-portal-view-mode";
 
 interface PageHeaderProps {
   title: string;
@@ -10,6 +11,8 @@ interface PageHeaderProps {
   badge?: string;
   wide?: boolean;
   master?: boolean;
+  /** When set (client portal), layout follows UA — not only viewport breakpoints. */
+  portalViewMode?: ClientPortalViewMode;
 }
 
 export default function PageHeader({
@@ -18,13 +21,19 @@ export default function PageHeader({
   badge,
   wide = false,
   master = false,
+  portalViewMode,
 }: PageHeaderProps) {
   const isHome = title === BRAND_APP;
-  const contentWidthClass = master
-    ? "max-w-lg md:max-w-7xl"
-    : wide
-      ? "max-w-lg md:max-w-6xl"
-      : "max-w-lg md:max-w-2xl";
+  const contentWidthClass =
+    portalViewMode === "mobile"
+      ? "max-w-lg"
+      : portalViewMode === "desktop"
+        ? "client-portal-header-inner max-w-lg md:max-w-6xl lg:max-w-[68.75rem]"
+        : master
+          ? "max-w-lg md:max-w-7xl"
+          : wide
+            ? "max-w-lg md:max-w-6xl"
+            : "max-w-lg md:max-w-2xl";
 
   return (
     <header dir="rtl" className="relative bg-navy text-white overflow-hidden">

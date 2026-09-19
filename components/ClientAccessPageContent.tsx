@@ -34,6 +34,8 @@ import {
   logClientPortalActivityApi,
 } from "@/lib/client-portal-api-client";
 import type { ClientPortalBootstrapDto } from "@/lib/client-portal-dto";
+import type { ClientPortalViewMode } from "@/lib/client-portal-view-mode";
+import { useClientPortalViewMode } from "@/components/useClientPortalViewMode";
 import { formatDocumentDate } from "@/lib/document-center";
 import { isClosedFault, isOpenFault } from "@/lib/fault-lifecycle";
 import { getAllElevatorFaultCounts } from "@/lib/elevator-stats";
@@ -105,11 +107,14 @@ function buildSessionFromBootstrap(
 
 interface ClientAccessPageContentProps {
   token: string;
+  initialViewMode?: ClientPortalViewMode;
 }
 
 export default function ClientAccessPageContent({
   token,
+  initialViewMode = "desktop",
 }: ClientAccessPageContentProps) {
+  const viewMode = useClientPortalViewMode(initialViewMode);
   const [tab, setTab] = useState<ClientTab>("home");
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<ClientAccessSession | null>(null);
@@ -415,55 +420,64 @@ export default function ClientAccessPageContent({
   }
 
   return (
-    <div className="min-h-screen bg-gray-light pb-8">
+    <div
+      className="client-portal-shell min-h-screen bg-gray-light pb-8"
+      data-portal-view={viewMode}
+    >
       <PageHeader
         title={buildingResolve.buildingName}
         subtitle={`פורטל לקוח · ${scopeLabel}`}
         badge={buildingStatus}
         wide
+        portalViewMode={viewMode}
       />
 
-      <main className="max-w-lg md:max-w-6xl mx-auto px-4 space-y-4 page-content -mt-2">
-        <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-2">
-          <p className="text-sm text-gray-text whitespace-pre-line">{welcomeMessage}</p>
-          <p className="text-xs text-gray-text">
+      <main className="client-portal-main space-y-4 -mt-2 lg:space-y-6">
+        <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-2 lg:p-5 lg:flex lg:items-start lg:justify-between lg:gap-6 lg:space-y-0">
+          <p className="text-sm text-gray-text whitespace-pre-line lg:text-base lg:flex-1">
+            {welcomeMessage}
+          </p>
+          <p className="text-xs text-gray-text lg:text-sm lg:shrink-0 lg:text-left">
             עודכן לאחרונה: {formatClientPortalLastUpdated(dataLastUpdated)}
           </p>
         </div>
 
         {availableTabs.length > 1 && (
-          <div className="flex flex-wrap gap-2">
+          <nav
+            className="flex flex-wrap gap-2 lg:gap-3 lg:border-b lg:border-gray-200 lg:pb-3"
+            aria-label="ניווט פורטל"
+          >
             {availableTabs.map(({ key, label }) => (
               <button
                 key={key}
                 type="button"
                 onClick={() => setTab(key)}
-                className={`flex-1 min-w-[6rem] rounded-xl py-2.5 text-sm font-semibold transition-colors ${
+                className={`flex-1 min-w-[6rem] rounded-xl py-2.5 text-sm font-semibold transition-colors lg:flex-none lg:min-w-[9rem] lg:px-5 lg:rounded-lg ${
                   tab === key
-                    ? "bg-navy text-white"
-                    : "bg-white border border-gray-200 text-navy"
+                    ? "bg-navy text-white lg:shadow-sm"
+                    : "bg-white border border-gray-200 text-navy lg:border-transparent lg:bg-transparent lg:hover:bg-white/80"
                 }`}
               >
                 {label}
               </button>
             ))}
-          </div>
+          </nav>
         )}
 
         {tab === "home" && (
-          <section className="flex flex-col gap-4">
+          <section className="flex flex-col gap-4 lg:gap-6 min-w-0">
             {permissions.can_report_faults && !showReportForm && (
               <button
                 type="button"
                 onClick={handleOpenReportForm}
-                className="order-1 md:order-2 btn-primary w-full text-lg font-bold py-4 min-h-[3.75rem] rounded-2xl shadow-md md:text-base md:font-semibold md:py-3 md:min-h-0 md:max-w-xs"
+                className="order-1 md:order-2 btn-primary w-full text-lg font-bold py-4 min-h-[3.75rem] rounded-2xl shadow-md md:text-base md:font-semibold md:py-3 md:min-h-0 md:max-w-xs lg:max-w-none lg:w-auto lg:min-w-[11rem] lg:px-8 lg:mx-auto lg:block"
               >
                 דווח תקלה
               </button>
             )}
 
             {permissions.can_report_faults && showReportForm && (
-              <section className="order-1 md:order-2 space-y-3 md:max-w-2xl">
+              <section className="order-1 md:order-2 space-y-3 md:max-w-2xl lg:max-w-2xl lg:mx-auto lg:w-full">
                 <SectionTitle title="דיווח תקלה" />
                 <ClientAccessReportForm
                   token={token}
@@ -494,14 +508,14 @@ export default function ClientAccessPageContent({
                 <button
                   type="button"
                   onClick={handleOpenFeedbackForm}
-                  className="order-1 md:order-2 w-full rounded-2xl border-2 border-gold/40 bg-gold/5 text-navy font-bold py-4 min-h-[3.75rem] text-lg shadow-sm md:text-base md:font-semibold md:py-3 md:min-h-0 md:max-w-xs"
+                  className="order-1 md:order-2 w-full rounded-2xl border-2 border-gold/40 bg-gold/5 text-navy font-bold py-4 min-h-[3.75rem] text-lg shadow-sm md:text-base md:font-semibold md:py-3 md:min-h-0 md:max-w-xs lg:max-w-none lg:w-auto lg:min-w-[11rem] lg:px-8 lg:mx-auto lg:block"
                 >
                   שלח משוב
                 </button>
               )}
 
             {permissions.can_submit_feedback && showFeedbackForm && (
-              <section className="order-1 md:order-2 space-y-3 md:max-w-2xl">
+              <section className="order-1 md:order-2 space-y-3 md:max-w-2xl lg:max-w-2xl lg:mx-auto lg:w-full">
                 <SectionTitle title="שליחת משוב" />
                 <FeedbackForm
                   portalToken={token}
@@ -521,7 +535,7 @@ export default function ClientAccessPageContent({
             )}
 
             {permissions.can_submit_feedback && feedbackSubmitted && (
-              <div className="order-1 md:order-2 bg-white rounded-2xl border border-gray-200 p-5 space-y-3 text-center md:max-w-2xl">
+              <div className="order-1 md:order-2 bg-white rounded-2xl border border-gray-200 p-5 space-y-3 text-center md:max-w-2xl lg:max-w-2xl lg:mx-auto lg:w-full">
                 <h3 className="text-lg font-bold text-navy">תודה על המשוב</h3>
                 <p className="text-sm text-gray-text">
                   המשוב שלך נקלט במערכת ויסייע לנו לשפר את השירות.
@@ -537,14 +551,14 @@ export default function ClientAccessPageContent({
             )}
 
             <div
-              className={`order-2 md:order-3 flex flex-col gap-4 ${
+              className={`order-2 md:order-3 flex flex-col gap-4 min-w-0 ${
                 permissions.can_view_open_faults
-                  ? "md:grid md:grid-cols-3 md:gap-6 md:items-start"
+                  ? "md:grid md:grid-cols-3 md:gap-6 md:items-start lg:grid-cols-2 lg:gap-8"
                   : ""
               }`}
             >
               {permissions.can_view_open_faults && (
-                <section className="space-y-3 md:col-span-2">
+                <section className="space-y-3 min-w-0 w-full md:col-span-2 lg:col-span-1">
                   <SectionTitle title="תקלות פתוחות" />
                   {openFaults.length > 0 ? (
                     <div className="flex flex-col gap-3">
@@ -567,7 +581,7 @@ export default function ClientAccessPageContent({
               )}
 
               <div
-                className={`space-y-3 ${
+                className={`space-y-3 min-w-0 w-full ${
                   permissions.can_view_open_faults ? "md:col-span-1" : ""
                 }`}
               >
@@ -575,11 +589,12 @@ export default function ClientAccessPageContent({
                 <ElevatorStatusRow
                   elevators={effectiveElevators}
                   faultCounts={faultCounts}
+                  responsiveGrid
                 />
               </div>
             </div>
 
-            <div className="order-4 md:order-1 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+            <div className="order-4 md:order-1 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4 lg:grid-cols-3 lg:gap-4">
               <InfoCard
                 label="מספר מעליות"
                 value={stats.elevatorCount}
@@ -636,7 +651,7 @@ export default function ClientAccessPageContent({
         )}
 
         {tab === "history" && permissions.can_view_fault_history && (
-          <section className="space-y-3">
+          <section className="space-y-3 lg:max-w-4xl">
             <SectionTitle title="היסטוריית תקלות" />
             <HistoryList
               faults={historyFaults}
@@ -696,7 +711,7 @@ export default function ClientAccessPageContent({
         <button
           type="button"
           onClick={handleLogout}
-          className="w-full rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-text"
+          className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-text lg:w-auto lg:min-w-[10rem] lg:px-6"
         >
           יציאה מהפורטל
         </button>

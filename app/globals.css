@@ -258,6 +258,42 @@ body {
   }
 }
 
+/* Client portal: full-width dashboard on tablet/desktop (not capped by .page-content) */
+.client-portal-main {
+  width: 100%;
+  max-width: 32rem;
+  margin-inline: auto;
+  padding-inline: 1rem;
+  padding-bottom: 2rem;
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .client-portal-main {
+    max-width: 48rem;
+    padding-inline: 1.5rem;
+    padding-bottom: 2.5rem;
+  }
+}
+
+.client-portal-shell[data-portal-view="mobile"] .client-portal-main {
+  max-width: 32rem;
+}
+
+/* Client portal desktop (1024px+): ~1100px content column; tablet/mobile unchanged above */
+@media (min-width: 1024px) {
+  .client-portal-shell .client-portal-main {
+    max-width: 68.75rem;
+    margin-inline: auto;
+    padding-inline: 2rem;
+    padding-bottom: 2.5rem;
+  }
+
+  .client-portal-shell .client-portal-header-inner {
+    max-width: 68.75rem;
+    margin-inline: auto;
+  }
+}
+
 @media (max-width: 767px) {
   .form-input,
   .form-section select,
