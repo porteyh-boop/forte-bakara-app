@@ -302,3 +302,23 @@ body {
     font-size: 16px;
   }
 }
+
+.client-portal-updates-list {
+  width: 100%;
+}
+
+.client-portal-update-card {
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 768px) {
+  .client-portal-updates-list {
+    max-width: 48rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .client-portal-updates-list {
+    max-width: 68.75rem;
+  }
+}

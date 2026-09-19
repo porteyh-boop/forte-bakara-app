@@ -1,3 +1,4 @@
+import type { ClientBuildingClientUpdateDto } from "@/lib/building-client-updates";
 import type {
   ClientPortalActivityInput,
   ClientPortalBootstrapDto,
@@ -126,4 +127,111 @@ export async function fetchClientPortalStatistics(
 
   const data = (await response.json()) as ClientPortalStatisticsDto;
   return { ok: true, data };
+}
+
+export async function fetchClientBuildingUpdates(
+  token: string
+): Promise<
+  | { ok: true; updates: ClientBuildingClientUpdateDto[] }
+  | { ok: false; error: string }
+> {
+  const response = await fetch("/forte/api/client/building-updates", {
+    method: "GET",
+    headers: portalHeaders(token),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    return { ok: false, error: await parseError(response) };
+  }
+
+  const body = (await response.json()) as {
+    updates: ClientBuildingClientUpdateDto[];
+  };
+  return { ok: true, updates: body.updates ?? [] };
+}
+
+export async function fetchClientBuildingUpdatesUnreadCount(
+  token: string
+): Promise<{ ok: true; count: number } | { ok: false; error: string }> {
+  const response = await fetch(
+    "/forte/api/client/building-updates/unread-count",
+    {
+      method: "GET",
+      headers: portalHeaders(token),
+      cache: "no-store",
+    }
+  );
+
+  if (!response.ok) {
+    return { ok: false, error: await parseError(response) };
+  }
+
+  const body = (await response.json()) as {
+    count?: number;
+    unreadCount?: number;
+  };
+  return {
+    ok: true,
+    count: Number(body.unreadCount ?? body.count ?? 0),
+  };
+}
+
+export async function markClientBuildingUpdateRead(
+  token: string,
+  updateId: string
+): Promise<
+  | { ok: true; alreadyRead: boolean }
+  | { ok: false; error: string }
+> {
+  const response = await fetch(
+    `/forte/api/client/building-updates/${encodeURIComponent(updateId)}/read`,
+    {
+      method: "POST",
+      headers: portalHeaders(token),
+    }
+  );
+
+  if (!response.ok) {
+    return { ok: false, error: await parseError(response) };
+  }
+
+  const body = (await response.json()) as { alreadyRead?: boolean };
+  return { ok: true, alreadyRead: Boolean(body.alreadyRead) };
+}
+
+export async function openClientBuildingUpdateAttachment(
+  token: string,
+  updateId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const response = await fetch(
+    `/forte/api/client/building-updates/${encodeURIComponent(updateId)}/attachment`,
+    {
+      method: "GET",
+      headers: {
+        [CLIENT_PORTAL_TOKEN_HEADER]: token,
+      },
+      cache: "no-store",
+    }
+  );
+
+  if (!response.ok) {
+    return { ok: false, error: await parseError(response) };
+  }
+
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    const body = (await response.json()) as { url?: string };
+    if (!body.url) {
+      return { ok: false, error: "attachment_unavailable" };
+    }
+    window.open(body.url, "_blank", "noopener,noreferrer");
+    return { ok: true };
+  }
+
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  window.open(objectUrl, "_blank", "noopener,noreferrer");
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+  return { ok: true };
 }

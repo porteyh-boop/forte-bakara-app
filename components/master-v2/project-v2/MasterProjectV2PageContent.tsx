@@ -16,6 +16,7 @@ import MasterProjectV2InspectionsTab from "@/components/master-v2/project-v2/Mas
 import MasterProjectV2InspectorFollowUpPopup from "@/components/master-v2/project-v2/MasterProjectV2InspectorFollowUpPopup";
 import MasterProjectV2LettersTab from "@/components/master-v2/project-v2/MasterProjectV2LettersTab";
 import MasterProjectV2DocumentsTab from "@/components/master-v2/project-v2/MasterProjectV2DocumentsTab";
+import MasterProjectV2ClientUpdatesTab from "@/components/master-v2/project-v2/MasterProjectV2ClientUpdatesTab";
 import MasterProjectV2ExecutionTab from "@/components/master-v2/project-v2/MasterProjectV2ExecutionTab";
 import MasterProjectV2FinancesTab from "@/components/master-v2/project-v2/MasterProjectV2FinancesTab";
 import MasterProjectV2TasksTab from "@/components/master-v2/project-v2/MasterProjectV2TasksTab";
@@ -385,6 +386,8 @@ export default function MasterProjectV2PageContent() {
         return <MasterProjectV2ContactsTab buildingId={buildingId} />;
       case "documents":
         return <MasterProjectV2DocumentsTab buildingId={buildingId} />;
+      case "clientUpdates":
+        return <MasterProjectV2ClientUpdatesTab buildingId={buildingId} />;
       case "tasks":
         return <MasterProjectV2TasksTab buildingId={buildingId} />;
       case "ai":

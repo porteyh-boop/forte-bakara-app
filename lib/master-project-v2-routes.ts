@@ -44,6 +44,7 @@ export const PROJECT_V2_TAB_IDS = [
   "faults",
   "contacts",
   "documents",
+  "clientUpdates",
   "tasks",
   "ai",
   "permissions",

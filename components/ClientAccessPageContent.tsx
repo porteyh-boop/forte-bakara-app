@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ClientAccessReportForm from "@/components/ClientAccessReportForm";
 import ClientPortalInstallPrompt from "@/components/ClientPortalInstallPrompt";
+import ClientPortalBuildingUpdatesSection from "@/components/ClientPortalBuildingUpdatesSection";
 import ClientPortalStatisticsSection from "@/components/ClientPortalStatisticsSection";
 import ElevatorStatusRow from "@/components/ElevatorStatusRow";
 import FaultCard from "@/components/FaultCard";
@@ -31,6 +32,7 @@ import {
 } from "@/lib/client-portal";
 import {
   fetchClientPortalBootstrap,
+  fetchClientBuildingUpdatesUnreadCount,
   logClientPortalActivityApi,
 } from "@/lib/client-portal-api-client";
 import type { ClientPortalBootstrapDto } from "@/lib/client-portal-dto";
@@ -42,7 +44,12 @@ import { getAllElevatorFaultCounts } from "@/lib/elevator-stats";
 import { getEffectiveElevators } from "@/lib/elevator-status";
 import type { Elevator, Fault } from "@/lib/types";
 
-type ClientTab = "home" | "history" | "documents" | "statistics";
+type ClientTab =
+  | "home"
+  | "history"
+  | "documents"
+  | "statistics"
+  | "updates";
 
 const PORTAL_ACCESS_DENIED_MESSAGE = "אין לך הרשאה לגשת לפורטל.";
 const LOGOUT_MESSAGE = "יצאתם מהפורטל.";
@@ -146,6 +153,7 @@ export default function ClientAccessPageContent({
   >([]);
   const [dataLastUpdated, setDataLastUpdated] = useState<string | null>(null);
   const [isTrialBuilding, setIsTrialBuilding] = useState(false);
+  const [updatesUnreadCount, setUpdatesUnreadCount] = useState(0);
 
   const loginLoggedRef = useRef(false);
   const faultsViewLoggedRef = useRef(false);
@@ -207,6 +215,35 @@ export default function ClientAccessPageContent({
   useEffect(() => {
     void loadScopedData();
   }, [loadScopedData, refreshKey]);
+
+  const refreshUpdatesUnreadCount = useCallback(async () => {
+    if (!permissions?.can_view_client_updates) return;
+    const result = await fetchClientBuildingUpdatesUnreadCount(token);
+    if (result.ok) {
+      setUpdatesUnreadCount(result.count);
+    }
+  }, [token, permissions?.can_view_client_updates]);
+
+  const handleUpdatesUnreadDelta = useCallback((delta: number) => {
+    setUpdatesUnreadCount((count) => Math.max(0, count + delta));
+  }, []);
+
+  useEffect(() => {
+    if (!session || !permissions?.can_view_client_updates) {
+      setUpdatesUnreadCount(0);
+      return;
+    }
+    void refreshUpdatesUnreadCount();
+  }, [session, permissions?.can_view_client_updates, refreshUpdatesUnreadCount]);
+
+  useEffect(() => {
+    if (!permissions?.can_view_client_updates) return;
+    if (typeof window === "undefined") return;
+    const hash = window.location.hash.replace(/^#/, "").toLowerCase();
+    if (hash === "updates") {
+      setTab("updates");
+    }
+  }, [permissions?.can_view_client_updates]);
 
   useEffect(() => {
     if (!session || !permissions?.can_view_building_dashboard) return;
@@ -316,11 +353,17 @@ export default function ClientAccessPageContent({
     if (permissions?.can_view_statistics) {
       tabs.push({ key: "statistics", label: "סטטיסטיקות" });
     }
+    if (permissions?.can_view_client_updates) {
+      tabs.push({ key: "updates", label: "עדכונים והודעות" });
+    }
     return tabs;
   }, [permissions]);
 
   useEffect(() => {
     if (tab === "statistics" && !permissions?.can_view_statistics) {
+      setTab("home");
+    }
+    if (tab === "updates" && !permissions?.can_view_client_updates) {
       setTab("home");
     }
   }, [tab, permissions]);
@@ -447,20 +490,43 @@ export default function ClientAccessPageContent({
             className="flex flex-wrap gap-2 lg:gap-3 lg:border-b lg:border-gray-200 lg:pb-3"
             aria-label="ניווט פורטל"
           >
-            {availableTabs.map(({ key, label }) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setTab(key)}
-                className={`flex-1 min-w-[6rem] rounded-xl py-2.5 text-sm font-semibold transition-colors lg:flex-none lg:min-w-[9rem] lg:px-5 lg:rounded-lg ${
-                  tab === key
-                    ? "bg-navy text-white lg:shadow-sm"
-                    : "bg-white border border-gray-200 text-navy lg:border-transparent lg:bg-transparent lg:hover:bg-white/80"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
+            {availableTabs.map(({ key, label }) => {
+              const unreadOnTab =
+                key === "updates" && updatesUnreadCount > 0
+                  ? updatesUnreadCount
+                  : 0;
+              const tabLabel =
+                unreadOnTab > 0
+                  ? `${label}, ${unreadOnTab} עדכונים שלא נקראו`
+                  : label;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === key}
+                  aria-label={tabLabel}
+                  onClick={() => setTab(key)}
+                  className={`flex-1 min-w-[6rem] rounded-xl py-2.5 text-sm font-semibold transition-colors lg:flex-none lg:min-w-[9rem] lg:px-5 lg:rounded-lg ${
+                    tab === key
+                      ? "bg-navy text-white lg:shadow-sm"
+                      : "bg-white border border-gray-200 text-navy lg:border-transparent lg:bg-transparent lg:hover:bg-white/80"
+                  }`}
+                >
+                  <span className="inline-flex items-center justify-center gap-1.5">
+                    {label}
+                    {unreadOnTab > 0 && (
+                      <span
+                        className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-gold px-1.5 py-0.5 text-[10px] font-bold leading-none text-navy"
+                        aria-hidden="true"
+                      >
+                        {unreadOnTab}
+                      </span>
+                    )}
+                  </span>
+                </button>
+              );
+            })}
           </nav>
         )}
 
@@ -705,6 +771,14 @@ export default function ClientAccessPageContent({
             access={session.access}
             elevators={elevators}
             isTrial={isTrialBuilding}
+          />
+        )}
+
+        {tab === "updates" && permissions.can_view_client_updates && (
+          <ClientPortalBuildingUpdatesSection
+            token={token}
+            isActive={tab === "updates"}
+            onUnreadCountDelta={handleUpdatesUnreadDelta}
           />
         )}
 

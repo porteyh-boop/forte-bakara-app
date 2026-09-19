@@ -57,6 +57,13 @@ const STATION_ITEMS: SidebarItem[] = [
   { id: "execution", label: "שלב ביצוע", icon: "📈", tabId: "execution", section: "project" },
   { id: "finances", label: "כספים", icon: "💰", tabId: "finances", section: "project" },
   { id: "documents", label: "מסמכים", icon: "📄", tabId: "documents", section: "project" },
+  {
+    id: "clientUpdates",
+    label: "עדכונים ללקוח",
+    icon: "📢",
+    tabId: "clientUpdates",
+    section: "project",
+  },
   { id: "letters", label: "מכתבים", icon: "✉", tabId: "letters", section: "project" },
   { id: "inspections", label: "בדיקות", icon: "🔍", tabId: "inspections", section: "project" },
   { id: "faults", label: "תקלות", icon: "⚠", tabId: "faults", section: "project" },

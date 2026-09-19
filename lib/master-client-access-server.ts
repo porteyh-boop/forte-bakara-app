@@ -84,6 +84,7 @@ function mapPermissionRow(row: Record<string, unknown>): ClientPermissionRecord 
     can_view_fault_history: Boolean(row.can_view_fault_history),
     can_view_availability: Boolean(row.can_view_availability),
     can_view_documents: Boolean(row.can_view_documents),
+    can_view_client_updates: Boolean(row.can_view_client_updates),
     can_view_statistics: Boolean(row.can_view_statistics),
     can_upload_images: Boolean(row.can_upload_images),
     can_receive_notifications: Boolean(row.can_receive_notifications),
