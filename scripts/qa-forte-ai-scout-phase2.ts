@@ -45,6 +45,7 @@ assert(migration.includes("source_url"), "source_url required");
 const provider = read("lib/scout/scout-research-provider.ts");
 assert(provider.includes("ScoutResearchProvider"), "ScoutResearchProvider interface");
 assert(provider.includes("createSerperScoutResearchProvider"), "Serper factory wired");
+assert(provider.includes("resolveScoutWebSearchApiKey"), "Serper API key env normalization");
 assert(
   fs.existsSync(path.join(process.cwd(), "lib/scout/scout-serper-provider.ts")),
   "scout-serper-provider.ts exists"

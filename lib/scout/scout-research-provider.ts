@@ -23,9 +23,27 @@ function normalizeEnvSecret(value: string | undefined): string {
   return v;
 }
 
+/** Serper keys are hex strings; reject multiline pasted sample scripts for X-API-KEY. */
+function isPlausibleSerperApiKey(value: string): boolean {
+  return /^[a-f0-9]{32,64}$/i.test(value);
+}
+
+function resolveScoutWebSearchApiKey(raw: string | undefined): string | null {
+  const normalized = normalizeEnvSecret(raw);
+  if (!normalized) return null;
+  if (isPlausibleSerperApiKey(normalized)) return normalized;
+
+  const fromSample = normalized.match(
+    /['"]X-API-KEY['"]\s*:\s*['"]([a-f0-9]{32,64})['"]/i
+  )?.[1];
+  if (fromSample && isPlausibleSerperApiKey(fromSample)) return fromSample;
+
+  return null;
+}
+
 export function getScoutResearchProvider(): ScoutResearchProvider | null {
   const provider = normalizeEnvSecret(process.env.SCOUT_WEB_SEARCH_PROVIDER).toLowerCase();
-  const apiKey = normalizeEnvSecret(process.env.SCOUT_WEB_SEARCH_API_KEY);
+  const apiKey = resolveScoutWebSearchApiKey(process.env.SCOUT_WEB_SEARCH_API_KEY);
   if (!apiKey) return null;
 
   if (provider === "serper" || !provider) {
