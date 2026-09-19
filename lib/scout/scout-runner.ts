@@ -78,7 +78,7 @@ export async function runScoutTaskServer(taskId: string): Promise<{
     await recordAiActionServer({
       agentKey: "scout",
       actionType: "scout_research_failed",
-      summary: "SCOUT: חיפוש Tavily נכשל",
+      summary: "SCOUT: חיפוש Serper נכשל",
       taskId,
       details: { message: error instanceof Error ? error.message : String(error) },
     });

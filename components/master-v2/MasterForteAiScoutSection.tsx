@@ -126,9 +126,11 @@ export default function MasterForteAiScoutSection() {
     if (result.error) {
       setError(
         result.error === "search_unconfigured"
-          ? "חיפוש לא מוגדר — הגדירו SCOUT_WEB_SEARCH_API_KEY (Tavily)."
+          ? "חיפוש לא מוגדר — הגדירו SCOUT_WEB_SEARCH_API_KEY (Serper)."
           : result.error
       );
+      await refreshTasks();
+      await loadTaskDetail(selectedTaskId);
       return;
     }
     setMessage(`המחקר הושלם — ${result.candidatesAdded} מועמדים נוספו.`);
@@ -197,7 +199,7 @@ export default function MasterForteAiScoutSection() {
       <ForteV2Panel className="p-4 sm:p-5">
         <h2 className="text-base font-bold text-forte-text">SCOUT — איתור לידים</h2>
         <p className="text-xs text-forte-text-secondary mt-1">
-          מחקר ציבורי בלבד (Tavily). ללא פנייה ללקוחות. ייבוא ללידים רק לאחר אישורך.
+          מחקר ציבורי בלבד (Serper). ללא פנייה ללקוחות. ייבוא ללידים רק לאחר אישורך.
         </p>
 
         {error ? (
@@ -256,7 +258,7 @@ export default function MasterForteAiScoutSection() {
             disabled={busy || !selectedTaskId}
             onClick={() => void handleRunTask()}
           >
-            הרץ מחקר (Tavily)
+            הרץ מחקר (Serper)
           </ForteV2SecondaryButton>
         </div>
       </ForteV2Panel>
@@ -329,7 +331,7 @@ export default function MasterForteAiScoutSection() {
           {candidates.length === 0 ? (
             <ForteV2EmptyState
               title="אין מועמדים"
-              description="הריצו מחקר Tavily למשימה זו."
+              description="הריצו מחקר Serper למשימה זו."
             />
           ) : (
             <ul className="space-y-3 p-2 max-h-[32rem] overflow-y-auto">
