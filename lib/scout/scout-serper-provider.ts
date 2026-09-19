@@ -25,8 +25,8 @@ export function createSerperScoutResearchProvider(
     id: "serper",
     async search(payload: ScoutSearchPayload): Promise<ScoutSearchHit[]> {
       const maxResults = Math.min(Math.max(payload.maxResults, 1), 15);
-      const response = await supabaseSystemFetch(SERPER_SEARCH_URL, {
-        method: "POST",
+      const requestInit = {
+        method: "POST" as const,
         headers: {
           "Content-Type": "application/json",
           "X-API-KEY": apiKey,
@@ -37,7 +37,18 @@ export function createSerperScoutResearchProvider(
           gl: "il",
           hl: "he",
         }),
-      });
+      };
+      let response;
+      try {
+        response =
+          process.env.VERCEL === "1"
+            ? await fetch(SERPER_SEARCH_URL, requestInit)
+            : await supabaseSystemFetch(SERPER_SEARCH_URL, requestInit);
+      } catch (error) {
+        throw new Error(
+          `serper_fetch_failed:${error instanceof Error ? error.message : String(error)}`
+        );
+      }
 
       if (!response.ok) {
         const text = await response.text().catch(() => "");
