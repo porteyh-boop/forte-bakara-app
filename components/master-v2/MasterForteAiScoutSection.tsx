@@ -23,6 +23,12 @@ import {
   runQualifierOnCandidate,
   runScoutTask,
 } from "@/lib/scout/scout-api";
+import { createContentOutreachDraft } from "@/lib/content/content-api";
+import {
+  CONTENT_CHANNELS,
+  CONTENT_CHANNEL_LABELS,
+  type ContentChannelId,
+} from "@/lib/content/content-types";
 import {
   AI_TASK_STATUS_LABELS,
   type AiTaskStatusId,
@@ -58,6 +64,10 @@ export default function MasterForteAiScoutSection() {
   const expandedPanelRef = useRef<HTMLDivElement | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [contentChannelById, setContentChannelById] = useState<
+    Record<string, ContentChannelId>
+  >({});
+  const [contentDraftById, setContentDraftById] = useState<Record<string, string>>({});
 
   const [city, setCity] = useState("");
   const [region, setRegion] = useState("");
@@ -229,6 +239,44 @@ export default function MasterForteAiScoutSection() {
     await loadTaskDetail(selectedTaskId);
   }
 
+  function contentChannelFor(candidateId: string): ContentChannelId {
+    return contentChannelById[candidateId] ?? "whatsapp";
+  }
+
+  async function handleCreateContentDraft(candidateId: string) {
+    setBusy(true);
+    setError(null);
+    const channel = contentChannelFor(candidateId);
+    const result = await createContentOutreachDraft({ candidateId, channel });
+    setBusy(false);
+    if (result.error || !result.draft) {
+      setError(
+        result.error === "not_approved"
+          ? "CONTENT זמין רק למועמדים שאושרו או יובאו."
+          : result.error === "content_agent_missing"
+            ? "סוכן CONTENT לא מוגדר — הריצו migration 047/050."
+            : result.error ?? "יצירת טיוטה נכשלה"
+      );
+      return;
+    }
+    setContentDraftById((prev) => ({
+      ...prev,
+      [candidateId]: result.draft!.draftText,
+    }));
+    setMessage("טיוטת CONTENT נוצרה — ניתן לערוך ולהעתיק.");
+  }
+
+  async function handleCopyContentDraft(candidateId: string) {
+    const text = contentDraftById[candidateId];
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setMessage("הטיוטה הועתקה ללוח.");
+    } catch {
+      setError("העתקה ללוח נכשלה.");
+    }
+  }
+
   function qualifyTone(
     verdict: ScoutLeadCandidateDto["qualifyVerdict"]
   ): "success" | "warning" | "danger" | "neutral" {
@@ -362,6 +410,66 @@ export default function MasterForteAiScoutSection() {
                         </ForteV2SecondaryButton>
                       </div>
                     </div>
+                    {c.reviewStatus === "approved" || c.reviewStatus === "imported" ? (
+                      <div className="mt-3 rounded-md border border-forte-border/70 bg-white px-3 py-2">
+                        <p className="text-[11px] font-semibold text-forte-text">
+                          CONTENT — הכנת פנייה
+                        </p>
+                        <p className="text-xs text-forte-text-secondary mt-1">
+                          טיוטה בלבד — ללא שליחה מהמערכת.
+                        </p>
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <ForteV2FormLabel htmlFor={`content-ch-${c.id}`}>
+                            <span className="text-xs">ערוץ</span>
+                          </ForteV2FormLabel>
+                          <select
+                            id={`content-ch-${c.id}`}
+                            className="text-xs rounded-md border border-forte-border px-2 py-1"
+                            value={contentChannelFor(c.id)}
+                            disabled={busy}
+                            onChange={(e) =>
+                              setContentChannelById((prev) => ({
+                                ...prev,
+                                [c.id]: e.target.value as ContentChannelId,
+                              }))
+                            }
+                          >
+                            {CONTENT_CHANNELS.map((ch) => (
+                              <option key={ch} value={ch}>
+                                {CONTENT_CHANNEL_LABELS[ch]}
+                              </option>
+                            ))}
+                          </select>
+                          <ForteV2PrimaryButton
+                            size="sm"
+                            disabled={busy}
+                            onClick={() => void handleCreateContentDraft(c.id)}
+                          >
+                            צור טיוטה
+                          </ForteV2PrimaryButton>
+                        </div>
+                        {contentDraftById[c.id] ? (
+                          <div className="mt-2 space-y-2">
+                            <textarea
+                              className="w-full min-h-[140px] text-xs rounded-md border border-forte-border px-2 py-2 font-sans"
+                              value={contentDraftById[c.id]}
+                              onChange={(e) =>
+                                setContentDraftById((prev) => ({
+                                  ...prev,
+                                  [c.id]: e.target.value,
+                                }))
+                              }
+                            />
+                            <ForteV2SecondaryButton
+                              size="sm"
+                              onClick={() => void handleCopyContentDraft(c.id)}
+                            >
+                              העתק
+                            </ForteV2SecondaryButton>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2 pt-1">
