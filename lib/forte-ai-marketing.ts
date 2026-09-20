@@ -1,6 +1,7 @@
 export const AI_AGENT_KEYS = [
   "manager",
   "scout",
+  "qualifier",
   "content",
   "distribution",
   "engagement",
@@ -63,6 +64,7 @@ export type AiApprovalRequiredActionType =
 export const AI_AGENT_LABELS: Record<AiAgentKey, string> = {
   manager: "מנהל AI",
   scout: "SCOUT — איתור לידים",
+  qualifier: "QUALIFIER — סינון מועמדים",
   content: "CONTENT — תוכן",
   distribution: "DISTRIBUTION — הפצה",
   engagement: "ENGAGEMENT — מעקב",

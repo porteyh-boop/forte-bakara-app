@@ -25,6 +25,10 @@ export const SCOUT_REVIEW_STATUS_IDS = [
 
 export type ScoutReviewStatusId = (typeof SCOUT_REVIEW_STATUS_IDS)[number];
 
+import type { QualifyVerdictId } from "@/lib/qualifier/qualifier-types";
+
+export { QUALIFY_VERDICT_LABELS } from "@/lib/qualifier/qualifier-types";
+
 export const SCOUT_REVIEW_STATUS_LABELS: Record<ScoutReviewStatusId, string> = {
   pending: "ממתין לסקירה",
   approved: "אושר (טרם יובא)",
@@ -69,6 +73,9 @@ export type ScoutLeadCandidateDto = {
   duplicateMatchReason: string;
   reviewStatus: ScoutReviewStatusId;
   salesLeadId: string | null;
+  qualifyVerdict: QualifyVerdictId | null;
+  qualifyReason: string | null;
+  qualifiedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };

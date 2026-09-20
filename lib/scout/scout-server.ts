@@ -64,6 +64,12 @@ function mapCandidate(row: Record<string, unknown>): ScoutLeadCandidateDto {
     duplicateMatchReason: asString(row.duplicate_match_reason),
     reviewStatus: asString(row.review_status) as ScoutReviewStatusId,
     salesLeadId: asString(row.sales_lead_id) || null,
+    qualifyVerdict: (() => {
+      const v = asString(row.qualify_verdict).trim();
+      return v === "suitable" || v === "review" || v === "unsuitable" ? v : null;
+    })(),
+    qualifyReason: asString(row.qualify_reason) || null,
+    qualifiedAt: asString(row.qualified_at) || null,
     createdAt: asString(row.created_at),
     updatedAt: asString(row.updated_at),
   };

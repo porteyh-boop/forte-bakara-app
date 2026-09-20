@@ -20,6 +20,7 @@ import {
   importScoutCandidate,
   listScoutTasks,
   patchScoutCandidateReview,
+  runQualifierOnCandidate,
   runScoutTask,
 } from "@/lib/scout/scout-api";
 import {
@@ -27,6 +28,7 @@ import {
   type AiTaskStatusId,
 } from "@/lib/forte-ai-marketing";
 import {
+  QUALIFY_VERDICT_LABELS,
   SCOUT_CANDIDATE_TYPES,
   SCOUT_CANDIDATE_TYPE_LABELS,
   SCOUT_REVIEW_STATUS_LABELS,
@@ -192,6 +194,31 @@ export default function MasterForteAiScoutSection() {
     }
     setMessage("המועמד יובא ל-sales_leads.");
     await loadTaskDetail(selectedTaskId);
+  }
+
+  async function handleRunQualifier(candidateId: string) {
+    setBusy(true);
+    setError(null);
+    const result = await runQualifierOnCandidate(candidateId);
+    setBusy(false);
+    if (result.error) {
+      setError(
+        result.error === "qualifier_agent_missing"
+          ? "סוכן QUALIFIER לא מוגדר — הריצו migration 049."
+          : result.error
+      );
+      return;
+    }
+    await loadTaskDetail(selectedTaskId);
+  }
+
+  function qualifyTone(
+    verdict: ScoutLeadCandidateDto["qualifyVerdict"]
+  ): "success" | "warning" | "danger" | "neutral" {
+    if (verdict === "suitable") return "success";
+    if (verdict === "review") return "warning";
+    if (verdict === "unsuitable") return "danger";
+    return "neutral";
   }
 
   return (
@@ -389,6 +416,34 @@ export default function MasterForteAiScoutSection() {
                           דוא&quot;ל (מהמקור): {c.email}
                         </p>
                       ) : null}
+                      <div className="mt-3 rounded-md border border-forte-border/70 bg-forte-blue-light/20 px-3 py-2">
+                        <p className="text-[11px] font-semibold text-forte-text">
+                          QUALIFIER
+                        </p>
+                        {c.qualifyVerdict ? (
+                          <div className="mt-1 space-y-1">
+                            <ForteV2StatusBadge tone={qualifyTone(c.qualifyVerdict)}>
+                              {QUALIFY_VERDICT_LABELS[c.qualifyVerdict]}
+                            </ForteV2StatusBadge>
+                            <p className="text-xs text-forte-text-secondary whitespace-pre-wrap">
+                              {c.qualifyReason}
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-forte-text-secondary mt-1">
+                            טרם הורץ סינון QUALIFIER.
+                          </p>
+                        )}
+                        <div className="mt-2">
+                        <ForteV2SecondaryButton
+                          size="sm"
+                          disabled={busy || c.reviewStatus === "imported"}
+                          onClick={() => void handleRunQualifier(c.id)}
+                        >
+                          {c.qualifyVerdict ? "הרץ QUALIFIER שוב" : "הרץ QUALIFIER"}
+                        </ForteV2SecondaryButton>
+                        </div>
+                      </div>
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2 pt-1">

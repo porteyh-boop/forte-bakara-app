@@ -11,6 +11,7 @@ import type {
 } from "@/lib/scout/scout-types";
 
 const SCOUT_BASE = "/forte/api/master/ai-marketing/scout";
+const QUALIFIER_BASE = "/forte/api/master/ai-marketing/qualifier";
 
 export async function createScoutTask(payload: ScoutSearchPayload): Promise<{
   task: ScoutTaskDto | null;
@@ -92,6 +93,27 @@ export async function runScoutTask(taskId: string): Promise<{
     };
   }
   return { candidatesAdded: body?.candidatesAdded ?? 0, error: null };
+}
+
+export async function runQualifierOnCandidate(candidateId: string): Promise<{
+  candidate: ScoutLeadCandidateDto | null;
+  error: string | null;
+}> {
+  const response = await masterApiFetch(
+    `${QUALIFIER_BASE}/candidates/${encodeURIComponent(candidateId)}/run`,
+    { method: "POST" }
+  );
+  const body = await parseMasterApiJson<{
+    candidate?: ScoutLeadCandidateDto;
+    error?: string;
+  }>(response);
+  if (!response.ok || !body?.candidate) {
+    return {
+      candidate: null,
+      error: body?.error ?? parseMasterApiError(body, response.status),
+    };
+  }
+  return { candidate: body.candidate, error: null };
 }
 
 export async function patchScoutCandidateReview(input: {
