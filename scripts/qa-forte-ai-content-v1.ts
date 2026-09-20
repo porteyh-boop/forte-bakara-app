@@ -63,18 +63,32 @@ assert(ui.includes("createContentOutreachDraft"), "SCOUT UI calls content API");
 assert(ui.includes("CONTENT — הכנת פנייה"), "SCOUT UI CONTENT section");
 assert(!ui.includes("שלח"), "SCOUT UI has no send button label (שלח)");
 
+function assertNoInternalLeak(text: string, label: string) {
+  const lower = text.toLowerCase();
+  assert(!text.includes("FORTE"), `${label}: no FORTE brand in customer text`);
+  assert(!text.includes("QUALIFIER"), `${label}: no QUALIFIER in customer text`);
+  assert(!lower.includes("http"), `${label}: no source URL in customer text`);
+  assert(!text.includes("ציון"), `${label}: no score in customer text`);
+  assert(!text.includes("התאמת מילות"), `${label}: no rationale jargon in customer text`);
+}
+
 const wa = buildContentDraftV1("whatsapp", baseInput());
+assert(wa.includes("שמי יהודה פורטה"), "WhatsApp draft uses יהודה פורטה intro");
 assert(wa.includes("שלום יוסי כהן"), "WhatsApp draft uses contact name");
-assert(wa.includes("FORTE"), "WhatsApp draft mentions FORTE");
+assert(wa.includes("ליווי מקצועי"), "WhatsApp draft service line");
 assert(!wa.includes("אנחנו"), "WhatsApp draft avoids אנחנו");
+assertNoInternalLeak(wa, "WhatsApp");
 
 const email = buildContentDraftV1("email", baseInput());
 assert(email.includes("נושא:"), "Email draft has subject line");
 assert(email.includes("בברכה"), "Email draft body present");
+assert(email.includes("יהודה פורטה"), "Email draft signed יהודה פורטה");
+assertNoInternalLeak(email, "Email");
 
 const phone = buildContentDraftV1("phone", baseInput());
 assert(phone.includes("פתיחה מוצעת"), "Phone draft opener header");
-assert(phone.includes("QUALIFIER"), "Phone draft includes qualifier when present");
+assert(phone.includes("יהודה פורטה"), "Phone draft mentions יהודה פורטה");
+assertNoInternalLeak(phone, "Phone");
 
 const minimal = buildContentDraftV1(
   "whatsapp",
@@ -88,7 +102,8 @@ const minimal = buildContentDraftV1(
   })
 );
 assert(!minimal.includes("undefined"), "minimal input no undefined tokens");
-assert(minimal.includes("FORTE"), "minimal input still produces draft");
+assert(minimal.includes("יהודה פורטה"), "minimal input still produces draft");
+assertNoInternalLeak(minimal, "WhatsApp minimal");
 
 const scoutServer = read("lib/scout/scout-server.ts");
 assert(scoutServer.includes("runScoutTaskServer"), "SCOUT server entry intact");
