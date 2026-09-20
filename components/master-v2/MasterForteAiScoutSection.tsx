@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ForteV2EmptyState,
   ForteV2FormInput,
@@ -48,11 +48,14 @@ function taskStatusTone(
 
 export default function MasterForteAiScoutSection() {
   const [tasks, setTasks] = useState<ScoutTaskDto[]>([]);
+  const [expandedTaskId, setExpandedTaskId] = useState<string>("");
   const [selectedTaskId, setSelectedTaskId] = useState<string>("");
   const [candidates, setCandidates] = useState<ScoutLeadCandidateDto[]>([]);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const expandedPanelRef = useRef<HTMLDivElement | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -60,11 +63,6 @@ export default function MasterForteAiScoutSection() {
   const [region, setRegion] = useState("");
   const [targetType, setTargetType] = useState<ScoutCandidateTypeId>("vaad_bayit");
   const [maxResults, setMaxResults] = useState("5");
-
-  const selectedTask = useMemo(
-    () => tasks.find((t) => t.id === selectedTaskId) ?? null,
-    [tasks, selectedTaskId]
-  );
 
   const refreshTasks = useCallback(async () => {
     const result = await listScoutTasks();
@@ -93,9 +91,28 @@ export default function MasterForteAiScoutSection() {
     })();
   }, [refreshTasks]);
 
-  function selectTask(taskId: string) {
+  async function toggleTaskExpand(taskId: string) {
+    if (expandedTaskId === taskId) {
+      setExpandedTaskId("");
+      setSelectedTaskId("");
+      setCandidates([]);
+      setSelectedIds(new Set());
+      return;
+    }
+    setExpandedTaskId(taskId);
     setSelectedTaskId(taskId);
-    void loadTaskDetail(taskId);
+    setSelectedIds(new Set());
+    setDetailLoading(true);
+    setError(null);
+    await loadTaskDetail(taskId);
+    setDetailLoading(false);
+    requestAnimationFrame(() => {
+      expandedPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  }
+
+  function selectTask(taskId: string) {
+    void toggleTaskExpand(taskId);
   }
 
   async function handleCreateTask() {
@@ -221,6 +238,177 @@ export default function MasterForteAiScoutSection() {
     return "neutral";
   }
 
+  function locationLine(c: ScoutLeadCandidateDto): string {
+    const parts = [c.city, c.address, c.buildingName].filter(Boolean);
+    return parts.length ? parts.join(" · ") : "—";
+  }
+
+  function renderCandidatesBody(taskTitle: string) {
+    return (
+      <>
+        <div className="flex flex-wrap gap-2 p-2 border-b border-forte-border/60 bg-white/80">
+          <ForteV2SecondaryButton
+            size="sm"
+            disabled={busy || selectedIds.size === 0}
+            onClick={() => void handleBulkReview("approved")}
+          >
+            אשר נבחרים
+          </ForteV2SecondaryButton>
+          <ForteV2SecondaryButton
+            size="sm"
+            disabled={busy || selectedIds.size === 0}
+            onClick={() => void handleBulkReview("rejected")}
+          >
+            דחה נבחרים
+          </ForteV2SecondaryButton>
+          <ForteV2PrimaryButton
+            size="sm"
+            disabled={busy || selectedIds.size === 0}
+            onClick={() => void handleBulkImport()}
+          >
+            ייבא מאושרים ללידים
+          </ForteV2PrimaryButton>
+        </div>
+
+        {detailLoading ? (
+          <p className="text-sm text-forte-text-secondary p-3">טוען מועמדים...</p>
+        ) : candidates.length === 0 ? (
+          <ForteV2EmptyState
+            title="אין מועמדים"
+            description={`לא נמצאו מועמדים למשימה «${taskTitle}». הריצו מחקר Serper אם טרם הורצה.`}
+          />
+        ) : (
+          <ul className="space-y-3 p-2 max-h-[32rem] overflow-y-auto">
+            {candidates.map((c) => (
+              <li
+                key={c.id}
+                className="rounded-lg border border-forte-border p-3 text-sm space-y-2 bg-white"
+              >
+                <div className="flex items-start gap-2">
+                  <input
+                    type="checkbox"
+                    className="mt-1 shrink-0"
+                    checked={selectedIds.has(c.id)}
+                    onChange={() => toggleSelect(c.id)}
+                    aria-label="בחר מועמד"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-bold text-forte-text">
+                        {c.organizationName || c.buildingName || "—"}
+                      </span>
+                      <span className="text-xs rounded-full bg-forte-blue-light px-2 py-0.5">
+                        ציון {c.matchScore}
+                      </span>
+                      <span className="text-xs text-forte-text-secondary">
+                        {SCOUT_REVIEW_STATUS_LABELS[c.reviewStatus]}
+                      </span>
+                    </div>
+                    <p className="text-xs text-forte-text-secondary mt-1">
+                      {locationLine(c)}
+                    </p>
+                    <p className="text-xs text-forte-text-secondary mt-1">
+                      {c.scoreRationale}
+                    </p>
+                    {c.duplicateLeadId ? (
+                      <p className="text-xs text-amber-900 mt-1">
+                        כפילות: {c.duplicateMatchReason}
+                      </p>
+                    ) : null}
+                    <p className="text-xs mt-2 whitespace-pre-wrap line-clamp-4">
+                      {c.publicNotes}
+                    </p>
+                    <a
+                      href={c.sourceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-forte-primary underline break-all mt-1 inline-block"
+                    >
+                      מקור: {c.sourceTitle || c.sourceUrl}
+                    </a>
+                    {c.phone ? (
+                      <p className="text-xs text-forte-text-secondary">
+                        טלפון (מהמקור): {c.phone}
+                      </p>
+                    ) : null}
+                    {c.email ? (
+                      <p className="text-xs text-forte-text-secondary">
+                        דוא&quot;ל (מהמקור): {c.email}
+                      </p>
+                    ) : null}
+                    <div className="mt-3 rounded-md border border-forte-border/70 bg-forte-blue-light/20 px-3 py-2">
+                      <p className="text-[11px] font-semibold text-forte-text">QUALIFIER</p>
+                      {c.qualifyVerdict ? (
+                        <div className="mt-1 space-y-1">
+                          <ForteV2StatusBadge tone={qualifyTone(c.qualifyVerdict)}>
+                            {QUALIFY_VERDICT_LABELS[c.qualifyVerdict]}
+                          </ForteV2StatusBadge>
+                          <p className="text-xs text-forte-text-secondary whitespace-pre-wrap">
+                            {c.qualifyReason}
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-forte-text-secondary mt-1">
+                          טרם הורץ סינון QUALIFIER.
+                        </p>
+                      )}
+                      <div className="mt-2">
+                        <ForteV2SecondaryButton
+                          size="sm"
+                          disabled={busy || c.reviewStatus === "imported"}
+                          onClick={() => void handleRunQualifier(c.id)}
+                        >
+                          {c.qualifyVerdict ? "הרץ QUALIFIER שוב" : "הרץ QUALIFIER"}
+                        </ForteV2SecondaryButton>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <ForteV2SecondaryButton
+                    size="sm"
+                    disabled={busy || c.reviewStatus === "imported"}
+                    onClick={() =>
+                      void patchScoutCandidateReview({
+                        candidateId: c.id,
+                        reviewStatus: "approved",
+                      }).then(() => loadTaskDetail(selectedTaskId))
+                    }
+                  >
+                    אשר
+                  </ForteV2SecondaryButton>
+                  <ForteV2SecondaryButton
+                    size="sm"
+                    disabled={busy || c.reviewStatus === "imported"}
+                    onClick={() =>
+                      void patchScoutCandidateReview({
+                        candidateId: c.id,
+                        reviewStatus: "rejected",
+                      }).then(() => loadTaskDetail(selectedTaskId))
+                    }
+                  >
+                    דחה
+                  </ForteV2SecondaryButton>
+                  <ForteV2PrimaryButton
+                    size="sm"
+                    disabled={
+                      busy ||
+                      c.reviewStatus !== "approved" ||
+                      Boolean(c.duplicateLeadId)
+                    }
+                    onClick={() => void handleSingleImport(c)}
+                  >
+                    ייבא ללידים
+                  </ForteV2PrimaryButton>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </>
+    );
+  }
+
   return (
     <section className="space-y-4" dir="rtl">
       <ForteV2Panel className="p-4 sm:p-5">
@@ -300,195 +488,64 @@ export default function MasterForteAiScoutSection() {
           />
         ) : (
           <ul className="divide-y divide-forte-border/60">
-            {tasks.map((task) => (
-              <li key={task.id} className="py-3 px-2">
-                <button
-                  type="button"
-                  className={`w-full text-right rounded-lg p-2 hover:bg-forte-blue-light/30 ${
-                    selectedTaskId === task.id ? "bg-forte-blue-light/50" : ""
-                  }`}
-                  onClick={() => selectTask(task.id)}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-semibold text-sm text-forte-text">
-                      {task.title}
-                    </span>
-                    <ForteV2StatusBadge tone={taskStatusTone(task.status)}>
-                      {AI_TASK_STATUS_LABELS[task.status as AiTaskStatusId] ??
-                        task.status}
-                    </ForteV2StatusBadge>
-                  </div>
-                  <p className="text-xs text-forte-text-secondary mt-1">
-                    {SCOUT_CANDIDATE_TYPE_LABELS[task.payload.targetType]} ·{" "}
-                    {task.candidateCount} מועמדים
-                  </p>
-                </button>
-              </li>
-            ))}
+            {tasks.map((task) => {
+              const isExpanded = expandedTaskId === task.id;
+              return (
+                <li key={task.id} className="py-2 px-2">
+                  <button
+                    type="button"
+                    aria-expanded={isExpanded}
+                    className={`w-full text-right rounded-lg p-2 hover:bg-forte-blue-light/30 transition-colors ${
+                      isExpanded ? "bg-forte-blue-light/50 ring-1 ring-forte-border/60" : ""
+                    }`}
+                    onClick={() => void toggleTaskExpand(task.id)}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-semibold text-sm text-forte-text flex items-center gap-2">
+                        <span
+                          className="inline-block text-forte-text-secondary transition-transform"
+                          aria-hidden
+                          style={{
+                            transform: isExpanded ? "rotate(-90deg)" : "rotate(90deg)",
+                          }}
+                        >
+                          ◀
+                        </span>
+                        {task.title}
+                      </span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs text-forte-primary font-medium">
+                          {isExpanded ? "הסתר מועמדים" : "הצג מועמדים"}
+                        </span>
+                        <ForteV2StatusBadge tone={taskStatusTone(task.status)}>
+                          {AI_TASK_STATUS_LABELS[task.status as AiTaskStatusId] ??
+                            task.status}
+                        </ForteV2StatusBadge>
+                      </div>
+                    </div>
+                    <p className="text-xs text-forte-text-secondary mt-1 pe-6">
+                      {SCOUT_CANDIDATE_TYPE_LABELS[task.payload.targetType]} ·{" "}
+                      {task.candidateCount} מועמדים
+                    </p>
+                  </button>
+
+                  {isExpanded ? (
+                    <div
+                      ref={expandedTaskId === task.id ? expandedPanelRef : undefined}
+                      className="mt-2 ms-1 me-1 rounded-lg border border-forte-border/80 bg-forte-blue-light/10 overflow-hidden"
+                    >
+                      <p className="text-xs font-semibold text-forte-text px-3 py-2 border-b border-forte-border/60">
+                        מועמדים — {task.title}
+                      </p>
+                      {renderCandidatesBody(task.title)}
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
           </ul>
         )}
       </ForteV2TableCard>
-
-      {selectedTask ? (
-        <ForteV2TableCard title={`מועמדים — ${selectedTask.title}`}>
-          <div className="flex flex-wrap gap-2 p-2 border-b border-forte-border/60">
-            <ForteV2SecondaryButton
-              size="sm"
-              disabled={busy || selectedIds.size === 0}
-              onClick={() => void handleBulkReview("approved")}
-            >
-              אשר נבחרים
-            </ForteV2SecondaryButton>
-            <ForteV2SecondaryButton
-              size="sm"
-              disabled={busy || selectedIds.size === 0}
-              onClick={() => void handleBulkReview("rejected")}
-            >
-              דחה נבחרים
-            </ForteV2SecondaryButton>
-            <ForteV2PrimaryButton
-              size="sm"
-              disabled={busy || selectedIds.size === 0}
-              onClick={() => void handleBulkImport()}
-            >
-              ייבא מאושרים ללידים
-            </ForteV2PrimaryButton>
-          </div>
-
-          {candidates.length === 0 ? (
-            <ForteV2EmptyState
-              title="אין מועמדים"
-              description="הריצו מחקר Serper למשימה זו."
-            />
-          ) : (
-            <ul className="space-y-3 p-2 max-h-[32rem] overflow-y-auto">
-              {candidates.map((c) => (
-                <li
-                  key={c.id}
-                  className="rounded-lg border border-forte-border p-3 text-sm space-y-2"
-                >
-                  <div className="flex items-start gap-2">
-                    <input
-                      type="checkbox"
-                      className="mt-1 shrink-0"
-                      checked={selectedIds.has(c.id)}
-                      onChange={() => toggleSelect(c.id)}
-                      aria-label="בחר מועמד"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-bold text-forte-text">
-                          {c.organizationName || "—"}
-                        </span>
-                        <span className="text-xs rounded-full bg-forte-blue-light px-2 py-0.5">
-                          ציון {c.matchScore}
-                        </span>
-                        <span className="text-xs text-forte-text-secondary">
-                          {SCOUT_REVIEW_STATUS_LABELS[c.reviewStatus]}
-                        </span>
-                      </div>
-                      <p className="text-xs text-forte-text-secondary mt-1">
-                        {c.scoreRationale}
-                      </p>
-                      {c.duplicateLeadId ? (
-                        <p className="text-xs text-amber-900 mt-1">
-                          כפילות: {c.duplicateMatchReason}
-                        </p>
-                      ) : null}
-                      <p className="text-xs mt-2 whitespace-pre-wrap line-clamp-4">
-                        {c.publicNotes}
-                      </p>
-                      <a
-                        href={c.sourceUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-forte-primary underline break-all mt-1 inline-block"
-                      >
-                        מקור: {c.sourceTitle || c.sourceUrl}
-                      </a>
-                      {c.phone ? (
-                        <p className="text-xs text-forte-text-secondary">
-                          טלפון (מהמקור): {c.phone}
-                        </p>
-                      ) : null}
-                      {c.email ? (
-                        <p className="text-xs text-forte-text-secondary">
-                          דוא&quot;ל (מהמקור): {c.email}
-                        </p>
-                      ) : null}
-                      <div className="mt-3 rounded-md border border-forte-border/70 bg-forte-blue-light/20 px-3 py-2">
-                        <p className="text-[11px] font-semibold text-forte-text">
-                          QUALIFIER
-                        </p>
-                        {c.qualifyVerdict ? (
-                          <div className="mt-1 space-y-1">
-                            <ForteV2StatusBadge tone={qualifyTone(c.qualifyVerdict)}>
-                              {QUALIFY_VERDICT_LABELS[c.qualifyVerdict]}
-                            </ForteV2StatusBadge>
-                            <p className="text-xs text-forte-text-secondary whitespace-pre-wrap">
-                              {c.qualifyReason}
-                            </p>
-                          </div>
-                        ) : (
-                          <p className="text-xs text-forte-text-secondary mt-1">
-                            טרם הורץ סינון QUALIFIER.
-                          </p>
-                        )}
-                        <div className="mt-2">
-                        <ForteV2SecondaryButton
-                          size="sm"
-                          disabled={busy || c.reviewStatus === "imported"}
-                          onClick={() => void handleRunQualifier(c.id)}
-                        >
-                          {c.qualifyVerdict ? "הרץ QUALIFIER שוב" : "הרץ QUALIFIER"}
-                        </ForteV2SecondaryButton>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    <ForteV2SecondaryButton
-                      size="sm"
-                      disabled={busy || c.reviewStatus === "imported"}
-                      onClick={() =>
-                        void patchScoutCandidateReview({
-                          candidateId: c.id,
-                          reviewStatus: "approved",
-                        }).then(() => loadTaskDetail(selectedTaskId))
-                      }
-                    >
-                      אשר
-                    </ForteV2SecondaryButton>
-                    <ForteV2SecondaryButton
-                      size="sm"
-                      disabled={busy || c.reviewStatus === "imported"}
-                      onClick={() =>
-                        void patchScoutCandidateReview({
-                          candidateId: c.id,
-                          reviewStatus: "rejected",
-                        }).then(() => loadTaskDetail(selectedTaskId))
-                      }
-                    >
-                      דחה
-                    </ForteV2SecondaryButton>
-                    <ForteV2PrimaryButton
-                      size="sm"
-                      disabled={
-                        busy ||
-                        c.reviewStatus !== "approved" ||
-                        Boolean(c.duplicateLeadId)
-                      }
-                      onClick={() => void handleSingleImport(c)}
-                    >
-                      ייבא ללידים
-                    </ForteV2PrimaryButton>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </ForteV2TableCard>
-      ) : null}
     </section>
   );
 }
