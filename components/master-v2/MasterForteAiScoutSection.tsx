@@ -326,11 +326,11 @@ export default function MasterForteAiScoutSection() {
             description={`לא נמצאו מועמדים למשימה «${taskTitle}». הריצו מחקר Serper אם טרם הורצה.`}
           />
         ) : (
-          <ul className="space-y-3 p-2 max-h-[32rem] overflow-y-auto">
+          <ul className="space-y-3 p-2 max-h-[32rem] overflow-y-auto overflow-x-hidden">
             {candidates.map((c) => (
               <li
                 key={c.id}
-                className="rounded-lg border border-forte-border p-3 text-sm space-y-2 bg-white"
+                className="min-w-0 max-w-full overflow-x-hidden rounded-lg border border-forte-border p-3 text-sm space-y-2 bg-white"
               >
                 <div className="flex items-start gap-2">
                   <input
@@ -411,7 +411,7 @@ export default function MasterForteAiScoutSection() {
                       </div>
                     </div>
                     {c.reviewStatus === "approved" || c.reviewStatus === "imported" ? (
-                      <div className="mt-3 rounded-md border border-forte-border/70 bg-white px-3 py-2">
+                      <div className="mt-3 min-w-0 w-full max-w-full overflow-hidden rounded-md border border-forte-border/70 bg-white px-3 py-2">
                         <p className="text-[11px] font-semibold text-forte-text">
                           CONTENT — הכנת פנייה
                         </p>
@@ -449,9 +449,13 @@ export default function MasterForteAiScoutSection() {
                           </ForteV2PrimaryButton>
                         </div>
                         {contentDraftById[c.id] ? (
-                          <div className="mt-2 space-y-2">
+                          <div className="mt-2 min-w-0 w-full max-w-full space-y-2">
                             <textarea
-                              className="w-full min-h-[140px] text-xs rounded-md border border-forte-border px-2 py-2 font-sans"
+                              dir="rtl"
+                              rows={8}
+                              spellCheck={false}
+                              aria-label="טיוטת פנייה"
+                              className="box-border block w-full max-w-full min-w-0 min-h-[180px] resize-y overflow-x-hidden rounded-md border border-forte-border bg-white px-3 py-3 font-sans text-sm leading-6 text-forte-text text-right whitespace-pre-wrap break-words [overflow-wrap:anywhere] [word-break:break-word]"
                               value={contentDraftById[c.id]}
                               onChange={(e) =>
                                 setContentDraftById((prev) => ({
