@@ -28,6 +28,7 @@ import {
   formatRecentActionDisplay,
   formatTaskStatusLabel,
 } from "@/lib/forte-ai-display-he";
+import MasterForteAiMarketingSection from "@/components/master-v2/MasterForteAiMarketingSection";
 import MasterForteAiScoutSection from "@/components/master-v2/MasterForteAiScoutSection";
 import {
   fetchForteAiMarketingDashboard,
@@ -40,6 +41,7 @@ const MARKETING_AGENT_KEYS: AiAgentKey[] = [
   "scout",
   "qualifier",
   "content",
+  "marketing",
   "distribution",
   "engagement",
   "sales",
@@ -292,6 +294,8 @@ export default function MasterForteAiView() {
             </div>
 
             <MasterForteAiScoutSection />
+
+            <MasterForteAiMarketingSection />
 
             <ForteV2TableCard title="אישורים הממתינים ליהודה">
               {dashboard.pendingApprovals.length === 0 ? (

@@ -1,0 +1,71 @@
+export const SOCIAL_PLATFORMS = ["facebook", "instagram", "both"] as const;
+export type SocialPlatformId = (typeof SOCIAL_PLATFORMS)[number];
+
+export const SOCIAL_POST_STATUSES = [
+  "draft",
+  "pending_approval",
+  "approved",
+  "scheduled",
+  "ready_to_publish",
+  "published",
+  "failed",
+  "rejected",
+] as const;
+
+export type SocialPostStatusId = (typeof SOCIAL_POST_STATUSES)[number];
+
+export const SOCIAL_POST_STATUS_LABELS: Record<SocialPostStatusId, string> = {
+  draft: "טיוטה",
+  pending_approval: "ממתין לאישור",
+  approved: "אושר",
+  scheduled: "מתוזמן",
+  ready_to_publish: "מוכן לפרסום",
+  published: "פורסם",
+  failed: "נכשל",
+  rejected: "נדחה",
+};
+
+export const SOCIAL_PLATFORM_LABELS: Record<SocialPlatformId, string> = {
+  facebook: "Facebook",
+  instagram: "Instagram",
+  both: "Facebook ו-Instagram",
+};
+
+export const SOCIAL_MARKETING_APPROVER = "יהודה";
+
+export type SocialMarketingPostDto = {
+  id: string;
+  topic: string;
+  targetAudience: string;
+  platform: SocialPlatformId;
+  bodyFacebook: string;
+  bodyInstagram: string;
+  publishDate: string | null;
+  publishTime: string | null;
+  imageUrl: string | null;
+  status: SocialPostStatusId;
+  approvedAt: string | null;
+  approvedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SocialMarketingPostInput = {
+  topic: string;
+  targetAudience: string;
+  platform: SocialPlatformId;
+  bodyFacebook: string;
+  bodyInstagram: string;
+  publishDate: string;
+  publishTime: string;
+  imageUrl: string;
+};
+
+export type SocialMarketingPostAction =
+  | "submit_for_approval"
+  | "approve"
+  | "reject"
+  | "schedule"
+  | "mark_ready_to_publish"
+  | "mark_published"
+  | "mark_failed";

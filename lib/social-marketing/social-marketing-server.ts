@@ -1,0 +1,417 @@
+import { recordAiActionServer } from "@/lib/forte-ai-marketing-server";
+import {
+  SOCIAL_MARKETING_APPROVER,
+  SOCIAL_PLATFORMS,
+  SOCIAL_POST_STATUSES,
+  type SocialMarketingPostAction,
+  type SocialMarketingPostDto,
+  type SocialMarketingPostInput,
+  type SocialPlatformId,
+  type SocialPostStatusId,
+} from "@/lib/social-marketing/social-marketing-types";
+import {
+  getSupabaseServiceClient,
+  isSupabaseServiceConfigured,
+} from "@/lib/supabase-server";
+
+const POSTS_TABLE = "social_marketing_posts";
+
+export type SocialMarketingServerError =
+  | "supabase_service_unconfigured"
+  | "invalid_input"
+  | "not_found"
+  | "save_failed"
+  | "approval_required"
+  | "invalid_status"
+  | "marketing_agent_missing";
+
+function asString(value: unknown): string {
+  return typeof value === "string" ? value : value == null ? "" : String(value);
+}
+
+function isPlatform(value: string): value is SocialPlatformId {
+  return (SOCIAL_PLATFORMS as readonly string[]).includes(value);
+}
+
+function isStatus(value: string): value is SocialPostStatusId {
+  return (SOCIAL_POST_STATUSES as readonly string[]).includes(value);
+}
+
+function mapPost(row: Record<string, unknown>): SocialMarketingPostDto {
+  const platformRaw = asString(row.platform);
+  const statusRaw = asString(row.status);
+  return {
+    id: asString(row.id),
+    topic: asString(row.topic),
+    targetAudience: asString(row.target_audience),
+    platform: isPlatform(platformRaw) ? platformRaw : "facebook",
+    bodyFacebook: asString(row.body_facebook),
+    bodyInstagram: asString(row.body_instagram),
+    publishDate: asString(row.publish_date) || null,
+    publishTime: asString(row.publish_time).slice(0, 5) || null,
+    imageUrl: asString(row.image_url) || null,
+    status: isStatus(statusRaw) ? statusRaw : "draft",
+    approvedAt: asString(row.approved_at) || null,
+    approvedBy: asString(row.approved_by) || null,
+    createdAt: asString(row.created_at),
+    updatedAt: asString(row.updated_at),
+  };
+}
+
+function isApprovedRow(row: Record<string, unknown>): boolean {
+  return Boolean(asString(row.approved_at).trim() && asString(row.approved_by).trim());
+}
+
+const CONTENT_FIELDS = [
+  "topic",
+  "target_audience",
+  "platform",
+  "body_facebook",
+  "body_instagram",
+  "publish_date",
+  "publish_time",
+  "image_url",
+] as const;
+
+function contentFieldChanged(
+  row: Record<string, unknown>,
+  patch: Record<string, unknown>
+): boolean {
+  for (const key of CONTENT_FIELDS) {
+    if (key in patch && asString(patch[key]) !== asString(row[key])) {
+      return true;
+    }
+  }
+  return false;
+}
+
+const STATUSES_RESET_ON_EDIT: SocialPostStatusId[] = [
+  "approved",
+  "scheduled",
+  "ready_to_publish",
+];
+
+function parseInput(body: unknown): SocialMarketingPostInput | null {
+  if (!body || typeof body !== "object") return null;
+  const raw = body as Record<string, unknown>;
+  const platform = asString(raw.platform).trim();
+  if (!isPlatform(platform)) return null;
+  const topic = asString(raw.topic).trim();
+  if (!topic) return null;
+  return {
+    topic,
+    targetAudience: asString(raw.targetAudience ?? raw.target_audience).trim(),
+    platform,
+    bodyFacebook: asString(raw.bodyFacebook ?? raw.body_facebook).trim(),
+    bodyInstagram: asString(raw.bodyInstagram ?? raw.body_instagram).trim(),
+    publishDate: asString(raw.publishDate ?? raw.publish_date).trim(),
+    publishTime: asString(raw.publishTime ?? raw.publish_time).trim(),
+    imageUrl: asString(raw.imageUrl ?? raw.image_url).trim(),
+  };
+}
+
+function inputToRow(input: SocialMarketingPostInput): Record<string, unknown> {
+  return {
+    topic: input.topic,
+    target_audience: input.targetAudience,
+    platform: input.platform,
+    body_facebook: input.bodyFacebook,
+    body_instagram: input.bodyInstagram,
+    publish_date: input.publishDate || null,
+    publish_time: input.publishTime ? `${input.publishTime.slice(0, 5)}:00` : null,
+    image_url: input.imageUrl || null,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function validateBodies(input: SocialMarketingPostInput): boolean {
+  if (input.platform === "facebook") return input.bodyFacebook.length > 0;
+  if (input.platform === "instagram") return input.bodyInstagram.length > 0;
+  return input.bodyFacebook.length > 0 || input.bodyInstagram.length > 0;
+}
+
+export async function listSocialMarketingPostsServer(): Promise<{
+  posts: SocialMarketingPostDto[];
+  error: SocialMarketingServerError | null;
+}> {
+  if (!isSupabaseServiceConfigured()) {
+    return { posts: [], error: "supabase_service_unconfigured" };
+  }
+  const sb = getSupabaseServiceClient();
+  if (!sb) return { posts: [], error: "supabase_service_unconfigured" };
+
+  const { data, error } = await sb
+    .from(POSTS_TABLE)
+    .select("*")
+    .order("updated_at", { ascending: false });
+
+  if (error) return { posts: [], error: "save_failed" };
+  return {
+    posts: (data ?? []).map((r) => mapPost(r as Record<string, unknown>)),
+    error: null,
+  };
+}
+
+export async function createSocialMarketingPostServer(body: unknown): Promise<{
+  post: SocialMarketingPostDto | null;
+  error: SocialMarketingServerError | null;
+}> {
+  const input = parseInput(body);
+  if (!input || !validateBodies(input)) {
+    return { post: null, error: "invalid_input" };
+  }
+  if (!isSupabaseServiceConfigured()) {
+    return { post: null, error: "supabase_service_unconfigured" };
+  }
+  const sb = getSupabaseServiceClient();
+  if (!sb) return { post: null, error: "supabase_service_unconfigured" };
+
+  const row = {
+    ...inputToRow(input),
+    status: "draft",
+    approved_at: null,
+    approved_by: null,
+  };
+
+  const { data, error } = await sb.from(POSTS_TABLE).insert(row).select("*").maybeSingle();
+  if (error || !data) return { post: null, error: "save_failed" };
+
+  const post = mapPost(data as Record<string, unknown>);
+  await recordAiActionServer({
+    agentKey: "marketing",
+    actionType: "social_post_draft_created",
+    summary: `טיוטת פוסט — ${post.topic}`,
+    details: { postId: post.id },
+  });
+
+  return { post, error: null };
+}
+
+export async function updateSocialMarketingPostServer(
+  postIdRaw: string,
+  body: unknown
+): Promise<{ post: SocialMarketingPostDto | null; error: SocialMarketingServerError | null }> {
+  const postId = asString(postIdRaw).trim();
+  if (!postId) return { post: null, error: "invalid_input" };
+
+  const input = parseInput(body);
+  if (!input || !validateBodies(input)) {
+    return { post: null, error: "invalid_input" };
+  }
+
+  if (!isSupabaseServiceConfigured()) {
+    return { post: null, error: "supabase_service_unconfigured" };
+  }
+  const sb = getSupabaseServiceClient();
+  if (!sb) return { post: null, error: "supabase_service_unconfigured" };
+
+  const { data: existing } = await sb
+    .from(POSTS_TABLE)
+    .select("*")
+    .eq("id", postId)
+    .maybeSingle();
+  if (!existing) return { post: null, error: "not_found" };
+
+  const patch = inputToRow(input);
+  const status = asString((existing as Record<string, unknown>).status);
+  if (
+    isStatus(status) &&
+    STATUSES_RESET_ON_EDIT.includes(status) &&
+    contentFieldChanged(existing as Record<string, unknown>, patch)
+  ) {
+    patch.status = "pending_approval";
+    patch.approved_at = null;
+    patch.approved_by = null;
+  }
+
+  const { data, error } = await sb
+    .from(POSTS_TABLE)
+    .update(patch)
+    .eq("id", postId)
+    .select("*")
+    .maybeSingle();
+
+  if (error || !data) return { post: null, error: "save_failed" };
+  return { post: mapPost(data as Record<string, unknown>), error: null };
+}
+
+async function loadRow(
+  sb: NonNullable<ReturnType<typeof getSupabaseServiceClient>>,
+  postId: string
+): Promise<Record<string, unknown> | null> {
+  const { data } = await sb.from(POSTS_TABLE).select("*").eq("id", postId).maybeSingle();
+  return data ? (data as Record<string, unknown>) : null;
+}
+
+function requireApproval(row: Record<string, unknown>): SocialMarketingServerError | null {
+  if (!isApprovedRow(row)) return "approval_required";
+  return null;
+}
+
+export async function runSocialMarketingPostActionServer(
+  postIdRaw: string,
+  actionRaw: unknown
+): Promise<{ post: SocialMarketingPostDto | null; error: SocialMarketingServerError | null }> {
+  const postId = asString(postIdRaw).trim();
+  const action = asString(actionRaw).trim() as SocialMarketingPostAction;
+  const allowed: SocialMarketingPostAction[] = [
+    "submit_for_approval",
+    "approve",
+    "reject",
+    "schedule",
+    "mark_ready_to_publish",
+    "mark_published",
+    "mark_failed",
+  ];
+  if (!postId || !allowed.includes(action)) {
+    return { post: null, error: "invalid_input" };
+  }
+
+  if (!isSupabaseServiceConfigured()) {
+    return { post: null, error: "supabase_service_unconfigured" };
+  }
+  const sb = getSupabaseServiceClient();
+  if (!sb) return { post: null, error: "supabase_service_unconfigured" };
+
+  const row = await loadRow(sb, postId);
+  if (!row) return { post: null, error: "not_found" };
+
+  const status = asString(row.status);
+  const patch: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
+
+  if (action === "submit_for_approval") {
+    if (status !== "draft" && status !== "rejected") {
+      return { post: null, error: "invalid_status" };
+    }
+    patch.status = "pending_approval";
+    patch.approved_at = null;
+    patch.approved_by = null;
+  } else if (action === "approve") {
+    if (status !== "pending_approval") return { post: null, error: "invalid_status" };
+    patch.status = "approved";
+    patch.approved_at = new Date().toISOString();
+    patch.approved_by = SOCIAL_MARKETING_APPROVER;
+  } else if (action === "reject") {
+    if (status !== "pending_approval" && status !== "approved") {
+      return { post: null, error: "invalid_status" };
+    }
+    patch.status = "rejected";
+    patch.approved_at = null;
+    patch.approved_by = null;
+  } else if (action === "schedule") {
+    const block = requireApproval(row);
+    if (block) return { post: null, error: block };
+    if (status !== "approved") return { post: null, error: "invalid_status" };
+    if (!asString(row.publish_date).trim() || !asString(row.publish_time).trim()) {
+      return { post: null, error: "invalid_input" };
+    }
+    patch.status = "scheduled";
+  } else if (action === "mark_ready_to_publish") {
+    const block = requireApproval(row);
+    if (block) return { post: null, error: block };
+    if (status !== "scheduled") return { post: null, error: "invalid_status" };
+    patch.status = "ready_to_publish";
+  } else if (action === "mark_published") {
+    const block = requireApproval(row);
+    if (block) return { post: null, error: block };
+    if (status !== "ready_to_publish" && status !== "scheduled") {
+      return { post: null, error: "invalid_status" };
+    }
+    patch.status = "published";
+  } else if (action === "mark_failed") {
+    patch.status = "failed";
+  }
+
+  const { data, error } = await sb
+    .from(POSTS_TABLE)
+    .update(patch)
+    .eq("id", postId)
+    .select("*")
+    .maybeSingle();
+
+  if (error || !data) return { post: null, error: "save_failed" };
+
+  const post = mapPost(data as Record<string, unknown>);
+  await recordAiActionServer({
+    agentKey: "marketing",
+    actionType: `social_post_${action}`,
+    summary: `${post.topic} — ${action}`,
+    details: { postId: post.id, status: post.status },
+  });
+
+  return { post, error: null };
+}
+
+export async function duplicateSocialMarketingPostServer(postIdRaw: string): Promise<{
+  post: SocialMarketingPostDto | null;
+  error: SocialMarketingServerError | null;
+}> {
+  const postId = asString(postIdRaw).trim();
+  if (!postId) return { post: null, error: "invalid_input" };
+  if (!isSupabaseServiceConfigured()) {
+    return { post: null, error: "supabase_service_unconfigured" };
+  }
+  const sb = getSupabaseServiceClient();
+  if (!sb) return { post: null, error: "supabase_service_unconfigured" };
+
+  const row = await loadRow(sb, postId);
+  if (!row) return { post: null, error: "not_found" };
+
+  const copy = {
+    topic: `${asString(row.topic)} (עותק)`,
+    target_audience: asString(row.target_audience),
+    platform: asString(row.platform),
+    body_facebook: asString(row.body_facebook),
+    body_instagram: asString(row.body_instagram),
+    publish_date: row.publish_date ?? null,
+    publish_time: row.publish_time ?? null,
+    image_url: asString(row.image_url) || null,
+    status: "draft",
+    approved_at: null,
+    approved_by: null,
+  };
+
+  const { data, error } = await sb.from(POSTS_TABLE).insert(copy).select("*").maybeSingle();
+  if (error || !data) return { post: null, error: "save_failed" };
+  return { post: mapPost(data as Record<string, unknown>), error: null };
+}
+
+export async function deleteSocialMarketingPostServer(postIdRaw: string): Promise<{
+  deleted: boolean;
+  error: SocialMarketingServerError | null;
+}> {
+  const postId = asString(postIdRaw).trim();
+  if (!postId) return { deleted: false, error: "invalid_input" };
+  if (!isSupabaseServiceConfigured()) {
+    return { deleted: false, error: "supabase_service_unconfigured" };
+  }
+  const sb = getSupabaseServiceClient();
+  if (!sb) return { deleted: false, error: "supabase_service_unconfigured" };
+
+  const row = await loadRow(sb, postId);
+  if (!row) return { deleted: false, error: "not_found" };
+
+  const { error } = await sb.from(POSTS_TABLE).delete().eq("id", postId);
+  if (error) return { deleted: false, error: "save_failed" };
+
+  await recordAiActionServer({
+    agentKey: "marketing",
+    actionType: "social_post_deleted",
+    summary: `פוסט נמחק — ${asString(row.topic)}`,
+    details: { postId },
+  });
+
+  return { deleted: true, error: null };
+}
+
+/** QA / tests */
+export function socialPostHasApproval(row: {
+  approvedAt: string | null;
+  approvedBy: string | null;
+}): boolean {
+  return Boolean(row.approvedAt?.trim() && row.approvedBy?.trim());
+}
+
+export { isApprovedRow, requireApproval, mapPost };

@@ -12,6 +12,7 @@ export const FORTE_AI_AGENT_DISPLAY_NAMES: Record<AiAgentKey, string> = {
   scout: "מאתר",
   qualifier: "מסנן",
   content: "כותב",
+  marketing: "שיווק",
   distribution: "מפיץ",
   engagement: "עוקב",
   sales: "מכירות",
@@ -22,6 +23,7 @@ export const FORTE_AI_AGENT_DESCRIPTIONS_HE: Record<AiAgentKey, string> = {
   scout: "מאתר לקוחות פוטנציאליים ממקורות ציבוריים",
   qualifier: "בוחן את התאמת הלקוח הפוטנציאלי",
   content: "מכין טיוטת פנייה מותאמת",
+  marketing: "מכין ומתזמן פוסטים לרשתות החברתיות",
   distribution: "מנהל את הוצאת הפנייה לאחר אישורך",
   engagement: "מנהל מעקב אחר פניות ותגובות",
   sales: "מנהל את המשך תהליך המכירה",
@@ -33,6 +35,7 @@ export const FORTE_AI_AGENT_CAPABILITY_ACTIVE: Record<AiAgentKey, boolean> = {
   scout: true,
   qualifier: true,
   content: true,
+  marketing: true,
   distribution: false,
   engagement: false,
   sales: false,
@@ -60,6 +63,8 @@ const AI_ACTION_TYPE_DISPLAY: Record<string, string> = {
   scout_lead_imported: "מועמד הועבר ללקוחות פוטנציאליים",
   scout_cleanup_completed: "ניקוי משימות איתור הושלם",
   scout_candidates_cleanup_completed: "ניקוי מועמדים הושלם",
+  social_post_draft_created: "נוצרה טיוטת פוסט",
+  social_post_deleted: "פוסט נמחק",
 };
 
 export function formatAgentDisplayName(agentKey: AiAgentKey | null | undefined): string {
