@@ -88,8 +88,17 @@ function hebrewSalesApiError(error: string, status: number): string {
   if (error === "invalid_building_service_type") {
     return "סוג השירות בליד אינו תואם לבניין — עדכנו את סוג השירות או נסו שוב לאחר עדכון המערכת.";
   }
+  if (error === "lead_protected") {
+    return "לא ניתן למחוק את הליד משום שהוא כבר מקושר לעבודה.";
+  }
   return error || "שגיאת שרת.";
 }
+
+export type SalesLeadCleanupOptions = {
+  closedNotWon: boolean;
+  newUnconverted: boolean;
+  staleInactive: boolean;
+};
 
 async function readApiError(response: Response): Promise<string> {
   const payload = await parseMasterApiJson<ApiErrorPayload>(response);
@@ -229,6 +238,73 @@ export async function provisionSalesLeadTrialPortal(
       status: null,
       error: "פתיחת הניסיון נכשלה.",
     };
+  }
+}
+
+export async function deleteSalesLead(leadId: string): Promise<{
+  deleted: boolean;
+  error: string | null;
+}> {
+  try {
+    const response = await masterApiFetch(
+      `${MASTER_SALES_LEADS_API}/${encodeURIComponent(leadId)}`,
+      { method: "DELETE" }
+    );
+    const payload = await parseMasterApiJson<{ deleted?: boolean; error?: string }>(
+      response
+    );
+    if (!response.ok) {
+      return { deleted: false, error: await readApiError(response) };
+    }
+    return { deleted: payload?.deleted === true, error: payload?.error ?? null };
+  } catch {
+    return { deleted: false, error: "מחיקת הליד נכשלה." };
+  }
+}
+
+export async function previewSalesLeadCleanup(
+  options: SalesLeadCleanupOptions
+): Promise<{ count: number; sampleNames: string[]; error: string | null }> {
+  try {
+    const response = await masterApiFetch(`${MASTER_SALES_LEADS_API}/cleanup`, {
+      method: "POST",
+      body: JSON.stringify({ ...options, preview: true }),
+    });
+    const payload = await parseMasterApiJson<{
+      count?: number;
+      sampleNames?: string[];
+      error?: string;
+    }>(response);
+    if (!response.ok) {
+      return { count: 0, sampleNames: [], error: await readApiError(response) };
+    }
+    return {
+      count: payload?.count ?? 0,
+      sampleNames: payload?.sampleNames ?? [],
+      error: null,
+    };
+  } catch {
+    return { count: 0, sampleNames: [], error: "לא ניתן לטעון תצוגה מקדימה." };
+  }
+}
+
+export async function executeSalesLeadCleanup(
+  options: SalesLeadCleanupOptions
+): Promise<{ deleted: number; error: string | null }> {
+  try {
+    const response = await masterApiFetch(`${MASTER_SALES_LEADS_API}/cleanup`, {
+      method: "POST",
+      body: JSON.stringify(options),
+    });
+    const payload = await parseMasterApiJson<{ deleted?: number; error?: string }>(
+      response
+    );
+    if (!response.ok) {
+      return { deleted: 0, error: await readApiError(response) };
+    }
+    return { deleted: payload?.deleted ?? 0, error: null };
+  } catch {
+    return { deleted: 0, error: "ניקוי הלידים נכשל." };
   }
 }
 

@@ -4,6 +4,7 @@ import {
   requireMasterApiSession,
   serviceUnavailableResponse,
 } from "@/lib/forte-master-api-auth";
+import { deleteSalesLeadServer } from "@/lib/sales-leads-cleanup-server";
 import {
   parseSalesLeadDraft,
   parseSalesLeadId,
@@ -81,6 +82,45 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       openedProject: result.openedProject,
       projectConversion: result.projectConversion,
     },
+    { headers: { "Cache-Control": "no-store" } }
+  );
+}
+
+export async function DELETE(request: NextRequest, context: RouteContext) {
+  if (!isAllowedForteApiOrigin(request)) {
+    return originForbiddenResponse();
+  }
+
+  const authError = requireMasterApiSession(request);
+  if (authError) return authError;
+
+  const { leadId: routeLeadId } = await context.params;
+  const leadId = parseSalesLeadId(routeLeadId);
+  if (!leadId) {
+    return NextResponse.json({ error: "invalid_lead_id" }, { status: 400 });
+  }
+
+  if (!isSupabaseServiceConfigured()) {
+    return serviceUnavailableResponse("supabase_service_unconfigured");
+  }
+
+  const result = await deleteSalesLeadServer(leadId);
+  if (!result.deleted) {
+    const status =
+      result.error === "not_found"
+        ? 404
+        : result.error === "lead_protected"
+          ? 409
+          : result.error === "invalid_lead_id"
+            ? 400
+            : result.error === "supabase_service_unconfigured"
+              ? 503
+              : 502;
+    return NextResponse.json({ deleted: false, error: result.error }, { status });
+  }
+
+  return NextResponse.json(
+    { deleted: true, error: null },
     { headers: { "Cache-Control": "no-store" } }
   );
 }

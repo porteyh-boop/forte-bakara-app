@@ -150,6 +150,25 @@ export function isClosedSalesLeadStatus(status: SalesLeadStatus): boolean {
   return CLOSED_SALES_LEAD_STATUSES.includes(status);
 }
 
+/** UI hint only — server re-validates on delete. */
+export function isSalesLeadDeletableForUi(lead: SalesLead): boolean {
+  if (lead.convertedBuildingId) return false;
+  if (lead.trialBuildingId || lead.trialClientUserId) return false;
+  if (lead.status === "זכייה") return false;
+  return true;
+}
+
+export function salesLeadDeleteBlockedMessage(lead: SalesLead): string | null {
+  if (isSalesLeadDeletableForUi(lead)) return null;
+  if (lead.convertedBuildingId || lead.status === "זכייה") {
+    return "ליד זה כבר הומר לעבודה/בניין ולכן לא ניתן למחוק אותו ממסך זה.";
+  }
+  if (lead.trialBuildingId || lead.trialClientUserId) {
+    return "ליד זה מקושר לפורטל ניסיון/עבודה ולכן לא ניתן למחוק אותו ממסך זה.";
+  }
+  return "לא ניתן למחוק את הליד.";
+}
+
 export function isOpenSalesLead(lead: Pick<SalesLead, "status">): boolean {
   return !isClosedSalesLeadStatus(lead.status);
 }

@@ -7,6 +7,7 @@ import { useMasterSalesLeadNotifications } from "@/components/master-v2/MasterSa
 import MasterSalesLeadTrialPortalSection from "@/components/master-v2/MasterSalesLeadTrialPortalSection";
 import MasterShellLayout from "@/components/master-v2/MasterShellLayout";
 import {
+  ForteV2DangerButton,
   ForteV2DataTable,
   ForteV2Dialog,
   ForteV2DialogOverlay,
@@ -38,8 +39,12 @@ import {
 } from "@/lib/sales-lead-public-form";
 import {
   createSalesLead,
+  deleteSalesLead,
+  executeSalesLeadCleanup,
   listSalesLeads,
+  previewSalesLeadCleanup,
   updateSalesLead,
+  type SalesLeadCleanupOptions,
 } from "@/lib/sales-leads-api";
 import { SERVICE_TYPE_OTHER } from "@/lib/service-type";
 import {
@@ -54,11 +59,26 @@ import {
   SALES_LEAD_SERVICE_TYPES,
   SALES_LEAD_SOURCES,
   SALES_LEAD_STATUSES,
+  isSalesLeadDeletableForUi,
+  salesLeadDeleteBlockedMessage,
   summarizeSalesLeads,
   type SalesLead,
   type SalesLeadDraft,
   type SalesLeadFilter,
 } from "@/lib/sales-leads";
+
+const EMPTY_CLEANUP_OPTS: SalesLeadCleanupOptions = {
+  closedNotWon: false,
+  newUnconverted: false,
+  staleInactive: false,
+};
+
+function leadDisplayName(lead: SalesLead): string {
+  const client = lead.clientName.trim();
+  const building = lead.buildingName.trim();
+  if (client && building) return `${client} · ${building}`;
+  return client || building || "ליד";
+}
 
 function KpiCard({ label, value }: { label: string; value: number }) {
   return (
@@ -90,6 +110,16 @@ export default function MasterSalesLeadsView({
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [winMissing, setWinMissing] = useState<SalesWinMissingField[] | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<SalesLead | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [bulkCleanupOpen, setBulkCleanupOpen] = useState(false);
+  const [cleanupOpts, setCleanupOpts] =
+    useState<SalesLeadCleanupOptions>(EMPTY_CLEANUP_OPTS);
+  const [cleanupPreview, setCleanupPreview] = useState<{
+    count: number;
+    sampleNames: string[];
+  }>({ count: 0, sampleNames: [] });
+  const [cleanupBusy, setCleanupBusy] = useState(false);
 
   useEffect(() => {
     setAuthed(isMasterAuthenticated());
@@ -228,6 +258,63 @@ export default function MasterSalesLeadsView({
     await persistDraft(draft);
   }
 
+  const refreshCleanupPreview = useCallback(async (opts: SalesLeadCleanupOptions) => {
+    const any =
+      opts.closedNotWon || opts.newUnconverted || opts.staleInactive;
+    if (!any) {
+      setCleanupPreview({ count: 0, sampleNames: [] });
+      return;
+    }
+    const result = await previewSalesLeadCleanup(opts);
+    if (result.error) {
+      setError(result.error);
+      setCleanupPreview({ count: 0, sampleNames: [] });
+      return;
+    }
+    setCleanupPreview({ count: result.count, sampleNames: result.sampleNames });
+  }, []);
+
+  function openBulkCleanup() {
+    setCleanupOpts(EMPTY_CLEANUP_OPTS);
+    setCleanupPreview({ count: 0, sampleNames: [] });
+    setBulkCleanupOpen(true);
+  }
+
+  async function handleDeleteConfirm() {
+    if (!deleteTarget || deleteBusy) return;
+    if (!isSalesLeadDeletableForUi(deleteTarget)) return;
+    setDeleteBusy(true);
+    const result = await deleteSalesLead(deleteTarget.id);
+    setDeleteBusy(false);
+    if (!result.deleted || result.error) {
+      setFormError(result.error ?? "מחיקת הליד נכשלה.");
+      return;
+    }
+    setLeads((current) => current.filter((lead) => lead.id !== deleteTarget.id));
+    if (editingId === deleteTarget.id) closeDialog();
+    setDeleteTarget(null);
+    setMessage("הליד הוסר מרשימת המכירות.");
+  }
+
+  async function handleBulkCleanupConfirm() {
+    if (cleanupBusy) return;
+    const any =
+      cleanupOpts.closedNotWon ||
+      cleanupOpts.newUnconverted ||
+      cleanupOpts.staleInactive;
+    if (!any || cleanupPreview.count === 0) return;
+    setCleanupBusy(true);
+    const result = await executeSalesLeadCleanup(cleanupOpts);
+    setCleanupBusy(false);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    setBulkCleanupOpen(false);
+    setMessage(`הוסרו ${result.deleted} לידים.`);
+    await refresh();
+  }
+
   if (!authed) {
     return <MasterCodeGate onSuccess={() => setAuthed(true)} />;
   }
@@ -239,7 +326,12 @@ export default function MasterSalesLeadsView({
           title="מכירות ולידים"
           subtitle="תור פניות ומעקב מכירות"
           actions={
-            <ForteV2PrimaryButton onClick={openCreate}>פנייה חדשה</ForteV2PrimaryButton>
+            <div className="flex flex-wrap gap-2">
+              <ForteV2SecondaryButton onClick={openBulkCleanup}>
+                נקה לידים
+              </ForteV2SecondaryButton>
+              <ForteV2PrimaryButton onClick={openCreate}>פנייה חדשה</ForteV2PrimaryButton>
+            </div>
           }
         />
 
@@ -320,6 +412,7 @@ export default function MasterSalesLeadsView({
                     <th>סטטוס</th>
                     <th>פעולה הבאה</th>
                     <th>תאריך מעקב</th>
+                    <th className="w-24">פעולות</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -373,6 +466,11 @@ export default function MasterSalesLeadsView({
                       </td>
                       <td className="text-forte-text/85" data-label="תאריך מעקב">
                         {formatSalesLeadDate(lead.followUpDate)}
+                      </td>
+                      <td data-label="פעולות" onClick={(event) => event.stopPropagation()}>
+                        <ForteV2DangerButton onClick={() => setDeleteTarget(lead)}>
+                          מחק
+                        </ForteV2DangerButton>
                       </td>
                     </tr>
                   ))}
@@ -632,15 +730,145 @@ export default function MasterSalesLeadsView({
                 </section>
               ) : null}
 
-              <div className="flex flex-wrap justify-end gap-2">
-                <ForteV2SecondaryButton onClick={closeDialog} disabled={saving}>
-                  ביטול
-                </ForteV2SecondaryButton>
-                <ForteV2PrimaryButton type="submit" disabled={saving}>
-                  {saving ? "שומר..." : "שמירה"}
-                </ForteV2PrimaryButton>
+              <div className="flex flex-wrap justify-between gap-2">
+                {editingLead && isSalesLeadDeletableForUi(editingLead) ? (
+                  <ForteV2DangerButton
+                    type="button"
+                    disabled={saving}
+                    onClick={() => setDeleteTarget(editingLead)}
+                  >
+                    מחק
+                  </ForteV2DangerButton>
+                ) : (
+                  <span />
+                )}
+                <div className="flex flex-wrap justify-end gap-2">
+                  <ForteV2SecondaryButton onClick={closeDialog} disabled={saving}>
+                    ביטול
+                  </ForteV2SecondaryButton>
+                  <ForteV2PrimaryButton type="submit" disabled={saving}>
+                    {saving ? "שומר..." : "שמירה"}
+                  </ForteV2PrimaryButton>
+                </div>
               </div>
             </form>
+          </ForteV2Dialog>
+        </ForteV2DialogOverlay>
+      ) : null}
+
+      {deleteTarget ? (
+        <ForteV2DialogOverlay onClose={() => !deleteBusy && setDeleteTarget(null)}>
+          <ForteV2Dialog
+            title="למחוק את הליד?"
+            onClose={() => !deleteBusy && setDeleteTarget(null)}
+          >
+            <div className="space-y-3 text-sm text-forte-text">
+              <p className="font-medium">{leadDisplayName(deleteTarget)}</p>
+              {isSalesLeadDeletableForUi(deleteTarget) ? (
+                <>
+                  <p className="text-forte-text-secondary">
+                    הליד יימחק מרשימת המכירות. פעולה זו אינה ניתנת לביטול.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <ForteV2DangerButton disabled={deleteBusy} onClick={() => void handleDeleteConfirm()}>
+                      {deleteBusy ? "מוחק..." : "מחק"}
+                    </ForteV2DangerButton>
+                    <ForteV2SecondaryButton
+                      disabled={deleteBusy}
+                      onClick={() => setDeleteTarget(null)}
+                    >
+                      ביטול
+                    </ForteV2SecondaryButton>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-forte-text-secondary">
+                    {salesLeadDeleteBlockedMessage(deleteTarget)}
+                  </p>
+                  <ForteV2SecondaryButton onClick={() => setDeleteTarget(null)}>
+                    סגור
+                  </ForteV2SecondaryButton>
+                </>
+              )}
+            </div>
+          </ForteV2Dialog>
+        </ForteV2DialogOverlay>
+      ) : null}
+
+      {bulkCleanupOpen ? (
+        <ForteV2DialogOverlay onClose={() => !cleanupBusy && setBulkCleanupOpen(false)}>
+          <ForteV2Dialog
+            title="נקה לידים"
+            onClose={() => !cleanupBusy && setBulkCleanupOpen(false)}
+          >
+            <div className="space-y-3 text-sm">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={cleanupOpts.closedNotWon}
+                  onChange={(e) => {
+                    const next = { ...cleanupOpts, closedNotWon: e.target.checked };
+                    setCleanupOpts(next);
+                    void refreshCleanupPreview(next);
+                  }}
+                />
+                לידים בסטטוס «לא נסגר»
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={cleanupOpts.newUnconverted}
+                  onChange={(e) => {
+                    const next = { ...cleanupOpts, newUnconverted: e.target.checked };
+                    setCleanupOpts(next);
+                    void refreshCleanupPreview(next);
+                  }}
+                />
+                לידים חדשים שלא הומרו לעבודה
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={cleanupOpts.staleInactive}
+                  onChange={(e) => {
+                    const next = { ...cleanupOpts, staleInactive: e.target.checked };
+                    setCleanupOpts(next);
+                    void refreshCleanupPreview(next);
+                  }}
+                />
+                לידים ללא עדכון מעל 90 יום (שאינם מקושרים לעבודה)
+              </label>
+              <p className="text-forte-text-secondary">
+                {cleanupPreview.count === 0
+                  ? "בחרו לפחות קטגוריה אחת כדי לראות כמה לידים יימחקו."
+                  : `יימחקו ${cleanupPreview.count} לידים.`}
+              </p>
+              {cleanupPreview.sampleNames.length > 0 ? (
+                <ul className="list-disc pr-5 text-forte-text-secondary max-h-32 overflow-auto">
+                  {cleanupPreview.sampleNames.map((name, index) => (
+                    <li key={`${name}-${index}`}>{name}</li>
+                  ))}
+                  {cleanupPreview.count > cleanupPreview.sampleNames.length ? (
+                    <li>…</li>
+                  ) : null}
+                </ul>
+              ) : null}
+              <div className="flex flex-wrap gap-2">
+                <ForteV2DangerButton
+                  disabled={cleanupBusy || cleanupPreview.count === 0}
+                  onClick={() => void handleBulkCleanupConfirm()}
+                >
+                  {cleanupBusy ? "מנקה..." : "נקה"}
+                </ForteV2DangerButton>
+                <ForteV2SecondaryButton
+                  disabled={cleanupBusy}
+                  onClick={() => setBulkCleanupOpen(false)}
+                >
+                  ביטול
+                </ForteV2SecondaryButton>
+              </div>
+            </div>
           </ForteV2Dialog>
         </ForteV2DialogOverlay>
       ) : null}
