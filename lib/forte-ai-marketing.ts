@@ -80,11 +80,11 @@ export const AI_AGENT_STATUS_LABELS: Record<AiAgentStatusId, string> = {
 };
 
 export const AI_TASK_STATUS_LABELS: Record<AiTaskStatusId, string> = {
-  pending: "ממתין",
+  pending: "ממתינה",
   running: "בתהליך",
-  completed: "הושלם",
-  failed: "נכשל",
-  cancelled: "בוטל",
+  completed: "הושלמה",
+  failed: "נכשלה",
+  cancelled: "בוטלה",
 };
 
 export const AI_APPROVAL_STATUS_LABELS: Record<AiApprovalStatusId, string> = {

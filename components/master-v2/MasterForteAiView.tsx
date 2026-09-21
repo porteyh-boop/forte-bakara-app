@@ -14,7 +14,6 @@ import {
   ForteV2TableCard,
 } from "@/components/master-v2/project-v2/MasterProjectV2Workspace";
 import {
-  AI_AGENT_STATUS_LABELS,
   AI_APPROVAL_STATUS_LABELS,
   type AiAgentDto,
   type AiAgentKey,
@@ -23,7 +22,8 @@ import {
 import {
   FORTE_AI_AGENT_DESCRIPTIONS_HE,
   FORTE_AI_AGENT_DISPLAY_NAMES,
-  agentUiRolloutLabel,
+  agentCapabilityTone,
+  formatAgentCapabilityLabel,
   formatAgentDisplayName,
   formatRecentActionDisplay,
   formatTaskStatusLabel,
@@ -38,20 +38,12 @@ import { isMasterAuthenticated, setMasterAuthenticated } from "@/lib/pilot-cloud
 
 const MARKETING_AGENT_KEYS: AiAgentKey[] = [
   "scout",
+  "qualifier",
   "content",
   "distribution",
   "engagement",
   "sales",
 ];
-
-function agentStatusTone(
-  status: AiAgentDto["status"]
-): "success" | "warning" | "danger" | "neutral" {
-  if (status === "active") return "success";
-  if (status === "paused") return "warning";
-  if (status === "error") return "danger";
-  return "neutral";
-}
 
 function SummaryCard({ label, value }: { label: string; value: number }) {
   return (
@@ -221,8 +213,8 @@ export default function MasterForteAiView() {
                       {FORTE_AI_AGENT_DESCRIPTIONS_HE.manager}
                     </p>
                   </div>
-                  <ForteV2StatusBadge tone={agentStatusTone(managerAgent.status)}>
-                    {AI_AGENT_STATUS_LABELS[managerAgent.status]}
+                  <ForteV2StatusBadge tone={agentCapabilityTone("manager")}>
+                    {formatAgentCapabilityLabel("manager")}
                   </ForteV2StatusBadge>
                 </div>
               </ForteV2Panel>
@@ -233,31 +225,23 @@ export default function MasterForteAiView() {
                 סוכני שיווק
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-                {marketingAgents.map((agent) => {
-                  const rollout = agentUiRolloutLabel(agent.agentKey);
-                  return (
-                    <ForteV2Panel key={agent.id} className="p-4 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <h3 className="text-sm font-bold text-forte-text">
-                            {FORTE_AI_AGENT_DISPLAY_NAMES[agent.agentKey]}
-                          </h3>
-                          <p className="text-xs text-forte-text-secondary mt-2 line-clamp-4">
-                            {FORTE_AI_AGENT_DESCRIPTIONS_HE[agent.agentKey]}
-                          </p>
-                        </div>
-                        <div className="flex flex-col items-end gap-1 shrink-0">
-                          <ForteV2StatusBadge tone={agentStatusTone(agent.status)}>
-                            {AI_AGENT_STATUS_LABELS[agent.status]}
-                          </ForteV2StatusBadge>
-                          {rollout ? (
-                            <ForteV2StatusBadge tone="neutral">{rollout}</ForteV2StatusBadge>
-                          ) : null}
-                        </div>
+                {marketingAgents.map((agent) => (
+                  <ForteV2Panel key={agent.id} className="p-4 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <h3 className="text-sm font-bold text-forte-text">
+                          {FORTE_AI_AGENT_DISPLAY_NAMES[agent.agentKey]}
+                        </h3>
+                        <p className="text-xs text-forte-text-secondary mt-2 line-clamp-4">
+                          {FORTE_AI_AGENT_DESCRIPTIONS_HE[agent.agentKey]}
+                        </p>
                       </div>
-                    </ForteV2Panel>
-                  );
-                })}
+                      <ForteV2StatusBadge tone={agentCapabilityTone(agent.agentKey)}>
+                        {formatAgentCapabilityLabel(agent.agentKey)}
+                      </ForteV2StatusBadge>
+                    </div>
+                  </ForteV2Panel>
+                ))}
               </div>
             </section>
 

@@ -43,6 +43,8 @@ const display = read("lib/forte-ai-display-he.ts");
 assert(display.includes("מאתר"), "display module has מאתר");
 assert(display.includes("מסנן"), "display module has מסנן");
 assert(display.includes("כותב"), "display module has כותב");
+assert(display.includes('active: "פעיל"'), "agent capability active label");
+assert(display.includes("FORTE_AI_AGENT_CAPABILITY_ACTIVE"), "capability map");
 
 for (const key of Object.keys(FORTE_AI_AGENT_DISPLAY_NAMES)) {
   assert(

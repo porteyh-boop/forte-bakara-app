@@ -27,18 +27,28 @@ export const FORTE_AI_AGENT_DESCRIPTIONS_HE: Record<AiAgentKey, string> = {
   sales: "מנהל את המשך תהליך המכירה",
 };
 
-/** Agents with working UI in production — others show «טרם הופעל». */
-export const FORTE_AI_AGENTS_UI_ACTIVE: ReadonlySet<AiAgentKey> = new Set([
-  "manager",
-  "scout",
-  "qualifier",
-  "content",
-]);
+/** Product capability — not DB ai_agents.status (idle/active). */
+export const FORTE_AI_AGENT_CAPABILITY_ACTIVE: Record<AiAgentKey, boolean> = {
+  manager: false,
+  scout: true,
+  qualifier: true,
+  content: true,
+  distribution: false,
+  engagement: false,
+  sales: false,
+};
+
+export const FORTE_AI_AGENT_CAPABILITY_LABELS = {
+  active: "פעיל",
+  inactive: "טרם הופעל",
+} as const;
 
 const AI_ACTION_TYPE_DISPLAY: Record<string, string> = {
   content_draft_created: "נוצרה טיוטת פנייה",
+  content_draft_deleted: "טיוטת פנייה נמחקה",
   qualifier_completed: "בדיקת התאמה הושלמה",
   scout_task_created: "נוצרה משימת איתור",
+  scout_task_deleted: "משימת איתור נמחקה",
   scout_research_started: "האיתור התחיל",
   scout_research_failed: "האיתור נכשל",
   scout_research_completed: "האיתור הושלם",
@@ -46,7 +56,10 @@ const AI_ACTION_TYPE_DISPLAY: Record<string, string> = {
   scout_duplicate_flagged: "מועמד סומן ככפילות",
   scout_candidate_approved: "מועמד אושר",
   scout_candidate_rejected: "מועמד נדחה",
+  scout_candidate_deleted: "מועמד הוסר מרשימת האיתור",
   scout_lead_imported: "מועמד הועבר ללקוחות פוטנציאליים",
+  scout_cleanup_completed: "ניקוי משימות איתור הושלם",
+  scout_candidates_cleanup_completed: "ניקוי מועמדים הושלם",
 };
 
 export function formatAgentDisplayName(agentKey: AiAgentKey | null | undefined): string {
@@ -54,9 +67,21 @@ export function formatAgentDisplayName(agentKey: AiAgentKey | null | undefined):
   return FORTE_AI_AGENT_DISPLAY_NAMES[agentKey] ?? agentKey;
 }
 
-export function agentUiRolloutLabel(agentKey: AiAgentKey): string | null {
-  if (FORTE_AI_AGENTS_UI_ACTIVE.has(agentKey)) return null;
-  return "טרם הופעל";
+export function formatAgentCapabilityLabel(agentKey: AiAgentKey): string {
+  return FORTE_AI_AGENT_CAPABILITY_ACTIVE[agentKey]
+    ? FORTE_AI_AGENT_CAPABILITY_LABELS.active
+    : FORTE_AI_AGENT_CAPABILITY_LABELS.inactive;
+}
+
+export function agentCapabilityTone(
+  agentKey: AiAgentKey
+): "success" | "neutral" {
+  return FORTE_AI_AGENT_CAPABILITY_ACTIVE[agentKey] ? "success" : "neutral";
+}
+
+/** @deprecated Use formatAgentCapabilityLabel — DB agent status is not shown on marketing cards. */
+export function agentUiRolloutLabel(_agentKey: AiAgentKey): string | null {
+  return null;
 }
 
 function localizeLegacyActionSummary(summary: string): string {
@@ -73,7 +98,6 @@ function localizeLegacyActionSummary(summary: string): string {
   return text.trim();
 }
 
-/** Display line for «פעולות אחרונות» — does not change stored action_type/summary. */
 export function formatRecentActionDisplay(action: AiActionDto): string {
   const agent = formatAgentDisplayName(action.agentKey);
   const typed = AI_ACTION_TYPE_DISPLAY[action.actionType.trim().toLowerCase()];
