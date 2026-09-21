@@ -9,6 +9,7 @@ import {
   type SocialPlatformId,
   type SocialPostStatusId,
 } from "@/lib/social-marketing/social-marketing-types";
+import { publishSocialPostToFacebookServer } from "@/lib/social-marketing/meta-facebook-server";
 import {
   getSupabaseServiceClient,
   isSupabaseServiceConfigured,
@@ -23,7 +24,15 @@ export type SocialMarketingServerError =
   | "save_failed"
   | "approval_required"
   | "invalid_status"
-  | "marketing_agent_missing";
+  | "marketing_agent_missing"
+  | "not_connected"
+  | "approval_stale"
+  | "publish_in_progress"
+  | "already_published"
+  | "facebook_not_applicable"
+  | "publish_timeout"
+  | "meta_api_error"
+  | "token_invalid";
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value : value == null ? "" : String(value);
@@ -53,6 +62,13 @@ function mapPost(row: Record<string, unknown>): SocialMarketingPostDto {
     status: isStatus(statusRaw) ? statusRaw : "draft",
     approvedAt: asString(row.approved_at) || null,
     approvedBy: asString(row.approved_by) || null,
+    contentVersion: Number(row.content_version) || 1,
+    approvedContentVersion:
+      row.approved_content_version == null ? null : Number(row.approved_content_version),
+    facebookPostId: asString(row.facebook_post_id) || null,
+    facebookPostUrl: asString(row.facebook_post_url) || null,
+    publishedToFacebookAt: asString(row.published_to_facebook_at) || null,
+    publishErrorCode: asString(row.publish_error_code) || null,
     createdAt: asString(row.created_at),
     updatedAt: asString(row.updated_at),
   };
@@ -214,14 +230,14 @@ export async function updateSocialMarketingPostServer(
 
   const patch = inputToRow(input);
   const status = asString((existing as Record<string, unknown>).status);
-  if (
-    isStatus(status) &&
-    STATUSES_RESET_ON_EDIT.includes(status) &&
-    contentFieldChanged(existing as Record<string, unknown>, patch)
-  ) {
-    patch.status = "pending_approval";
-    patch.approved_at = null;
-    patch.approved_by = null;
+  if (contentFieldChanged(existing as Record<string, unknown>, patch)) {
+    patch.content_version = (Number((existing as Record<string, unknown>).content_version) || 1) + 1;
+    if (isStatus(status) && STATUSES_RESET_ON_EDIT.includes(status)) {
+      patch.status = "pending_approval";
+      patch.approved_at = null;
+      patch.approved_by = null;
+      patch.approved_content_version = null;
+    }
   }
 
   const { data, error } = await sb
@@ -260,11 +276,19 @@ export async function runSocialMarketingPostActionServer(
     "reject",
     "schedule",
     "mark_ready_to_publish",
-    "mark_published",
+    "publish_facebook",
     "mark_failed",
   ];
   if (!postId || !allowed.includes(action)) {
     return { post: null, error: "invalid_input" };
+  }
+
+  if (action === "publish_facebook") {
+    const published = await publishSocialPostToFacebookServer(postId);
+    if (published.error || !published.post) {
+      return { post: null, error: (published.error ?? "save_failed") as SocialMarketingServerError };
+    }
+    return { post: mapPost(published.post), error: null };
   }
 
   if (!isSupabaseServiceConfigured()) {
@@ -288,11 +312,13 @@ export async function runSocialMarketingPostActionServer(
     patch.status = "pending_approval";
     patch.approved_at = null;
     patch.approved_by = null;
+    patch.approved_content_version = null;
   } else if (action === "approve") {
     if (status !== "pending_approval") return { post: null, error: "invalid_status" };
     patch.status = "approved";
     patch.approved_at = new Date().toISOString();
     patch.approved_by = SOCIAL_MARKETING_APPROVER;
+    patch.approved_content_version = Number(row.content_version) || 1;
   } else if (action === "reject") {
     if (status !== "pending_approval" && status !== "approved") {
       return { post: null, error: "invalid_status" };
@@ -300,6 +326,7 @@ export async function runSocialMarketingPostActionServer(
     patch.status = "rejected";
     patch.approved_at = null;
     patch.approved_by = null;
+    patch.approved_content_version = null;
   } else if (action === "schedule") {
     const block = requireApproval(row);
     if (block) return { post: null, error: block };
@@ -313,13 +340,6 @@ export async function runSocialMarketingPostActionServer(
     if (block) return { post: null, error: block };
     if (status !== "scheduled") return { post: null, error: "invalid_status" };
     patch.status = "ready_to_publish";
-  } else if (action === "mark_published") {
-    const block = requireApproval(row);
-    if (block) return { post: null, error: block };
-    if (status !== "ready_to_publish" && status !== "scheduled") {
-      return { post: null, error: "invalid_status" };
-    }
-    patch.status = "published";
   } else if (action === "mark_failed") {
     patch.status = "failed";
   }

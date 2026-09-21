@@ -20,6 +20,15 @@ function hebrewError(code: string): string {
   if (code === "invalid_input") return "יש למלא את השדות הנדרשים.";
   if (code === "save_failed") return "השמירה נכשלה.";
   if (code === "supabase_service_unconfigured") return "השירות אינו זמין כרגע.";
+  if (code === "not_connected") return "יש לחבר דף פייסבוק לפני פרסום.";
+  if (code === "approval_stale") return "התוכן השתנה מאז האישור. יש לאשר מחדש.";
+  if (code === "publish_in_progress") return "הפרסום כבר בתהליך.";
+  if (code === "already_published") return "הפוסט כבר פורסם בפייסבוק.";
+  if (code === "publish_timeout") {
+    return "זמן הפרסום פג. בדקו בפייסבוק — לא נשלחה בקשה נוספת אוטומטית.";
+  }
+  if (code === "meta_api_error") return "פייסבוק דחה את הבקשה או שהחיבור אינו תקין.";
+  if (code === "token_invalid") return "חיבור הפייסבוק פג תוקף. התחברו מחדש.";
   return "שגיאה. נסו שוב.";
 }
 

@@ -65,6 +65,7 @@ const AI_ACTION_TYPE_DISPLAY: Record<string, string> = {
   scout_candidates_cleanup_completed: "ניקוי מועמדים הושלם",
   social_post_draft_created: "נוצרה טיוטת פוסט",
   social_post_deleted: "פוסט נמחק",
+  social_post_published_facebook: "פוסט פורסם בפייסבוק",
 };
 
 export function formatAgentDisplayName(agentKey: AiAgentKey | null | undefined): string {

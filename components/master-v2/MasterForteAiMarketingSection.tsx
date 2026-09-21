@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   ForteV2DangerButton,
   ForteV2Dialog,
@@ -22,6 +23,14 @@ import {
   runSocialMarketingPostAction,
   updateSocialMarketingPost,
 } from "@/lib/social-marketing/social-marketing-api";
+import type { FacebookConnectionStatusDto } from "@/lib/social-marketing/meta-facebook-server";
+import {
+  disconnectFacebookPage,
+  fetchFacebookConnectionStatus,
+  listFacebookPagesForSelection,
+  selectFacebookPage,
+  startFacebookConnectUrl,
+} from "@/lib/social-marketing/meta-facebook-api";
 import {
   SOCIAL_PLATFORMS,
   SOCIAL_PLATFORM_LABELS,
@@ -63,7 +72,18 @@ function statusTone(
   }
   if (status === "pending_approval" || status === "scheduled") return "warning";
   if (status === "failed" || status === "rejected") return "danger";
+  if (status === "publish_uncertain") return "warning";
   return "neutral";
+}
+
+function canPublishToFacebook(
+  post: SocialMarketingPostDto,
+  fb: FacebookConnectionStatusDto | null
+): boolean {
+  if (!fb?.connected || fb.tokenValid === false) return false;
+  if (post.facebookPostId) return false;
+  if (post.platform === "instagram") return false;
+  return ["approved", "scheduled", "ready_to_publish"].includes(post.status);
 }
 
 function PostPreview({ post }: { post: SocialMarketingPostDto }) {
@@ -112,7 +132,13 @@ function PostPreview({ post }: { post: SocialMarketingPostDto }) {
 }
 
 export default function MasterForteAiMarketingSection() {
+  const searchParams = useSearchParams();
   const [posts, setPosts] = useState<SocialMarketingPostDto[]>([]);
+  const [fbStatus, setFbStatus] = useState<FacebookConnectionStatusDto | null>(null);
+  const [pagePickerOpen, setPagePickerOpen] = useState(false);
+  const [pageOptions, setPageOptions] = useState<{ id: string; name: string; canCreateContent: boolean }[]>(
+    []
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -123,17 +149,42 @@ export default function MasterForteAiMarketingSection() {
   const [previewPost, setPreviewPost] = useState<SocialMarketingPostDto | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SocialMarketingPostDto | null>(null);
 
+  const refreshFb = useCallback(async () => {
+    const result = await fetchFacebookConnectionStatus();
+    setFbStatus(result.status);
+    if (result.error) setError(result.error);
+  }, []);
+
   const refresh = useCallback(async () => {
     setLoading(true);
-    const result = await listSocialMarketingPosts();
-    setPosts(result.posts);
-    setError(result.error);
+    const postsResult = await listSocialMarketingPosts();
+    await refreshFb();
+    setPosts(postsResult.posts);
+    if (postsResult.error) setError(postsResult.error);
     setLoading(false);
-  }, []);
+  }, [refreshFb]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    const fb = searchParams.get("facebook");
+    if (fb === "select-page") {
+      void (async () => {
+        const pages = await listFacebookPagesForSelection();
+        if (pages.error) {
+          setError(pages.error);
+          return;
+        }
+        setPageOptions(pages.pages);
+        setPagePickerOpen(true);
+      })();
+    }
+    if (fb === "error") {
+      setError("החיבור לפייסבוק לא הושלם. נסו שוב.");
+    }
+  }, [searchParams]);
 
   const showFacebook = form.platform === "facebook" || form.platform === "both";
   const showInstagram = form.platform === "instagram" || form.platform === "both";
@@ -153,6 +204,12 @@ export default function MasterForteAiMarketingSection() {
       status: editing?.status ?? "draft",
       approvedAt: editing?.approvedAt ?? null,
       approvedBy: editing?.approvedBy ?? null,
+      contentVersion: editing?.contentVersion ?? 1,
+      approvedContentVersion: editing?.approvedContentVersion ?? null,
+      facebookPostId: editing?.facebookPostId ?? null,
+      facebookPostUrl: editing?.facebookPostUrl ?? null,
+      publishedToFacebookAt: editing?.publishedToFacebookAt ?? null,
+      publishErrorCode: editing?.publishErrorCode ?? null,
       createdAt: editing?.createdAt ?? "",
       updatedAt: editing?.updatedAt ?? "",
     };
@@ -237,13 +294,58 @@ export default function MasterForteAiMarketingSection() {
     setPosts((current) => [result.post!, ...current]);
   }
 
+  function connectFacebook() {
+    window.location.assign(startFacebookConnectUrl());
+  }
+
+  async function confirmPageSelection(pageId: string) {
+    if (busy) return;
+    setBusy(true);
+    const result = await selectFacebookPage(pageId);
+    setBusy(false);
+    if (result.error || !result.status) {
+      setError(result.error);
+      return;
+    }
+    setFbStatus(result.status);
+    setPagePickerOpen(false);
+  }
+
   return (
     <ForteV2TableCard title="שיווק — רשתות חברתיות">
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-        <p className="text-sm text-forte-text-secondary">
-          הכנת פוסטים ל-Facebook ו-Instagram. פרסום בפועל יתאפשר לאחר חיבור Meta ואישור יהודה.
+      <div className="rounded-xl border border-forte-border bg-forte-background/50 p-3 mb-4 space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-sm font-semibold text-forte-text">חיבור פייסבוק</p>
+            <p className="text-xs text-forte-text-secondary mt-1">
+              {fbStatus?.connected
+                ? `מחובר לדף: ${fbStatus.pageName} (מזהה ${fbStatus.pageId})`
+                : "לא מחובר לדף עסקי"}
+              {fbStatus?.connected && fbStatus.tokenValid === false
+                ? " · יש להתחבר מחדש"
+                : fbStatus?.connected && fbStatus.tokenValid
+                  ? " · חיבור תקין"
+                  : ""}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <ForteV2SecondaryButton onClick={() => void connectFacebook()}>
+              חיבור לפייסבוק
+            </ForteV2SecondaryButton>
+            {fbStatus?.connected ? (
+              <ForteV2SecondaryButton
+                disabled={busy}
+                onClick={() => void disconnectFacebookPage().then(() => refreshFb())}
+              >
+                ניתוק
+              </ForteV2SecondaryButton>
+            ) : null}
+            <ForteV2PrimaryButton onClick={openCreate}>פוסט חדש</ForteV2PrimaryButton>
+          </div>
+        </div>
+        <p className="text-xs text-forte-text-secondary">
+          יכולת «שיווק» במערכת פעילה לניהול טיוטות. פרסום לפייסבוק דורש חיבור תקין + אישור יהודה.
         </p>
-        <ForteV2PrimaryButton onClick={openCreate}>פוסט חדש</ForteV2PrimaryButton>
       </div>
 
       {error ? <ForteV2StatusBanner tone="error">{error}</ForteV2StatusBanner> : null}
@@ -274,6 +376,16 @@ export default function MasterForteAiMarketingSection() {
                     ? ` · ${post.publishDate}${post.publishTime ? ` ${post.publishTime}` : ""}`
                     : ""}
                 </p>
+                {post.facebookPostUrl ? (
+                  <a
+                    className="text-xs text-forte-primary underline mt-1 inline-block"
+                    href={post.facebookPostUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    צפייה בפוסט בפייסבוק
+                  </a>
+                ) : null}
               </div>
               <div className="flex flex-wrap gap-2 shrink-0">
                 <ForteV2SecondaryButton disabled={busy} onClick={() => openEdit(post)}>
@@ -322,13 +434,13 @@ export default function MasterForteAiMarketingSection() {
                     מוכן לפרסום
                   </ForteV2PrimaryButton>
                 ) : null}
-                {post.status === "ready_to_publish" ? (
-                  <ForteV2SecondaryButton
+                {canPublishToFacebook(post, fbStatus) ? (
+                  <ForteV2PrimaryButton
                     disabled={busy}
-                    onClick={() => void runAction(post, "mark_published")}
+                    onClick={() => void runAction(post, "publish_facebook")}
                   >
-                    סמן כפורסם
-                  </ForteV2SecondaryButton>
+                    פרסם לפייסבוק
+                  </ForteV2PrimaryButton>
                 ) : null}
                 <ForteV2SecondaryButton disabled={busy} onClick={() => void handleDuplicate(post)}>
                   שכפל
@@ -475,6 +587,35 @@ export default function MasterForteAiMarketingSection() {
                 </ForteV2SecondaryButton>
               </div>
             </div>
+          </ForteV2Dialog>
+        </ForteV2DialogOverlay>
+      ) : null}
+
+      {pagePickerOpen ? (
+        <ForteV2DialogOverlay onClose={() => !busy && setPagePickerOpen(false)}>
+          <ForteV2Dialog title="בחירת דף פייסבוק" onClose={() => !busy && setPagePickerOpen(false)}>
+            <p className="text-sm text-forte-text-secondary mb-3">
+              בחרו את הדף העסקי לפרסום. הבחירה לפי מזהה דף, לא לפי שם בלבד.
+            </p>
+            <ul className="space-y-2 max-h-64 overflow-auto">
+              {pageOptions.map((page) => (
+                <li
+                  key={page.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-forte-border p-3"
+                >
+                  <div>
+                    <p className="font-medium text-forte-text">{page.name}</p>
+                    <p className="text-xs text-forte-text-secondary">מזהה: {page.id}</p>
+                  </div>
+                  <ForteV2PrimaryButton
+                    disabled={busy || !page.canCreateContent}
+                    onClick={() => void confirmPageSelection(page.id)}
+                  >
+                    {page.canCreateContent ? "בחר" : "אין הרשאת פרסום"}
+                  </ForteV2PrimaryButton>
+                </li>
+              ))}
+            </ul>
           </ForteV2Dialog>
         </ForteV2DialogOverlay>
       ) : null}

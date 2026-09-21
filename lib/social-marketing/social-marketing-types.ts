@@ -10,6 +10,7 @@ export const SOCIAL_POST_STATUSES = [
   "published",
   "failed",
   "rejected",
+  "publish_uncertain",
 ] as const;
 
 export type SocialPostStatusId = (typeof SOCIAL_POST_STATUSES)[number];
@@ -23,6 +24,7 @@ export const SOCIAL_POST_STATUS_LABELS: Record<SocialPostStatusId, string> = {
   published: "פורסם",
   failed: "נכשל",
   rejected: "נדחה",
+  publish_uncertain: "פרסום לא וודאי",
 };
 
 export const SOCIAL_PLATFORM_LABELS: Record<SocialPlatformId, string> = {
@@ -46,6 +48,12 @@ export type SocialMarketingPostDto = {
   status: SocialPostStatusId;
   approvedAt: string | null;
   approvedBy: string | null;
+  contentVersion: number;
+  approvedContentVersion: number | null;
+  facebookPostId: string | null;
+  facebookPostUrl: string | null;
+  publishedToFacebookAt: string | null;
+  publishErrorCode: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -67,5 +75,5 @@ export type SocialMarketingPostAction =
   | "reject"
   | "schedule"
   | "mark_ready_to_publish"
-  | "mark_published"
+  | "publish_facebook"
   | "mark_failed";

@@ -24,7 +24,11 @@ function originForbiddenResponse(): NextResponse {
 function errorStatus(error: string | null): number {
   if (error === "not_found") return 404;
   if (error === "invalid_input" || error === "invalid_status") return 400;
-  if (error === "approval_required") return 409;
+  if (error === "approval_required" || error === "approval_stale") return 409;
+  if (error === "publish_in_progress" || error === "already_published") return 409;
+  if (error === "not_connected" || error === "token_invalid") return 503;
+  if (error === "publish_timeout") return 504;
+  if (error === "meta_api_error") return 502;
   if (error === "supabase_service_unconfigured") return 503;
   return 502;
 }
