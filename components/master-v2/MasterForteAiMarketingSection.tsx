@@ -19,6 +19,7 @@ import {
   createSocialMarketingPost,
   deleteSocialMarketingPost,
   duplicateSocialMarketingPost,
+  generateSocialMarketingPostsWithAi,
   listSocialMarketingPosts,
   runSocialMarketingPostAction,
   updateSocialMarketingPost,
@@ -127,6 +128,12 @@ function PostPreview({ post }: { post: SocialMarketingPostDto }) {
           </p>
         </div>
       ) : null}
+      {post.visualPrompt ? (
+        <div className="sm:col-span-2 rounded-lg border border-dashed border-forte-border bg-forte-background/40 p-3">
+          <p className="text-xs font-semibold text-forte-text-secondary mb-1">רעיון לתמונה (AI)</p>
+          <p className="text-sm text-forte-text whitespace-pre-wrap">{post.visualPrompt}</p>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -148,6 +155,7 @@ export default function MasterForteAiMarketingSection() {
   const [formError, setFormError] = useState<string | null>(null);
   const [previewPost, setPreviewPost] = useState<SocialMarketingPostDto | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SocialMarketingPostDto | null>(null);
+  const [aiGenerating, setAiGenerating] = useState(false);
 
   const refreshFb = useCallback(async () => {
     const result = await fetchFacebookConnectionStatus();
@@ -201,6 +209,8 @@ export default function MasterForteAiMarketingSection() {
       publishDate: form.publishDate || null,
       publishTime: form.publishTime || null,
       imageUrl: form.imageUrl || null,
+      visualPrompt: editing?.visualPrompt ?? null,
+      generatedBy: editing?.generatedBy ?? null,
       status: editing?.status ?? "draft",
       approvedAt: editing?.approvedAt ?? null,
       approvedBy: editing?.approvedBy ?? null,
@@ -298,6 +308,19 @@ export default function MasterForteAiMarketingSection() {
     window.location.assign(startFacebookConnectUrl());
   }
 
+  async function handleGenerateWithAi() {
+    if (busy || aiGenerating) return;
+    setAiGenerating(true);
+    setError(null);
+    const result = await generateSocialMarketingPostsWithAi();
+    setAiGenerating(false);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    await refresh();
+  }
+
   async function confirmPageSelection(pageId: string) {
     if (busy) return;
     setBusy(true);
@@ -340,11 +363,18 @@ export default function MasterForteAiMarketingSection() {
                 ניתוק
               </ForteV2SecondaryButton>
             ) : null}
+            <ForteV2SecondaryButton
+              disabled={busy || aiGenerating}
+              onClick={() => void handleGenerateWithAi()}
+            >
+              {aiGenerating ? "יוצר פוסטים..." : "צור פוסטים עם AI"}
+            </ForteV2SecondaryButton>
             <ForteV2PrimaryButton onClick={openCreate}>פוסט חדש</ForteV2PrimaryButton>
           </div>
         </div>
         <p className="text-xs text-forte-text-secondary">
-          יכולת «שיווק» במערכת פעילה לניהול טיוטות. פרסום לפייסבוק דורש חיבור תקין + אישור יהודה.
+          יצירת AI שומרת 3 הצעות במצב ממתין לאישור. אישור ודחייה — בלבד מ«אישורים הממתינים ליהודה» למטה.
+          פרסום לפייסבוק דורש חיבור תקין + אישור יהודה.
         </p>
       </div>
 
@@ -400,23 +430,9 @@ export default function MasterForteAiMarketingSection() {
                   </ForteV2SecondaryButton>
                 ) : null}
                 {post.status === "pending_approval" ? (
-                  <>
-                    <ForteV2SecondaryButton disabled={busy} onClick={() => setPreviewPost(post)}>
-                      תצוגה מקדימה
-                    </ForteV2SecondaryButton>
-                    <ForteV2PrimaryButton
-                      disabled={busy}
-                      onClick={() => setPreviewPost(post)}
-                    >
-                      אשר
-                    </ForteV2PrimaryButton>
-                    <ForteV2SecondaryButton
-                      disabled={busy}
-                      onClick={() => void runAction(post, "reject")}
-                    >
-                      דחה
-                    </ForteV2SecondaryButton>
-                  </>
+                  <ForteV2SecondaryButton disabled={busy} onClick={() => setPreviewPost(post)}>
+                    תצוגה מקדימה
+                  </ForteV2SecondaryButton>
                 ) : null}
                 {post.status === "approved" ? (
                   <ForteV2PrimaryButton
@@ -563,27 +579,15 @@ export default function MasterForteAiMarketingSection() {
 
       {previewPost ? (
         <ForteV2DialogOverlay onClose={() => !busy && setPreviewPost(null)}>
-          <ForteV2Dialog title="אישור פוסט" onClose={() => !busy && setPreviewPost(null)}>
+          <ForteV2Dialog title="תצוגה מקדימה" onClose={() => !busy && setPreviewPost(null)}>
             <div className="space-y-4 text-sm">
               <p className="text-forte-text-secondary">
-                ודאו את התוכן לפני אישור יהודה. לאחר האישור ניתן לתזמן לפרסום.
+                לאשר או לדחות — השתמשו ב«אישורים הממתינים ליהודה» למטה. לאחר אישור ניתן לתזמן ולפרסם.
               </p>
               <PostPreview post={previewPost} />
               <div className="flex flex-wrap gap-2">
-                <ForteV2PrimaryButton
-                  disabled={busy}
-                  onClick={() => void runAction(previewPost, "approve")}
-                >
-                  אשר
-                </ForteV2PrimaryButton>
-                <ForteV2SecondaryButton
-                  disabled={busy}
-                  onClick={() => void runAction(previewPost, "reject")}
-                >
-                  דחה
-                </ForteV2SecondaryButton>
                 <ForteV2SecondaryButton disabled={busy} onClick={() => setPreviewPost(null)}>
-                  ביטול
+                  סגור
                 </ForteV2SecondaryButton>
               </div>
             </div>

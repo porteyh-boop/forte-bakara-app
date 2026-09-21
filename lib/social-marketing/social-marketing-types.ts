@@ -35,6 +35,12 @@ export const SOCIAL_PLATFORM_LABELS: Record<SocialPlatformId, string> = {
 
 export const SOCIAL_MARKETING_APPROVER = "יהודה";
 
+export type SocialMarketingPostMetaPayload = {
+  generatedBy?: string;
+  visualPrompt?: string;
+  generatedAt?: string;
+};
+
 export type SocialMarketingPostDto = {
   id: string;
   topic: string;
@@ -45,6 +51,8 @@ export type SocialMarketingPostDto = {
   publishDate: string | null;
   publishTime: string | null;
   imageUrl: string | null;
+  visualPrompt: string | null;
+  generatedBy: string | null;
   status: SocialPostStatusId;
   approvedAt: string | null;
   approvedBy: string | null;

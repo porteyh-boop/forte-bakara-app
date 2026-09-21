@@ -11,6 +11,18 @@ import type {
 
 const BASE = "/forte/api/master/ai-marketing/marketing/posts";
 
+function hebrewGenerateError(code: string): string {
+  if (code === "openai_not_configured") {
+    return "יצירת פוסטים עם AI אינה מוגדרת בשרת. פנו למנהל המערכת.";
+  }
+  if (code === "generation_in_progress") {
+    return "יצירת פוסטים כבר מתבצעת. המתינו מספר דקות ונסו שוב.";
+  }
+  if (code === "invalid_llm_response") return "המודל החזיר תשובה לא תקינה. לא נשמרו פוסטים.";
+  if (code === "llm_failed") return "יצירת התוכן נכשלה. נסו שוב.";
+  return hebrewError(code);
+}
+
 function hebrewError(code: string): string {
   if (code === "approval_required") {
     return "לא ניתן לתזמן או לפרסם לפני אישור יהודה.";
@@ -29,7 +41,39 @@ function hebrewError(code: string): string {
   }
   if (code === "meta_api_error") return "פייסבוק דחה את הבקשה או שהחיבור אינו תקין.";
   if (code === "token_invalid") return "חיבור הפייסבוק פג תוקף. התחברו מחדש.";
+  if (code === "approval_via_dashboard") {
+    return "אישור ודחייה מתבצעים בלבד מ«אישורים הממתינים ליהודה».";
+  }
   return "שגיאה. נסו שוב.";
+}
+
+export async function generateSocialMarketingPostsWithAi(): Promise<{
+  posts: SocialMarketingPostDto[];
+  error: string | null;
+}> {
+  try {
+    const response = await masterApiFetch(`${BASE}/generate`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    const payload = await parseMasterApiJson<{
+      posts?: SocialMarketingPostDto[];
+      error?: string;
+    }>(response);
+    if (!response.ok) {
+      return {
+        posts: [],
+        error: hebrewGenerateError(parseMasterApiError(payload, response.status)),
+      };
+    }
+    const posts = payload?.posts ?? [];
+    if (posts.length !== 3) {
+      return { posts: [], error: "המערכת לא קיבלה 3 פוסטים. לא נשמר batch." };
+    }
+    return { posts, error: null };
+  } catch {
+    return { posts: [], error: "יצירת הפוסטים נכשלה." };
+  }
 }
 
 export async function listSocialMarketingPosts(): Promise<{

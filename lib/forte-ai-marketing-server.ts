@@ -25,6 +25,7 @@ import {
 
 export type ForteAiMarketingServerError =
   | "supabase_service_unconfigured"
+  | "supabase_unreachable"
   | "load_failed"
   | "invalid_approval_id"
   | "not_found"
@@ -47,6 +48,21 @@ const INTERESTED_STATUSES: SalesLeadStatus[] = [
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value : value == null ? "" : String(value);
+}
+
+function mapDashboardLoadError(message: string): ForteAiMarketingServerError {
+  const lower = message.toLowerCase();
+  if (lower.includes("fetch failed") || lower.includes("network")) {
+    return "supabase_unreachable";
+  }
+  if (
+    lower.includes("does not exist") ||
+    lower.includes("42p01") ||
+    lower.includes("schema cache")
+  ) {
+    return "load_failed";
+  }
+  return "load_failed";
 }
 
 function asAgentKey(value: unknown): AiAgentKey | null {
@@ -194,7 +210,10 @@ export async function loadForteAiMarketingDashboardServer(): Promise<{
 
     if (agentErr) {
       console.warn("[forte-ai-marketing] agents load failed:", agentErr.message);
-      return { dashboard: null, error: "load_failed" };
+      return {
+        dashboard: null,
+        error: mapDashboardLoadError(agentErr.message),
+      };
     }
 
     const agents = (agentRows ?? []).map((r) =>
@@ -281,8 +300,12 @@ export async function loadForteAiMarketingDashboardServer(): Promise<{
       error: null,
     };
   } catch (error) {
-    console.warn("[forte-ai-marketing] dashboard error:", error);
-    return { dashboard: null, error: "load_failed" };
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn("[forte-ai-marketing] dashboard error:", message);
+    return {
+      dashboard: null,
+      error: mapDashboardLoadError(message),
+    };
   }
 }
 
@@ -317,6 +340,32 @@ export async function patchAiApprovalStatusServer(input: {
     return { approval: null, error: "invalid_status" };
   }
 
+  const actionId = asString((existing as Record<string, unknown>).action_id);
+  const { data: actionRow } = await sb
+    .from(ACTIONS_TABLE)
+    .select("action_type, details")
+    .eq("id", actionId)
+    .maybeSingle();
+
+  const actionType = actionRow
+    ? asString((actionRow as Record<string, unknown>).action_type).trim().toLowerCase()
+    : "";
+  const details =
+    actionRow && typeof (actionRow as Record<string, unknown>).details === "object"
+      ? ((actionRow as Record<string, unknown>).details as Record<string, unknown>)
+      : {};
+  const linkedPostId = asString(details.postId).trim();
+
+  if (actionType === "send_social_post" && linkedPostId) {
+    const { applyJudahDecisionToSocialPostServer } = await import(
+      "@/lib/social-marketing/social-marketing-server"
+    );
+    const synced = await applyJudahDecisionToSocialPostServer(linkedPostId, input.status);
+    if (synced.error) {
+      return { approval: null, error: synced.error === "not_found" ? "not_found" : "save_failed" };
+    }
+  }
+
   const now = new Date().toISOString();
   const { data: updated, error: saveErr } = await sb
     .from(APPROVALS_TABLE)
@@ -336,19 +385,19 @@ export async function patchAiApprovalStatusServer(input: {
     return { approval: null, error: "save_failed" };
   }
 
-  const actionId = asString((updated as Record<string, unknown>).action_id);
-  const { data: actionRow } = await sb
+  const updatedActionId = asString((updated as Record<string, unknown>).action_id);
+  const { data: actionRowForMap } = await sb
     .from(ACTIONS_TABLE)
     .select("summary, agent_id")
-    .eq("id", actionId)
+    .eq("id", updatedActionId)
     .maybeSingle();
 
   const agentKeyById = await buildAgentKeyMap(sb);
-  const agentId = actionRow
-    ? asString((actionRow as Record<string, unknown>).agent_id)
+  const agentId = actionRowForMap
+    ? asString((actionRowForMap as Record<string, unknown>).agent_id)
     : "";
-  const summary = actionRow
-    ? asString((actionRow as Record<string, unknown>).summary)
+  const summary = actionRowForMap
+    ? asString((actionRowForMap as Record<string, unknown>).summary)
     : "";
 
   return {

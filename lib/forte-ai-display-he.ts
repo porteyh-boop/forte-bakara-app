@@ -66,6 +66,7 @@ const AI_ACTION_TYPE_DISPLAY: Record<string, string> = {
   social_post_draft_created: "נוצרה טיוטת פוסט",
   social_post_deleted: "פוסט נמחק",
   social_post_published_facebook: "פוסט פורסם בפייסבוק",
+  send_social_post: "פוסט ממתין לאישור לפני פרסום",
 };
 
 export function formatAgentDisplayName(agentKey: AiAgentKey | null | undefined): string {

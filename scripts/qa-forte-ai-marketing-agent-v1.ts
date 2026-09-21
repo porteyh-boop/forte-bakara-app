@@ -46,7 +46,9 @@ assert(view.includes("פוסט חדש"), "new post button");
 assert(!view.includes("DISTRIBUTION"), "no DISTRIBUTION in UI");
 assert(view.includes("bodyFacebook"), "facebook body field");
 assert(view.includes("bodyInstagram"), "instagram body field");
-assert(view.includes("תצוגה מקדימה"), "preview before approve");
+assert(view.includes("תצוגה מקדימה"), "preview for pending posts");
+assert(view.includes("צור פוסטים עם AI"), "AI generate button");
+assert(!view.includes('runAction(previewPost, "approve")'), "approve only via Judah dashboard");
 
 assert(!isApprovedRow({ approved_at: "", approved_by: "יהודה" }), "empty approved_at blocked");
 assert(isApprovedRow({ approved_at: new Date().toISOString(), approved_by: SOCIAL_MARKETING_APPROVER }), "full approval ok");

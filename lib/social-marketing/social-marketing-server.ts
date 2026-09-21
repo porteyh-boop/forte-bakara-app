@@ -1,4 +1,5 @@
 import { recordAiActionServer } from "@/lib/forte-ai-marketing-server";
+import type { OpenAiMarketingPostDraft } from "@/lib/llm/openai-marketing-schema";
 import {
   SOCIAL_MARKETING_APPROVER,
   SOCIAL_PLATFORMS,
@@ -6,6 +7,7 @@ import {
   type SocialMarketingPostAction,
   type SocialMarketingPostDto,
   type SocialMarketingPostInput,
+  type SocialMarketingPostMetaPayload,
   type SocialPlatformId,
   type SocialPostStatusId,
 } from "@/lib/social-marketing/social-marketing-types";
@@ -23,6 +25,7 @@ export type SocialMarketingServerError =
   | "not_found"
   | "save_failed"
   | "approval_required"
+  | "approval_via_dashboard"
   | "invalid_status"
   | "marketing_agent_missing"
   | "not_connected"
@@ -33,6 +36,8 @@ export type SocialMarketingServerError =
   | "publish_timeout"
   | "meta_api_error"
   | "token_invalid";
+
+const SOCIAL_POST_APPROVAL_ACTION = "send_social_post";
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value : value == null ? "" : String(value);
@@ -46,7 +51,19 @@ function isStatus(value: string): value is SocialPostStatusId {
   return (SOCIAL_POST_STATUSES as readonly string[]).includes(value);
 }
 
+function parseMetaPayload(row: Record<string, unknown>): SocialMarketingPostMetaPayload {
+  const raw = row.meta_payload;
+  if (!raw || typeof raw !== "object") return {};
+  const rec = raw as Record<string, unknown>;
+  return {
+    generatedBy: asString(rec.generatedBy).trim() || undefined,
+    visualPrompt: asString(rec.visualPrompt).trim() || undefined,
+    generatedAt: asString(rec.generatedAt).trim() || undefined,
+  };
+}
+
 function mapPost(row: Record<string, unknown>): SocialMarketingPostDto {
+  const meta = parseMetaPayload(row);
   const platformRaw = asString(row.platform);
   const statusRaw = asString(row.status);
   return {
@@ -59,6 +76,8 @@ function mapPost(row: Record<string, unknown>): SocialMarketingPostDto {
     publishDate: asString(row.publish_date) || null,
     publishTime: asString(row.publish_time).slice(0, 5) || null,
     imageUrl: asString(row.image_url) || null,
+    visualPrompt: meta.visualPrompt ?? null,
+    generatedBy: meta.generatedBy ?? null,
     status: isStatus(statusRaw) ? statusRaw : "draft",
     approvedAt: asString(row.approved_at) || null,
     approvedBy: asString(row.approved_by) || null,
@@ -264,6 +283,141 @@ function requireApproval(row: Record<string, unknown>): SocialMarketingServerErr
   return null;
 }
 
+export async function registerSocialPostPendingApprovalServer(
+  postId: string,
+  topic: string
+): Promise<void> {
+  await recordAiActionServer({
+    agentKey: "marketing",
+    actionType: SOCIAL_POST_APPROVAL_ACTION,
+    summary: `פוסט ממתין לאישור — ${topic}`,
+    details: { postId },
+  });
+}
+
+async function applySocialPostJudahDecisionInternal(
+  sb: NonNullable<ReturnType<typeof getSupabaseServiceClient>>,
+  postId: string,
+  decision: "approved" | "rejected"
+): Promise<{ post: SocialMarketingPostDto | null; error: SocialMarketingServerError | null }> {
+  const row = await loadRow(sb, postId);
+  if (!row) return { post: null, error: "not_found" };
+
+  const status = asString(row.status);
+  const patch: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
+
+  if (decision === "approved") {
+    if (status !== "pending_approval") return { post: null, error: "invalid_status" };
+    patch.status = "approved";
+    patch.approved_at = new Date().toISOString();
+    patch.approved_by = SOCIAL_MARKETING_APPROVER;
+    patch.approved_content_version = Number(row.content_version) || 1;
+  } else {
+    if (status !== "pending_approval" && status !== "approved") {
+      return { post: null, error: "invalid_status" };
+    }
+    patch.status = "rejected";
+    patch.approved_at = null;
+    patch.approved_by = null;
+    patch.approved_content_version = null;
+  }
+
+  const { data, error } = await sb
+    .from(POSTS_TABLE)
+    .update(patch)
+    .eq("id", postId)
+    .select("*")
+    .maybeSingle();
+
+  if (error || !data) return { post: null, error: "save_failed" };
+  return { post: mapPost(data as Record<string, unknown>), error: null };
+}
+
+/** Sync social post when יהודה approves/rejects from dashboard (send_social_post). */
+export async function applyJudahDecisionToSocialPostServer(
+  postIdRaw: string,
+  decision: "approved" | "rejected"
+): Promise<{ post: SocialMarketingPostDto | null; error: SocialMarketingServerError | null }> {
+  const postId = asString(postIdRaw).trim();
+  if (!postId) return { post: null, error: "invalid_input" };
+  if (!isSupabaseServiceConfigured()) {
+    return { post: null, error: "supabase_service_unconfigured" };
+  }
+  const sb = getSupabaseServiceClient();
+  if (!sb) return { post: null, error: "supabase_service_unconfigured" };
+  return applySocialPostJudahDecisionInternal(sb, postId, decision);
+}
+
+function draftToRow(draft: OpenAiMarketingPostDraft, generatedAt: string): Record<string, unknown> {
+  return {
+    topic: draft.topic.trim(),
+    target_audience: draft.target_audience.trim(),
+    platform: draft.platform,
+    body_facebook: draft.body_facebook.trim(),
+    body_instagram: draft.body_instagram.trim(),
+    publish_date: draft.publish_date.trim(),
+    publish_time: `${draft.publish_time.trim().slice(0, 5)}:00`,
+    image_url: null,
+    status: "pending_approval",
+    approved_at: null,
+    approved_by: null,
+    meta_payload: {
+      generatedBy: "marketing_agent_v1",
+      visualPrompt: draft.visual_prompt.trim(),
+      generatedAt,
+    },
+    updated_at: generatedAt,
+  };
+}
+
+export async function persistAiMarketingBatchServer(
+  drafts: OpenAiMarketingPostDraft[]
+): Promise<{ posts: SocialMarketingPostDto[]; error: SocialMarketingServerError | null }> {
+  if (drafts.length !== 3) return { posts: [], error: "invalid_input" };
+  if (!isSupabaseServiceConfigured()) {
+    return { posts: [], error: "supabase_service_unconfigured" };
+  }
+  const sb = getSupabaseServiceClient();
+  if (!sb) return { posts: [], error: "supabase_service_unconfigured" };
+
+  const generatedAt = new Date().toISOString();
+  const insertedIds: string[] = [];
+  const savedPosts: SocialMarketingPostDto[] = [];
+
+  try {
+    for (const draft of drafts) {
+      const { data, error } = await sb
+        .from(POSTS_TABLE)
+        .insert(draftToRow(draft, generatedAt))
+        .select("*")
+        .maybeSingle();
+      if (error || !data) throw new Error("insert_failed");
+      const post = mapPost(data as Record<string, unknown>);
+      insertedIds.push(post.id);
+      savedPosts.push(post);
+    }
+
+    for (const post of savedPosts) {
+      const reg = await recordAiActionServer({
+        agentKey: "marketing",
+        actionType: SOCIAL_POST_APPROVAL_ACTION,
+        summary: `פוסט ממתין לאישור — ${post.topic}`,
+        details: { postId: post.id },
+      });
+      if (reg.error) throw new Error("approval_register_failed");
+    }
+
+    return { posts: savedPosts, error: null };
+  } catch {
+    if (insertedIds.length > 0) {
+      await sb.from(POSTS_TABLE).delete().in("id", insertedIds);
+    }
+    return { posts: [], error: "save_failed" };
+  }
+}
+
 export async function runSocialMarketingPostActionServer(
   postIdRaw: string,
   actionRaw: unknown
@@ -313,20 +467,8 @@ export async function runSocialMarketingPostActionServer(
     patch.approved_at = null;
     patch.approved_by = null;
     patch.approved_content_version = null;
-  } else if (action === "approve") {
-    if (status !== "pending_approval") return { post: null, error: "invalid_status" };
-    patch.status = "approved";
-    patch.approved_at = new Date().toISOString();
-    patch.approved_by = SOCIAL_MARKETING_APPROVER;
-    patch.approved_content_version = Number(row.content_version) || 1;
-  } else if (action === "reject") {
-    if (status !== "pending_approval" && status !== "approved") {
-      return { post: null, error: "invalid_status" };
-    }
-    patch.status = "rejected";
-    patch.approved_at = null;
-    patch.approved_by = null;
-    patch.approved_content_version = null;
+  } else if (action === "approve" || action === "reject") {
+    return { post: null, error: "approval_via_dashboard" };
   } else if (action === "schedule") {
     const block = requireApproval(row);
     if (block) return { post: null, error: block };
@@ -354,12 +496,17 @@ export async function runSocialMarketingPostActionServer(
   if (error || !data) return { post: null, error: "save_failed" };
 
   const post = mapPost(data as Record<string, unknown>);
-  await recordAiActionServer({
-    agentKey: "marketing",
-    actionType: `social_post_${action}`,
-    summary: `${post.topic} — ${action}`,
-    details: { postId: post.id, status: post.status },
-  });
+
+  if (action === "submit_for_approval") {
+    await registerSocialPostPendingApprovalServer(post.id, post.topic);
+  } else {
+    await recordAiActionServer({
+      agentKey: "marketing",
+      actionType: `social_post_${action}`,
+      summary: `${post.topic} — ${action}`,
+      details: { postId: post.id, status: post.status },
+    });
+  }
 
   return { post, error: null };
 }
