@@ -61,14 +61,15 @@ export const AI_APPROVAL_REQUIRED_ACTION_TYPES = [
 export type AiApprovalRequiredActionType =
   (typeof AI_APPROVAL_REQUIRED_ACTION_TYPES)[number];
 
+/** @deprecated Prefer FORTE_AI_AGENT_DISPLAY_NAMES from forte-ai-display-he in UI. */
 export const AI_AGENT_LABELS: Record<AiAgentKey, string> = {
-  manager: "מנהל AI",
-  scout: "SCOUT — איתור לידים",
-  qualifier: "QUALIFIER — סינון מועמדים",
-  content: "CONTENT — תוכן",
-  distribution: "DISTRIBUTION — הפצה",
-  engagement: "ENGAGEMENT — מעקב",
-  sales: "SALES — מכירה",
+  manager: "מנהל",
+  scout: "מאתר",
+  qualifier: "מסנן",
+  content: "כותב",
+  distribution: "מפיץ",
+  engagement: "עוקב",
+  sales: "מכירות",
 };
 
 export const AI_AGENT_STATUS_LABELS: Record<AiAgentStatusId, string> = {
@@ -80,7 +81,7 @@ export const AI_AGENT_STATUS_LABELS: Record<AiAgentStatusId, string> = {
 
 export const AI_TASK_STATUS_LABELS: Record<AiTaskStatusId, string> = {
   pending: "ממתין",
-  running: "בביצוע",
+  running: "בתהליך",
   completed: "הושלם",
   failed: "נכשל",
   cancelled: "בוטל",

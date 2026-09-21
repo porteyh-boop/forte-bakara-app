@@ -14,14 +14,20 @@ import {
   ForteV2TableCard,
 } from "@/components/master-v2/project-v2/MasterProjectV2Workspace";
 import {
-  AI_AGENT_LABELS,
   AI_AGENT_STATUS_LABELS,
   AI_APPROVAL_STATUS_LABELS,
-  AI_TASK_STATUS_LABELS,
   type AiAgentDto,
   type AiAgentKey,
   type ForteAiMarketingDashboardDto,
 } from "@/lib/forte-ai-marketing";
+import {
+  FORTE_AI_AGENT_DESCRIPTIONS_HE,
+  FORTE_AI_AGENT_DISPLAY_NAMES,
+  agentUiRolloutLabel,
+  formatAgentDisplayName,
+  formatRecentActionDisplay,
+  formatTaskStatusLabel,
+} from "@/lib/forte-ai-display-he";
 import MasterForteAiScoutSection from "@/components/master-v2/MasterForteAiScoutSection";
 import {
   fetchForteAiMarketingDashboard,
@@ -163,14 +169,18 @@ export default function MasterForteAiView() {
       <div className="space-y-5 pb-8" dir="rtl">
         <ForteV2PageHeader
           title="FORTE AI"
-          subtitle="תשתית Multi-Agent לשיווק — ניטור, משימות, תיעוד ואישורים. ללא פרסום או הודעות חיצוניות בשלב זה."
+          subtitle="מערכת סוכני שיווק — ניטור, משימות, תיעוד ואישורים. ללא פרסום או הודעות חיצוניות בשלב זה."
         />
 
         {loadError ? (
           <ForteV2StatusBanner tone="error">
-            {loadError === "load_failed"
-              ? "טעינת לוח הבקרה נכשלה. ודאו ש-migration 047 הורץ ב-Supabase."
-              : loadError}
+            {loadError === "supabase_unreachable"
+              ? "לא ניתן להתחבר ל-Supabase מהשרת המקומי. בדקו NEXT_PUBLIC_SUPABASE_URL ו-SUPABASE_SERVICE_ROLE_KEY ב-.env.local והפעילו מחדש את npm run dev."
+              : loadError === "load_failed"
+                ? "טעינת לוח הבקרה נכשלה. ודאו ש-migration 047 הורץ ב-Supabase."
+                : loadError === "supabase_service_unconfigured"
+                  ? "Supabase לא מוגדר — הוסיפו NEXT_PUBLIC_SUPABASE_URL ו-SUPABASE_SERVICE_ROLE_KEY ל-.env.local."
+                  : loadError}
           </ForteV2StatusBanner>
         ) : null}
 
@@ -185,7 +195,10 @@ export default function MasterForteAiView() {
             <section>
               <h2 className="text-sm font-bold text-forte-text mb-2">סיכום</h2>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-                <SummaryCard label="לידים פתוחים" value={dashboard.summary.leadsOpen} />
+                <SummaryCard
+                  label="לקוחות פוטנציאליים פתוחים"
+                  value={dashboard.summary.leadsOpen}
+                />
                 <SummaryCard label="פריטי תוכן" value={dashboard.summary.contentItems} />
                 <SummaryCard label="קמפיינים" value={dashboard.summary.campaigns} />
                 <SummaryCard
@@ -200,12 +213,12 @@ export default function MasterForteAiView() {
               <ForteV2Panel className="p-4 sm:p-5">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div>
-                    <p className="text-xs text-forte-text-secondary">סוכן מנהל</p>
+                    <p className="text-xs text-forte-text-secondary">סוכן</p>
                     <h3 className="text-base font-bold text-forte-text">
-                      {managerAgent.displayName}
+                      {FORTE_AI_AGENT_DISPLAY_NAMES.manager}
                     </h3>
                     <p className="text-sm text-forte-text-secondary mt-1 max-w-2xl">
-                      {managerAgent.description}
+                      {FORTE_AI_AGENT_DESCRIPTIONS_HE.manager}
                     </p>
                   </div>
                   <ForteV2StatusBadge tone={agentStatusTone(managerAgent.status)}>
@@ -220,26 +233,31 @@ export default function MasterForteAiView() {
                 סוכני שיווק
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-                {marketingAgents.map((agent) => (
-                  <ForteV2Panel key={agent.id} className="p-4">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold text-forte-primary uppercase tracking-wide">
-                          {agent.agentKey}
-                        </p>
-                        <h3 className="text-sm font-bold text-forte-text mt-0.5">
-                          {AI_AGENT_LABELS[agent.agentKey]}
-                        </h3>
-                        <p className="text-xs text-forte-text-secondary mt-2 line-clamp-3">
-                          {agent.description}
-                        </p>
+                {marketingAgents.map((agent) => {
+                  const rollout = agentUiRolloutLabel(agent.agentKey);
+                  return (
+                    <ForteV2Panel key={agent.id} className="p-4 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <h3 className="text-sm font-bold text-forte-text">
+                            {FORTE_AI_AGENT_DISPLAY_NAMES[agent.agentKey]}
+                          </h3>
+                          <p className="text-xs text-forte-text-secondary mt-2 line-clamp-4">
+                            {FORTE_AI_AGENT_DESCRIPTIONS_HE[agent.agentKey]}
+                          </p>
+                        </div>
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          <ForteV2StatusBadge tone={agentStatusTone(agent.status)}>
+                            {AI_AGENT_STATUS_LABELS[agent.status]}
+                          </ForteV2StatusBadge>
+                          {rollout ? (
+                            <ForteV2StatusBadge tone="neutral">{rollout}</ForteV2StatusBadge>
+                          ) : null}
+                        </div>
                       </div>
-                      <ForteV2StatusBadge tone={agentStatusTone(agent.status)}>
-                        {AI_AGENT_STATUS_LABELS[agent.status]}
-                      </ForteV2StatusBadge>
-                    </div>
-                  </ForteV2Panel>
-                ))}
+                    </ForteV2Panel>
+                  );
+                })}
               </div>
             </section>
 
@@ -256,8 +274,8 @@ export default function MasterForteAiView() {
                       <li key={task.id} className="py-3 px-1 text-sm">
                         <p className="font-semibold text-forte-text">{task.title}</p>
                         <p className="text-xs text-forte-text-secondary mt-1">
-                          {task.agentKey?.toUpperCase() ?? "—"} ·{" "}
-                          {AI_TASK_STATUS_LABELS[task.status]}
+                          {formatAgentDisplayName(task.agentKey)} ·{" "}
+                          {formatTaskStatusLabel(task.status)}
                         </p>
                       </li>
                     ))}
@@ -269,15 +287,16 @@ export default function MasterForteAiView() {
                 {dashboard.recentActions.length === 0 ? (
                   <ForteV2EmptyState
                     title="אין פעולות מתועדות"
-                    description="כל פעולת Agent תירשם ב-ai_actions."
+                    description="כל פעולת סוכן תירשם כאן לצפייה ומעקב."
                   />
                 ) : (
                   <ul className="divide-y divide-forte-border/60 max-h-80 overflow-y-auto">
                     {dashboard.recentActions.map((action) => (
                       <li key={action.id} className="py-3 px-1 text-sm">
-                        <p className="font-medium text-forte-text">{action.summary}</p>
+                        <p className="font-medium text-forte-text text-right">
+                          {formatRecentActionDisplay(action)}
+                        </p>
                         <p className="text-xs text-forte-text-secondary mt-1">
-                          {action.agentKey?.toUpperCase() ?? "—"} ·{" "}
                           {formatDateTime(action.createdAt)}
                           {action.requiresApproval ? " · נדרש אישור" : ""}
                         </p>
@@ -308,7 +327,7 @@ export default function MasterForteAiView() {
                           {row.summary || row.approvalKind}
                         </p>
                         <p className="text-xs text-forte-text-secondary mt-1">
-                          {row.agentKey?.toUpperCase() ?? "—"} ·{" "}
+                          {formatAgentDisplayName(row.agentKey)} ·{" "}
                           {AI_APPROVAL_STATUS_LABELS[row.status]} ·{" "}
                           {row.approverLabel}
                         </p>

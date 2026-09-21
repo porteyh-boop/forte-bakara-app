@@ -60,7 +60,8 @@ assert(route.includes("isAllowedForteApiOrigin"), "content API origin guard");
 
 const ui = read("components/master-v2/MasterForteAiScoutSection.tsx");
 assert(ui.includes("createContentOutreachDraft"), "SCOUT UI calls content API");
-assert(ui.includes("CONTENT — הכנת פנייה"), "SCOUT UI CONTENT section");
+assert(ui.includes("כותב — הכנת פנייה"), "UI content section Hebrew title");
+assert(!ui.includes("CONTENT —"), "UI no CONTENT English heading");
 assert(!ui.includes("שלח"), "SCOUT UI has no send button label (שלח)");
 
 function assertNoInternalLeak(text: string, label: string) {

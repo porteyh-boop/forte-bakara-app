@@ -140,7 +140,7 @@ export default function MasterForteAiScoutSection() {
       setError(result.error ?? "יצירת משימה נכשלה");
       return;
     }
-    setMessage("משימת SCOUT נוצרה. לחצו «הרץ מחקר».");
+    setMessage("משימת איתור נוצרה. לחצו «התחל איתור».");
     await refreshTasks();
     selectTask(result.task.id);
   }
@@ -155,14 +155,14 @@ export default function MasterForteAiScoutSection() {
     if (result.error) {
       setError(
         result.error === "search_unconfigured"
-          ? "חיפוש לא מוגדר — הגדירו SCOUT_WEB_SEARCH_API_KEY (Serper)."
+          ? "חיפוש אינטרנט לא מוגדר בשרת (Serper). פנו למנהל המערכת."
           : result.error
       );
       await refreshTasks();
       await loadTaskDetail(selectedTaskId);
       return;
     }
-    setMessage(`המחקר הושלם — ${result.candidatesAdded} מועמדים נוספו.`);
+    setMessage(`האיתור הושלם — ${result.candidatesAdded} מועמדים נוספו.`);
     await refreshTasks();
     await loadTaskDetail(selectedTaskId);
   }
@@ -200,7 +200,7 @@ export default function MasterForteAiScoutSection() {
           ? "לא ניתן לייבא מועמד עם כפילות — אשרו רק מועמדים ללא כפילות."
           : result.error
       );
-    } else setMessage(`יובאו ${result.imported} מועמדים ללידים.`);
+    } else setMessage(`הועברו ${result.imported} מועמדים ללקוחות פוטנציאליים.`);
     setSelectedIds(new Set());
     await loadTaskDetail(selectedTaskId);
   }
@@ -219,7 +219,7 @@ export default function MasterForteAiScoutSection() {
       );
       return;
     }
-    setMessage("המועמד יובא ל-sales_leads.");
+    setMessage("המועמד הועבר ללקוחות פוטנציאליים.");
     await loadTaskDetail(selectedTaskId);
   }
 
@@ -231,7 +231,7 @@ export default function MasterForteAiScoutSection() {
     if (result.error) {
       setError(
         result.error === "qualifier_agent_missing"
-          ? "סוכן QUALIFIER לא מוגדר — הריצו migration 049."
+          ? "סוכן המסנן לא מוגדר במערכת. פנו למנהל המערכת."
           : result.error
       );
       return;
@@ -252,9 +252,9 @@ export default function MasterForteAiScoutSection() {
     if (result.error || !result.draft) {
       setError(
         result.error === "not_approved"
-          ? "CONTENT זמין רק למועמדים שאושרו או יובאו."
+          ? "הכותב זמין רק למועמדים שאושרו או הועברו ללקוחות פוטנציאליים."
           : result.error === "content_agent_missing"
-            ? "סוכן CONTENT לא מוגדר — הריצו migration 047/050."
+            ? "סוכן הכותב לא מוגדר במערכת. פנו למנהל המערכת."
             : result.error ?? "יצירת טיוטה נכשלה"
       );
       return;
@@ -263,7 +263,7 @@ export default function MasterForteAiScoutSection() {
       ...prev,
       [candidateId]: result.draft!.draftText,
     }));
-    setMessage("טיוטת CONTENT נוצרה — ניתן לערוך ולהעתיק.");
+    setMessage("טיוטת הפנייה נוצרה — ניתן לערוך ולהעתיק.");
   }
 
   async function handleCopyContentDraft(candidateId: string) {
@@ -314,7 +314,7 @@ export default function MasterForteAiScoutSection() {
             disabled={busy || selectedIds.size === 0}
             onClick={() => void handleBulkImport()}
           >
-            ייבא מאושרים ללידים
+            העבר מאושרים ללקוחות פוטנציאליים
           </ForteV2PrimaryButton>
         </div>
 
@@ -323,7 +323,7 @@ export default function MasterForteAiScoutSection() {
         ) : candidates.length === 0 ? (
           <ForteV2EmptyState
             title="אין מועמדים"
-            description={`לא נמצאו מועמדים למשימה «${taskTitle}». הריצו מחקר Serper אם טרם הורצה.`}
+            description={`לא נמצאו מועמדים למשימה «${taskTitle}». לחצו «התחל איתור» אם טרם הורצה.`}
           />
         ) : (
           <ul className="space-y-3 p-2 max-h-[32rem] overflow-y-auto overflow-x-hidden">
@@ -346,7 +346,7 @@ export default function MasterForteAiScoutSection() {
                         {c.organizationName || c.buildingName || "—"}
                       </span>
                       <span className="text-xs rounded-full bg-forte-blue-light px-2 py-0.5">
-                        ציון {c.matchScore}
+                        ציון התאמה {c.matchScore}
                       </span>
                       <span className="text-xs text-forte-text-secondary">
                         {SCOUT_REVIEW_STATUS_LABELS[c.reviewStatus]}
@@ -356,6 +356,7 @@ export default function MasterForteAiScoutSection() {
                       {locationLine(c)}
                     </p>
                     <p className="text-xs text-forte-text-secondary mt-1">
+                      <span className="font-medium text-forte-text">סיבת ההתאמה: </span>
                       {c.scoreRationale}
                     </p>
                     {c.duplicateLeadId ? (
@@ -384,20 +385,25 @@ export default function MasterForteAiScoutSection() {
                         דוא&quot;ל (מהמקור): {c.email}
                       </p>
                     ) : null}
-                    <div className="mt-3 rounded-md border border-forte-border/70 bg-forte-blue-light/20 px-3 py-2">
-                      <p className="text-[11px] font-semibold text-forte-text">QUALIFIER</p>
+                    <div className="mt-3 rounded-md border border-forte-border/70 bg-forte-blue-light/20 px-3 py-2 min-w-0">
+                      <p className="text-[11px] font-semibold text-forte-text">
+                        מסנן — בדיקת התאמה
+                      </p>
                       {c.qualifyVerdict ? (
                         <div className="mt-1 space-y-1">
-                          <ForteV2StatusBadge tone={qualifyTone(c.qualifyVerdict)}>
-                            {QUALIFY_VERDICT_LABELS[c.qualifyVerdict]}
-                          </ForteV2StatusBadge>
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-forte-text-secondary">
+                            <span>התאמה:</span>
+                            <ForteV2StatusBadge tone={qualifyTone(c.qualifyVerdict)}>
+                              {QUALIFY_VERDICT_LABELS[c.qualifyVerdict]}
+                            </ForteV2StatusBadge>
+                          </div>
                           <p className="text-xs text-forte-text-secondary whitespace-pre-wrap">
                             {c.qualifyReason}
                           </p>
                         </div>
                       ) : (
                         <p className="text-xs text-forte-text-secondary mt-1">
-                          טרם הורץ סינון QUALIFIER.
+                          טרם בוצעה בדיקת התאמה.
                         </p>
                       )}
                       <div className="mt-2">
@@ -406,14 +412,14 @@ export default function MasterForteAiScoutSection() {
                           disabled={busy || c.reviewStatus === "imported"}
                           onClick={() => void handleRunQualifier(c.id)}
                         >
-                          {c.qualifyVerdict ? "הרץ QUALIFIER שוב" : "הרץ QUALIFIER"}
+                          {c.qualifyVerdict ? "בדוק שוב" : "בדוק התאמה"}
                         </ForteV2SecondaryButton>
                       </div>
                     </div>
                     {c.reviewStatus === "approved" || c.reviewStatus === "imported" ? (
                       <div className="mt-3 min-w-0 w-full max-w-full overflow-hidden rounded-md border border-forte-border/70 bg-white px-3 py-2">
                         <p className="text-[11px] font-semibold text-forte-text">
-                          CONTENT — הכנת פנייה
+                          כותב — הכנת פנייה
                         </p>
                         <p className="text-xs text-forte-text-secondary mt-1">
                           טיוטה בלבד — ללא שליחה מהמערכת.
@@ -510,7 +516,7 @@ export default function MasterForteAiScoutSection() {
                     }
                     onClick={() => void handleSingleImport(c)}
                   >
-                    ייבא ללידים
+                    העבר ללקוחות פוטנציאליים
                   </ForteV2PrimaryButton>
                 </div>
               </li>
@@ -524,9 +530,12 @@ export default function MasterForteAiScoutSection() {
   return (
     <section className="space-y-4" dir="rtl">
       <ForteV2Panel className="p-4 sm:p-5">
-        <h2 className="text-base font-bold text-forte-text">SCOUT — איתור לידים</h2>
-        <p className="text-xs text-forte-text-secondary mt-1">
-          מחקר ציבורי בלבד (Serper). ללא פנייה ללקוחות. ייבוא ללידים רק לאחר אישורך.
+        <h2 className="text-base font-bold text-forte-text">
+          מאתר — איתור לקוחות פוטנציאליים
+        </h2>
+        <p className="text-xs text-forte-text-secondary mt-1 max-w-3xl">
+          המערכת מחפשת לקוחות פוטנציאליים ממקורות ציבוריים ושומרת אותם לבדיקה לפני
+          העברה למכירות. ללא פנייה אוטומטית ללקוחות.
         </p>
 
         {error ? (
@@ -550,7 +559,7 @@ export default function MasterForteAiScoutSection() {
             <ForteV2FormInput value={region} onChange={(e) => setRegion(e.target.value)} />
           </label>
           <label className="block space-y-1">
-            <ForteV2FormLabel>סוג יעד</ForteV2FormLabel>
+            <ForteV2FormLabel>סוג לקוח</ForteV2FormLabel>
             <select
               className="form-input text-sm py-2 w-full"
               value={targetType}
@@ -566,7 +575,7 @@ export default function MasterForteAiScoutSection() {
             </select>
           </label>
           <label className="block space-y-1">
-            <ForteV2FormLabel>מספר תוצאות (1–15)</ForteV2FormLabel>
+            <ForteV2FormLabel>מספר תוצאות</ForteV2FormLabel>
             <ForteV2FormInput
               type="number"
               min={1}
@@ -579,24 +588,24 @@ export default function MasterForteAiScoutSection() {
 
         <div className="flex flex-wrap gap-2 mt-4">
           <ForteV2PrimaryButton disabled={busy || !city.trim()} onClick={() => void handleCreateTask()}>
-            צור משימת איתור
+            צור משימה
           </ForteV2PrimaryButton>
           <ForteV2SecondaryButton
             disabled={busy || !selectedTaskId}
             onClick={() => void handleRunTask()}
           >
-            הרץ מחקר (Serper)
+            התחל איתור
           </ForteV2SecondaryButton>
         </div>
       </ForteV2Panel>
 
-      <ForteV2TableCard title="משימות SCOUT">
+      <ForteV2TableCard title="משימות איתור">
         {loading ? (
           <p className="text-sm text-forte-text-secondary p-3">טוען...</p>
         ) : tasks.length === 0 ? (
           <ForteV2EmptyState
-            title="אין משימות SCOUT"
-            description="צרו משימה חדשה כדי להתחיל מחקר."
+            title="אין משימות איתור"
+            description="צרו משימה חדשה כדי להתחיל איתור."
           />
         ) : (
           <ul className="divide-y divide-forte-border/60">

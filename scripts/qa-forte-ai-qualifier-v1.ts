@@ -74,7 +74,8 @@ assert(route.includes("requireMasterApiSession"), "qualifier API uses master ses
 
 const ui = read("components/master-v2/MasterForteAiScoutSection.tsx");
 assert(ui.includes("runQualifierOnCandidate"), "SCOUT UI calls qualifier API");
-assert(ui.includes("QUALIFY_VERDICT_LABELS"), "SCOUT UI shows qualifier labels");
+assert(ui.includes("QUALIFY_VERDICT_LABELS"), "UI shows qualifier labels");
+assert(ui.includes("מסנן — בדיקת התאמה"), "UI qualifier section Hebrew title");
 
 const suitable = runQualifierRulesV1(baseCandidate());
 assert(suitable.verdict === "suitable", "suitable candidate → suitable");

@@ -30,10 +30,10 @@ import type { QualifyVerdictId } from "@/lib/qualifier/qualifier-types";
 export { QUALIFY_VERDICT_LABELS } from "@/lib/qualifier/qualifier-types";
 
 export const SCOUT_REVIEW_STATUS_LABELS: Record<ScoutReviewStatusId, string> = {
-  pending: "ממתין לסקירה",
-  approved: "אושר (טרם יובא)",
+  pending: "ממתין",
+  approved: "אושר",
   rejected: "נדחה",
-  imported: "יובא ללידים",
+  imported: "הועבר ללידים",
 };
 
 export const SCOUT_SALES_LEAD_SOURCE = "סוכן SCOUT";
