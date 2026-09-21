@@ -19,7 +19,8 @@ export type ContentServerError =
   | "content_agent_missing"
   | "not_found"
   | "not_approved"
-  | "save_failed";
+  | "save_failed"
+  | "delete_failed";
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value : value == null ? "" : String(value);
@@ -187,4 +188,47 @@ export async function createContentOutreachDraftServer(body: unknown): Promise<{
   });
 
   return { draft: mapDraft(inserted as Record<string, unknown>), error: null };
+}
+
+export async function deleteContentOutreachDraftServer(draftId: string): Promise<{
+  deleted: boolean;
+  error: ContentServerError | null;
+}> {
+  const id = draftId.trim();
+  if (!id) return { deleted: false, error: "invalid_input" };
+  if (!isSupabaseServiceConfigured()) {
+    return { deleted: false, error: "supabase_service_unconfigured" };
+  }
+  const sb = getSupabaseServiceClient();
+  if (!sb) return { deleted: false, error: "supabase_service_unconfigured" };
+
+  if (!(await ensureContentAgentId(sb))) {
+    return { deleted: false, error: "content_agent_missing" };
+  }
+
+  const { data: row } = await sb
+    .from(DRAFTS_TABLE)
+    .select("id, scout_lead_candidate_id, channel")
+    .eq("id", id)
+    .maybeSingle();
+  if (!row) return { deleted: false, error: "not_found" };
+
+  const rec = row as Record<string, unknown>;
+  const candidateId = asString(rec.scout_lead_candidate_id);
+
+  const { error: delErr } = await sb.from(DRAFTS_TABLE).delete().eq("id", id);
+  if (delErr) return { deleted: false, error: "delete_failed" };
+
+  await recordAiActionServer({
+    agentKey: "content",
+    actionType: "content_draft_deleted",
+    summary: "טיוטת פנייה נמחקה",
+    details: {
+      draft_id: id,
+      candidate_id: candidateId,
+      channel: asString(rec.channel),
+    },
+  });
+
+  return { deleted: true, error: null };
 }

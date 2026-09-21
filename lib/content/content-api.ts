@@ -32,3 +32,21 @@ export async function createContentOutreachDraft(input: {
   }
   return { draft: body.draft, error: null };
 }
+
+export async function deleteContentOutreachDraft(draftId: string): Promise<{
+  deleted: boolean;
+  error: string | null;
+}> {
+  const response = await masterApiFetch(
+    `${CONTENT_BASE}/drafts/${encodeURIComponent(draftId)}`,
+    { method: "DELETE" }
+  );
+  const body = await parseMasterApiJson<{ deleted?: boolean; error?: string }>(response);
+  if (!response.ok || !body?.deleted) {
+    return {
+      deleted: false,
+      error: body?.error ?? parseMasterApiError(body, response.status),
+    };
+  }
+  return { deleted: true, error: null };
+}

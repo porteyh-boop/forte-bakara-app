@@ -210,3 +210,111 @@ export async function bulkImportScoutCandidates(candidateIds: string[]): Promise
   }
   return { imported: body?.imported ?? 0, error: null };
 }
+
+export async function deleteScoutTask(taskId: string): Promise<{
+  deleted: boolean;
+  error: string | null;
+}> {
+  const response = await masterApiFetch(
+    `${SCOUT_BASE}/tasks/${encodeURIComponent(taskId)}`,
+    { method: "DELETE" }
+  );
+  const body = await parseMasterApiJson<{ deleted?: boolean; error?: string }>(response);
+  if (!response.ok || !body?.deleted) {
+    return {
+      deleted: false,
+      error: body?.error ?? parseMasterApiError(body, response.status),
+    };
+  }
+  return { deleted: true, error: null };
+}
+
+export async function deleteScoutCandidate(candidateId: string): Promise<{
+  deleted: boolean;
+  error: string | null;
+}> {
+  const response = await masterApiFetch(
+    `${SCOUT_BASE}/candidates/${encodeURIComponent(candidateId)}`,
+    { method: "DELETE" }
+  );
+  const body = await parseMasterApiJson<{ deleted?: boolean; error?: string }>(response);
+  if (!response.ok || !body?.deleted) {
+    return {
+      deleted: false,
+      error: body?.error ?? parseMasterApiError(body, response.status),
+    };
+  }
+  return { deleted: true, error: null };
+}
+
+export type ScoutTaskCleanupOptions = {
+  failed: boolean;
+  completed: boolean;
+  emptyStale: boolean;
+};
+
+export async function previewScoutTaskCleanup(
+  options: ScoutTaskCleanupOptions
+): Promise<{ count: number; error: string | null }> {
+  const response = await masterApiFetch(`${SCOUT_BASE}/tasks/cleanup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...options, preview: true }),
+  });
+  const body = await parseMasterApiJson<{ count?: number; error?: string }>(response);
+  if (!response.ok) {
+    return { count: 0, error: body?.error ?? parseMasterApiError(body, response.status) };
+  }
+  return { count: body?.count ?? 0, error: null };
+}
+
+export async function executeScoutTaskCleanup(
+  options: ScoutTaskCleanupOptions
+): Promise<{ deleted: number; error: string | null }> {
+  const response = await masterApiFetch(`${SCOUT_BASE}/tasks/cleanup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(options),
+  });
+  const body = await parseMasterApiJson<{ deleted?: number; error?: string }>(response);
+  if (!response.ok) {
+    return { deleted: 0, error: body?.error ?? parseMasterApiError(body, response.status) };
+  }
+  return { deleted: body?.deleted ?? 0, error: null };
+}
+
+export type ScoutCandidateCleanupOptions = {
+  rejected: boolean;
+  unsuitable: boolean;
+  imported: boolean;
+};
+
+export async function previewScoutCandidateCleanup(
+  options: ScoutCandidateCleanupOptions
+): Promise<{ count: number; error: string | null }> {
+  const response = await masterApiFetch(`${SCOUT_BASE}/candidates/cleanup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...options, preview: true }),
+  });
+  const body = await parseMasterApiJson<{ count?: number; error?: string }>(response);
+  if (!response.ok) {
+    return { count: 0, error: body?.error ?? parseMasterApiError(body, response.status) };
+  }
+  return { count: body?.count ?? 0, error: null };
+}
+
+export async function executeScoutCandidateCleanup(
+  options: ScoutCandidateCleanupOptions
+): Promise<{ deleted: number; error: string | null }> {
+  const response = await masterApiFetch(`${SCOUT_BASE}/candidates/cleanup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(options),
+  });
+  const body = await parseMasterApiJson<{ deleted?: number; error?: string }>(response);
+  if (!response.ok) {
+    return { deleted: 0, error: body?.error ?? parseMasterApiError(body, response.status) };
+  }
+  return { deleted: body?.deleted ?? 0, error: null };
+}

@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ForteV2DangerButton,
+  ForteV2Dialog,
+  ForteV2DialogOverlay,
   ForteV2EmptyState,
   ForteV2FormInput,
   ForteV2FormLabel,
@@ -16,21 +19,32 @@ import {
   bulkImportScoutCandidates,
   bulkScoutCandidateReview,
   createScoutTask,
+  deleteScoutCandidate,
+  deleteScoutTask,
+  executeScoutCandidateCleanup,
+  executeScoutTaskCleanup,
   fetchScoutTaskDetail,
   importScoutCandidate,
   listScoutTasks,
   patchScoutCandidateReview,
+  previewScoutCandidateCleanup,
+  previewScoutTaskCleanup,
   runQualifierOnCandidate,
   runScoutTask,
+  type ScoutCandidateCleanupOptions,
+  type ScoutTaskCleanupOptions,
 } from "@/lib/scout/scout-api";
-import { createContentOutreachDraft } from "@/lib/content/content-api";
+import {
+  createContentOutreachDraft,
+  deleteContentOutreachDraft,
+} from "@/lib/content/content-api";
+import { formatTaskStatusLabel } from "@/lib/forte-ai-display-he";
 import {
   CONTENT_CHANNELS,
   CONTENT_CHANNEL_LABELS,
   type ContentChannelId,
 } from "@/lib/content/content-types";
 import {
-  AI_TASK_STATUS_LABELS,
   type AiTaskStatusId,
 } from "@/lib/forte-ai-marketing";
 import {
@@ -68,6 +82,28 @@ export default function MasterForteAiScoutSection() {
     Record<string, ContentChannelId>
   >({});
   const [contentDraftById, setContentDraftById] = useState<Record<string, string>>({});
+  const [contentDraftIdById, setContentDraftIdById] = useState<Record<string, string>>({});
+  const [deleteTaskTarget, setDeleteTaskTarget] = useState<ScoutTaskDto | null>(null);
+  const [deleteCandidateTarget, setDeleteCandidateTarget] =
+    useState<ScoutLeadCandidateDto | null>(null);
+  const [deleteDraftTarget, setDeleteDraftTarget] = useState<{
+    candidateId: string;
+    draftId: string;
+  } | null>(null);
+  const [bulkTaskOpen, setBulkTaskOpen] = useState(false);
+  const [bulkCandidateOpen, setBulkCandidateOpen] = useState(false);
+  const [taskCleanupOpts, setTaskCleanupOpts] = useState<ScoutTaskCleanupOptions>({
+    failed: true,
+    completed: false,
+    emptyStale: false,
+  });
+  const [candidateCleanupOpts, setCandidateCleanupOpts] =
+    useState<ScoutCandidateCleanupOptions>({
+      rejected: true,
+      unsuitable: false,
+      imported: false,
+    });
+  const [cleanupPreviewCount, setCleanupPreviewCount] = useState(0);
 
   const [city, setCity] = useState("");
   const [region, setRegion] = useState("");
@@ -263,7 +299,126 @@ export default function MasterForteAiScoutSection() {
       ...prev,
       [candidateId]: result.draft!.draftText,
     }));
+    setContentDraftIdById((prev) => ({
+      ...prev,
+      [candidateId]: result.draft!.id,
+    }));
     setMessage("טיוטת הפנייה נוצרה — ניתן לערוך ולהעתיק.");
+  }
+
+  async function handleDeleteTaskConfirm() {
+    if (!deleteTaskTarget) return;
+    const removedId = deleteTaskTarget.id;
+    setBusy(true);
+    setError(null);
+    const result = await deleteScoutTask(removedId);
+    setBusy(false);
+    if (result.error) {
+      setError(
+        result.error === "task_running"
+          ? "לא ניתן למחוק משימה שנמצאת בתהליך."
+          : result.error
+      );
+      return;
+    }
+    setDeleteTaskTarget(null);
+    setMessage("משימת האיתור נמחקה.");
+    if (expandedTaskId === removedId) {
+      setExpandedTaskId("");
+      setSelectedTaskId("");
+      setCandidates([]);
+    }
+    await refreshTasks();
+  }
+
+  async function handleDeleteCandidateConfirm() {
+    if (!deleteCandidateTarget) return;
+    setBusy(true);
+    const id = deleteCandidateTarget.id;
+    const result = await deleteScoutCandidate(id);
+    setBusy(false);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    setDeleteCandidateTarget(null);
+    setContentDraftById((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    setContentDraftIdById((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    setMessage("המועמד הוסר מרשימת האיתור.");
+    await loadTaskDetail(selectedTaskId);
+    await refreshTasks();
+  }
+
+  async function handleDeleteDraftConfirm() {
+    if (!deleteDraftTarget) return;
+    setBusy(true);
+    const { candidateId, draftId } = deleteDraftTarget;
+    const result = await deleteContentOutreachDraft(draftId);
+    setBusy(false);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    setDeleteDraftTarget(null);
+    setContentDraftById((prev) => {
+      const next = { ...prev };
+      delete next[candidateId];
+      return next;
+    });
+    setContentDraftIdById((prev) => {
+      const next = { ...prev };
+      delete next[candidateId];
+      return next;
+    });
+    setMessage("הטיוטה נמחקה.");
+  }
+
+  async function refreshTaskCleanupPreview(opts: ScoutTaskCleanupOptions) {
+    const result = await previewScoutTaskCleanup(opts);
+    setCleanupPreviewCount(result.count);
+  }
+
+  async function refreshCandidateCleanupPreview(opts: ScoutCandidateCleanupOptions) {
+    const result = await previewScoutCandidateCleanup(opts);
+    setCleanupPreviewCount(result.count);
+  }
+
+  async function handleBulkTaskCleanupConfirm() {
+    setBusy(true);
+    const result = await executeScoutTaskCleanup(taskCleanupOpts);
+    setBusy(false);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    setBulkTaskOpen(false);
+    setMessage(`הוסרו ${result.deleted} משימות איתור.`);
+    setExpandedTaskId("");
+    setSelectedTaskId("");
+    setCandidates([]);
+    await refreshTasks();
+  }
+
+  async function handleBulkCandidateCleanupConfirm() {
+    setBusy(true);
+    const result = await executeScoutCandidateCleanup(candidateCleanupOpts);
+    setBusy(false);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    setBulkCandidateOpen(false);
+    setMessage(`הוסרו ${result.deleted} מועמדים מרשימת האיתור.`);
+    await loadTaskDetail(selectedTaskId);
+    await refreshTasks();
   }
 
   async function handleCopyContentDraft(candidateId: string) {
@@ -476,6 +631,20 @@ export default function MasterForteAiScoutSection() {
                             >
                               העתק
                             </ForteV2SecondaryButton>
+                            {contentDraftIdById[c.id] ? (
+                              <ForteV2DangerButton
+                                outline
+                                disabled={busy}
+                                onClick={() =>
+                                  setDeleteDraftTarget({
+                                    candidateId: c.id,
+                                    draftId: contentDraftIdById[c.id],
+                                  })
+                                }
+                              >
+                                מחק טיוטה
+                              </ForteV2DangerButton>
+                            ) : null}
                           </div>
                         ) : null}
                       </div>
@@ -518,6 +687,13 @@ export default function MasterForteAiScoutSection() {
                   >
                     העבר ללקוחות פוטנציאליים
                   </ForteV2PrimaryButton>
+                  <ForteV2DangerButton
+                    outline
+                    disabled={busy}
+                    onClick={() => setDeleteCandidateTarget(c)}
+                  >
+                    מחק מועמד
+                  </ForteV2DangerButton>
                 </div>
               </li>
             ))}
@@ -600,6 +776,28 @@ export default function MasterForteAiScoutSection() {
       </ForteV2Panel>
 
       <ForteV2TableCard title="משימות איתור">
+        <div className="flex flex-wrap gap-2 px-2 pb-2 border-b border-forte-border/60">
+          <ForteV2SecondaryButton
+            size="sm"
+            disabled={busy}
+            onClick={() => {
+              setBulkTaskOpen(true);
+              void refreshTaskCleanupPreview(taskCleanupOpts);
+            }}
+          >
+            נקה משימות
+          </ForteV2SecondaryButton>
+          <ForteV2SecondaryButton
+            size="sm"
+            disabled={busy || !selectedTaskId}
+            onClick={() => {
+              setBulkCandidateOpen(true);
+              void refreshCandidateCleanupPreview(candidateCleanupOpts);
+            }}
+          >
+            נקה מועמדים
+          </ForteV2SecondaryButton>
+        </div>
         {loading ? (
           <p className="text-sm text-forte-text-secondary p-3">טוען...</p>
         ) : tasks.length === 0 ? (
@@ -639,9 +837,24 @@ export default function MasterForteAiScoutSection() {
                           {isExpanded ? "הסתר מועמדים" : "הצג מועמדים"}
                         </span>
                         <ForteV2StatusBadge tone={taskStatusTone(task.status)}>
-                          {AI_TASK_STATUS_LABELS[task.status as AiTaskStatusId] ??
-                            task.status}
+                          {formatTaskStatusLabel(task.status as AiTaskStatusId)}
                         </ForteV2StatusBadge>
+                        {task.status !== "running" ? (
+                          <span
+                            className="inline-block"
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => e.stopPropagation()}
+                            role="presentation"
+                          >
+                            <ForteV2DangerButton
+                              outline
+                              disabled={busy}
+                              onClick={() => setDeleteTaskTarget(task)}
+                            >
+                              מחק משימה
+                            </ForteV2DangerButton>
+                          </span>
+                        ) : null}
                       </div>
                     </div>
                     <p className="text-xs text-forte-text-secondary mt-1 pe-6">
@@ -667,6 +880,208 @@ export default function MasterForteAiScoutSection() {
           </ul>
         )}
       </ForteV2TableCard>
+
+      {deleteTaskTarget ? (
+        <ForteV2DialogOverlay onClose={() => !busy && setDeleteTaskTarget(null)}>
+          <ForteV2Dialog
+            title="למחוק את משימת האיתור?"
+            onClose={() => !busy && setDeleteTaskTarget(null)}
+          >
+            <div className="space-y-3 text-sm text-forte-text-secondary">
+              <p>
+                המשימה והמועמדים המשויכים אליה יוסרו ממסך האיתור. לקוחות פוטנציאליים
+                שכבר הועברו למערכת המכירות לא יימחקו.
+              </p>
+              <p className="font-medium text-forte-text">{deleteTaskTarget.title}</p>
+              <div className="flex flex-wrap gap-2 pt-2">
+                <ForteV2DangerButton disabled={busy} onClick={() => void handleDeleteTaskConfirm()}>
+                  מחק
+                </ForteV2DangerButton>
+                <ForteV2SecondaryButton disabled={busy} onClick={() => setDeleteTaskTarget(null)}>
+                  ביטול
+                </ForteV2SecondaryButton>
+              </div>
+            </div>
+          </ForteV2Dialog>
+        </ForteV2DialogOverlay>
+      ) : null}
+
+      {deleteCandidateTarget ? (
+        <ForteV2DialogOverlay onClose={() => !busy && setDeleteCandidateTarget(null)}>
+          <ForteV2Dialog
+            title="למחוק את המועמד?"
+            onClose={() => !busy && setDeleteCandidateTarget(null)}
+          >
+            <div className="space-y-3 text-sm text-forte-text-secondary">
+              <p>
+                המועמד יוסר מרשימת האיתור. הליד שכבר נוצר במערכת המכירות יישאר.
+              </p>
+              <p className="font-medium text-forte-text">
+                {deleteCandidateTarget.organizationName ||
+                  deleteCandidateTarget.buildingName ||
+                  "מועמד"}
+              </p>
+              <div className="flex flex-wrap gap-2 pt-2">
+                <ForteV2DangerButton
+                  disabled={busy}
+                  onClick={() => void handleDeleteCandidateConfirm()}
+                >
+                  מחק
+                </ForteV2DangerButton>
+                <ForteV2SecondaryButton
+                  disabled={busy}
+                  onClick={() => setDeleteCandidateTarget(null)}
+                >
+                  ביטול
+                </ForteV2SecondaryButton>
+              </div>
+            </div>
+          </ForteV2Dialog>
+        </ForteV2DialogOverlay>
+      ) : null}
+
+      {deleteDraftTarget ? (
+        <ForteV2DialogOverlay onClose={() => !busy && setDeleteDraftTarget(null)}>
+          <ForteV2Dialog
+            title="למחוק את הטיוטה?"
+            onClose={() => !busy && setDeleteDraftTarget(null)}
+          >
+            <div className="space-y-3 text-sm text-forte-text-secondary">
+              <p>רק טיוטת הפנייה תימחק. המועמד, סטטוס האישור ובדיקת ההתאמה לא ישתנו.</p>
+              <div className="flex flex-wrap gap-2 pt-2">
+                <ForteV2DangerButton disabled={busy} onClick={() => void handleDeleteDraftConfirm()}>
+                  מחק
+                </ForteV2DangerButton>
+                <ForteV2SecondaryButton disabled={busy} onClick={() => setDeleteDraftTarget(null)}>
+                  ביטול
+                </ForteV2SecondaryButton>
+              </div>
+            </div>
+          </ForteV2Dialog>
+        </ForteV2DialogOverlay>
+      ) : null}
+
+      {bulkTaskOpen ? (
+        <ForteV2DialogOverlay onClose={() => !busy && setBulkTaskOpen(false)}>
+          <ForteV2Dialog title="נקה משימות איתור" onClose={() => !busy && setBulkTaskOpen(false)}>
+            <div className="space-y-3 text-sm">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={taskCleanupOpts.failed}
+                  onChange={(e) => {
+                    const next = { ...taskCleanupOpts, failed: e.target.checked };
+                    setTaskCleanupOpts(next);
+                    void refreshTaskCleanupPreview(next);
+                  }}
+                />
+                משימות שנכשלו
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={taskCleanupOpts.completed}
+                  onChange={(e) => {
+                    const next = { ...taskCleanupOpts, completed: e.target.checked };
+                    setTaskCleanupOpts(next);
+                    void refreshTaskCleanupPreview(next);
+                  }}
+                />
+                משימות שהושלמו
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={taskCleanupOpts.emptyStale}
+                  onChange={(e) => {
+                    const next = { ...taskCleanupOpts, emptyStale: e.target.checked };
+                    setTaskCleanupOpts(next);
+                    void refreshTaskCleanupPreview(next);
+                  }}
+                />
+                משימות ישנות ללא מועמדים
+              </label>
+              <p className="text-forte-text-secondary">
+                יימחקו {cleanupPreviewCount} משימות. משימות בתהליך לא יימחקו.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <ForteV2DangerButton
+                  disabled={busy || cleanupPreviewCount === 0}
+                  onClick={() => void handleBulkTaskCleanupConfirm()}
+                >
+                  נקה
+                </ForteV2DangerButton>
+                <ForteV2SecondaryButton disabled={busy} onClick={() => setBulkTaskOpen(false)}>
+                  ביטול
+                </ForteV2SecondaryButton>
+              </div>
+            </div>
+          </ForteV2Dialog>
+        </ForteV2DialogOverlay>
+      ) : null}
+
+      {bulkCandidateOpen ? (
+        <ForteV2DialogOverlay onClose={() => !busy && setBulkCandidateOpen(false)}>
+          <ForteV2Dialog title="נקה מועמדים" onClose={() => !busy && setBulkCandidateOpen(false)}>
+            <div className="space-y-3 text-sm">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={candidateCleanupOpts.rejected}
+                  onChange={(e) => {
+                    const next = { ...candidateCleanupOpts, rejected: e.target.checked };
+                    setCandidateCleanupOpts(next);
+                    void refreshCandidateCleanupPreview(next);
+                  }}
+                />
+                מועמדים שנדחו
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={candidateCleanupOpts.unsuitable}
+                  onChange={(e) => {
+                    const next = { ...candidateCleanupOpts, unsuitable: e.target.checked };
+                    setCandidateCleanupOpts(next);
+                    void refreshCandidateCleanupPreview(next);
+                  }}
+                />
+                מועמדים שסומנו «לא מתאים»
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={candidateCleanupOpts.imported}
+                  onChange={(e) => {
+                    const next = { ...candidateCleanupOpts, imported: e.target.checked };
+                    setCandidateCleanupOpts(next);
+                    void refreshCandidateCleanupPreview(next);
+                  }}
+                />
+                מועמדים שכבר הועברו למכירות
+              </label>
+              <p className="text-forte-text-secondary">
+                יימחקו {cleanupPreviewCount} מועמדים מרשימת האיתור. לקוחות פוטנציאליים
+                במערכת המכירות יישארו.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <ForteV2DangerButton
+                  disabled={busy || cleanupPreviewCount === 0}
+                  onClick={() => void handleBulkCandidateCleanupConfirm()}
+                >
+                  נקה
+                </ForteV2DangerButton>
+                <ForteV2SecondaryButton
+                  disabled={busy}
+                  onClick={() => setBulkCandidateOpen(false)}
+                >
+                  ביטול
+                </ForteV2SecondaryButton>
+              </div>
+            </div>
+          </ForteV2Dialog>
+        </ForteV2DialogOverlay>
+      ) : null}
     </section>
   );
 }

@@ -4,6 +4,7 @@ import {
   requireMasterApiSession,
   serviceUnavailableResponse,
 } from "@/lib/forte-master-api-auth";
+import { deleteScoutCandidateServer } from "@/lib/scout/scout-cleanup-server";
 import { patchScoutCandidateReviewServer } from "@/lib/scout/scout-server";
 import { isSupabaseServiceConfigured } from "@/lib/supabase-server";
 
@@ -60,4 +61,26 @@ export async function PATCH(
   }
 
   return NextResponse.json({ candidate: result.candidate, error: null });
+}
+
+export async function DELETE(
+  request: NextRequest,
+  context: { params: Promise<{ candidateId: string }> }
+) {
+  if (!isAllowedForteApiOrigin(request)) return originForbiddenResponse();
+  const authError = requireMasterApiSession(request);
+  if (authError) return authError;
+  if (!isSupabaseServiceConfigured()) {
+    return serviceUnavailableResponse("supabase_service_unconfigured");
+  }
+
+  const { candidateId } = await context.params;
+  const result = await deleteScoutCandidateServer(candidateId);
+  if (result.error === "not_found") {
+    return NextResponse.json({ deleted: false, error: result.error }, { status: 404 });
+  }
+  if (result.error) {
+    return NextResponse.json({ deleted: false, error: result.error }, { status: 502 });
+  }
+  return NextResponse.json({ deleted: true, error: null });
 }
