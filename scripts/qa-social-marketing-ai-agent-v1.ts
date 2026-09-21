@@ -11,6 +11,10 @@ import {
 } from "../lib/social-marketing/social-marketing-agent";
 import type { OpenAiMarketingPostDraft } from "../lib/llm/openai-marketing-schema";
 import { DEFAULT_OPENAI_MARKETING_MODEL } from "../lib/llm/openai-config";
+import {
+  extractResponsesOutputText,
+  logOpenAiMarketingError,
+} from "../lib/llm/openai-marketing-client";
 
 function read(rel: string): string {
   return fs.readFileSync(path.join(process.cwd(), rel), "utf8");
@@ -64,6 +68,10 @@ const ui = read("components/master-v2/MasterForteAiMarketingSection.tsx");
 assert(!agentSrc.includes("meta-facebook-graph"), "agent does not import Facebook graph");
 assert(!agentSrc.includes("publishSocialPostToFacebook"), "agent does not publish");
 assert(!openaiSrc.includes("graph.facebook.com"), "OpenAI client has no Facebook URLs");
+assert(!openaiSrc.includes("chat/completions"), "uses Responses API not Chat Completions");
+assert(openaiSrc.includes("/v1/responses"), "Responses endpoint");
+assert(!openaiSrc.includes("temperature"), "temperature not sent");
+assert(openaiSrc.includes("logOpenAiMarketingError"), "safe OpenAI error logging");
 assert(!generateRoute.includes("publish_facebook"), "generate route does not publish");
 assert(patchSrc.includes("send_social_post") && patchSrc.includes("applyJudahDecisionToSocialPostServer"), "dashboard sync hook");
 assert(serverSrc.includes("approval_via_dashboard"), "blocks parallel approve in post API");
@@ -84,6 +92,30 @@ void (async () => {
   const badGenerator: MarketingBatchGenerator = async () => ({
     posts: [sample(1), sample(2)],
     error: null,
+  });
+
+  const mockResponsesPayload = {
+    output_text: JSON.stringify({
+      posts: [sample(1), sample(2), sample(3)],
+    }),
+  };
+  assert(
+    extractResponsesOutputText(mockResponsesPayload)?.includes("נושא בדיקה"),
+    "Responses output_text parsing"
+  );
+  const nestedPayload = {
+    output: [
+      {
+        type: "message",
+        role: "assistant",
+        content: [{ type: "output_text", text: JSON.stringify({ posts: [sample(1)] }) }],
+      },
+    ],
+  };
+  assert(extractResponsesOutputText(nestedPayload) !== null, "Responses nested output parsing");
+
+  logOpenAiMarketingError(400, {
+    error: { code: "unsupported_value", message: "test only" },
   });
 
   assert(validateMarketingPostDrafts((await mockGenerator({ systemPrompt: "", userPrompt: "" })).posts!), "mock batch shape");
