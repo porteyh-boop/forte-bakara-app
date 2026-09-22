@@ -15,6 +15,7 @@ import {
   extractResponsesOutputText,
   logOpenAiMarketingError,
 } from "../lib/llm/openai-marketing-client";
+import { pngBufferFromImagesGenerationsPayload } from "../lib/llm/openai-marketing-image";
 
 function read(rel: string): string {
   return fs.readFileSync(path.join(process.cwd(), rel), "utf8");
@@ -84,7 +85,22 @@ assert(serverSrc.includes("image_url: draft.imagePublicUrl"), "stable image_url 
 assert(agentSrc.includes("generateMarketingImagePngServer"), "agent generates images before persist");
 assert(agentSrc.includes("cleanupOrphanMarketingImagesServer"), "orphan cleanup on failure");
 assert(imageSrc.includes("/v1/images/generations"), "OpenAI Images API server-side");
-assert(imageSrc.includes("b64_json"), "images as b64 not temp URL");
+assert(!/"response_format"/.test(imageSrc), "images request has no response_format");
+assert(imageSrc.includes("b64_json"), "parses data[0].b64_json from response");
+assert(
+  agentSrc.includes("cleanupOrphanMarketingImagesServer") &&
+    agentSrc.includes("image_generation_failed"),
+  "image failure does not leave partial batch (cleanup + error)"
+);
+const parsedImg = pngBufferFromImagesGenerationsPayload({
+  data: [{ b64_json: Buffer.alloc(120, 0x41).toString("base64") }],
+});
+assert(parsedImg !== null && parsedImg.length >= 100, "b64_json payload decodes to Buffer");
+assert(
+  pngBufferFromImagesGenerationsPayload({ data: [{ url: "https://example.com/x.png" }] }) ===
+    null,
+  "does not treat url-only as success without b64_json"
+);
 assert(!imageSrc.includes("OPENAI_API_KEY"), "image module does not log key");
 assert(imageStorageSrc.includes("document-center"), "images in document-center bucket");
 assert(imageStorageSrc.includes("forte-marketing/social"), "marketing image prefix");

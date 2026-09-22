@@ -24,6 +24,30 @@ export function buildMarketingImagePrompt(visualPromptHe: string): string {
   return `${BRAND_GUARDRAILS}\n\nScene (Hebrew brief for context only — do not render text):\n${core}`;
 }
 
+/** Parse gpt-image-1 /v1/images/generations success payload. */
+export function pngBufferFromImagesGenerationsPayload(
+  payload: unknown
+): Buffer | null {
+  const data = (payload as { data?: unknown })?.data;
+  if (!Array.isArray(data) || data.length === 0) return null;
+
+  const first = data[0];
+  if (!first || typeof first !== "object") return null;
+  const item = first as Record<string, unknown>;
+
+  const b64 = item.b64_json;
+  if (typeof b64 === "string" && b64.trim()) {
+    try {
+      const pngBuffer = Buffer.from(b64, "base64");
+      if (pngBuffer.length >= 100) return pngBuffer;
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
 export function logOpenAiImageError(httpStatus: number, body: unknown): void {
   const root = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
   const nested =
@@ -68,7 +92,6 @@ export async function generateMarketingImagePngServer(input: {
         prompt: buildMarketingImagePrompt(input.visualPromptHe),
         n: 1,
         size: "1536x1024",
-        response_format: "b64_json",
       }),
     });
   } catch (err) {
@@ -91,25 +114,11 @@ export async function generateMarketingImagePngServer(input: {
     return { pngBuffer: null, error: "openai_request_failed" };
   }
 
-  const data = (payload as { data?: unknown }).data;
-  if (!Array.isArray(data) || data.length === 0) {
+  const pngBuffer = pngBufferFromImagesGenerationsPayload(payload);
+  if (!pngBuffer) {
     return { pngBuffer: null, error: "openai_invalid_response" };
   }
-
-  const b64 = (data[0] as { b64_json?: unknown })?.b64_json;
-  if (typeof b64 !== "string" || !b64.trim()) {
-    return { pngBuffer: null, error: "openai_invalid_response" };
-  }
-
-  try {
-    const pngBuffer = Buffer.from(b64, "base64");
-    if (pngBuffer.length < 100) {
-      return { pngBuffer: null, error: "openai_invalid_response" };
-    }
-    return { pngBuffer, error: null };
-  } catch {
-    return { pngBuffer: null, error: "openai_invalid_response" };
-  }
+  return { pngBuffer, error: null };
 }
 
 /** For meta_payload — text model name kept separate from image model. */
