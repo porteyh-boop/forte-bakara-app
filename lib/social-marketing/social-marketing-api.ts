@@ -20,6 +20,12 @@ function hebrewGenerateError(code: string): string {
   }
   if (code === "invalid_llm_response") return "המודל החזיר תשובה לא תקינה. לא נשמרו פוסטים.";
   if (code === "llm_failed") return "יצירת התוכן נכשלה. נסו שוב.";
+  if (code === "image_generation_failed") {
+    return "יצירת התמונה נכשלה. לא נשמרו פוסטים — נסו שוב.";
+  }
+  if (code === "image_upload_failed") {
+    return "שמירת התמונה נכשלה. לא נשמרו פוסטים — נסו שוב.";
+  }
   return hebrewError(code);
 }
 

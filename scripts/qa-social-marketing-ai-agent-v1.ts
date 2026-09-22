@@ -62,8 +62,11 @@ const agentSrc = read("lib/social-marketing/social-marketing-agent.ts");
 const serverSrc = read("lib/social-marketing/social-marketing-server.ts");
 const patchSrc = read("lib/forte-ai-marketing-server.ts");
 const openaiSrc = read("lib/llm/openai-marketing-client.ts");
+const imageSrc = read("lib/llm/openai-marketing-image.ts");
+const imageStorageSrc = read("lib/social-marketing/social-marketing-image-storage.ts");
 const generateRoute = read("app/forte/api/master/ai-marketing/marketing/posts/generate/route.ts");
 const ui = read("components/master-v2/MasterForteAiMarketingSection.tsx");
+const aiView = read("components/master-v2/MasterForteAiView.tsx");
 
 assert(!agentSrc.includes("meta-facebook-graph"), "agent does not import Facebook graph");
 assert(!agentSrc.includes("publishSocialPostToFacebook"), "agent does not publish");
@@ -76,9 +79,21 @@ assert(!generateRoute.includes("publish_facebook"), "generate route does not pub
 assert(patchSrc.includes("send_social_post") && patchSrc.includes("applyJudahDecisionToSocialPostServer"), "dashboard sync hook");
 assert(serverSrc.includes("approval_via_dashboard"), "blocks parallel approve in post API");
 assert(serverSrc.includes("persistAiMarketingBatchServer"), "batch persist helper");
+assert(serverSrc.includes("imageGenerated: true"), "meta marks image generated");
+assert(serverSrc.includes("image_url: draft.imagePublicUrl"), "stable image_url on AI posts");
+assert(agentSrc.includes("generateMarketingImagePngServer"), "agent generates images before persist");
+assert(agentSrc.includes("cleanupOrphanMarketingImagesServer"), "orphan cleanup on failure");
+assert(imageSrc.includes("/v1/images/generations"), "OpenAI Images API server-side");
+assert(imageSrc.includes("b64_json"), "images as b64 not temp URL");
+assert(!imageSrc.includes("OPENAI_API_KEY"), "image module does not log key");
+assert(imageStorageSrc.includes("document-center"), "images in document-center bucket");
+assert(imageStorageSrc.includes("forte-marketing/social"), "marketing image prefix");
+assert(generateRoute.includes("image_generation_failed"), "generate route maps image errors");
 assert(serverSrc.includes("pending_approval"), "AI posts start pending");
 assert(ui.includes("צור פוסטים עם AI"), "AI button in UI");
 assert(ui.includes("visualPrompt"), "visual prompt in preview UI");
+assert(ui.includes("MarketingPostImage"), "real image preview in marketing UI");
+assert(aiView.includes("linkedPostImageUrl"), "approval thumbnails for Judah");
 assert(!ui.includes('runAction(previewPost, "approve")'), "no parallel approve in preview dialog");
 
 assert(DEFAULT_OPENAI_MARKETING_MODEL === "gpt-5.4-mini", "default model gpt-5.4-mini");

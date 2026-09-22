@@ -124,7 +124,8 @@ function mapAction(
 function mapApproval(
   row: Record<string, unknown>,
   actionSummary: string,
-  agentKey: AiAgentKey | null
+  agentKey: AiAgentKey | null,
+  linkedPostImageUrl: string | null = null
 ): AiApprovalDto {
   return {
     id: asString(row.id),
@@ -135,6 +136,7 @@ function mapApproval(
     decisionNote: asString(row.decision_note),
     summary: actionSummary,
     agentKey,
+    linkedPostImageUrl,
     createdAt: asString(row.created_at),
     updatedAt: asString(row.updated_at),
   };
@@ -263,13 +265,71 @@ export async function loadForteAiMarketingDashboardServer(): Promise<{
       actionSummaryById.set(id, asString((row as Record<string, unknown>).summary));
     }
 
+    const pendingActionIds = [
+      ...new Set(
+        (approvalRows ?? []).map((row) =>
+          asString((row as Record<string, unknown>).action_id)
+        )
+      ),
+    ].filter(Boolean);
+
+    const actionDetailsById = new Map<
+      string,
+      { actionType: string; details: Record<string, unknown> }
+    >();
+    if (pendingActionIds.length > 0) {
+      const { data: pendingActionRows } = await db
+        .from(ACTIONS_TABLE)
+        .select("id, action_type, details, summary, agent_id")
+        .in("id", pendingActionIds);
+      for (const row of pendingActionRows ?? []) {
+        const rec = row as Record<string, unknown>;
+        const id = asString(rec.id);
+        const detailsRaw = rec.details;
+        const details =
+          detailsRaw && typeof detailsRaw === "object"
+            ? (detailsRaw as Record<string, unknown>)
+            : {};
+        actionDetailsById.set(id, {
+          actionType: asString(rec.action_type),
+          details,
+        });
+        const summary = asString(rec.summary);
+        if (summary) actionSummaryById.set(id, summary);
+      }
+    }
+
+    const linkedPostIds = [
+      ...new Set(
+        [...actionDetailsById.values()]
+          .filter((a) => a.actionType === "send_social_post")
+          .map((a) => asString(a.details.postId).trim())
+          .filter(Boolean)
+      ),
+    ];
+
+    const postImageById = new Map<string, string>();
+    if (linkedPostIds.length > 0) {
+      const { data: postRows } = await db
+        .from("social_marketing_posts")
+        .select("id, image_url")
+        .in("id", linkedPostIds);
+      for (const row of postRows ?? []) {
+        const rec = row as Record<string, unknown>;
+        const pid = asString(rec.id);
+        const url = asString(rec.image_url).trim();
+        if (pid && url) postImageById.set(pid, url);
+      }
+    }
+
     const pendingApprovals: AiApprovalDto[] = [];
     for (const row of approvalRows ?? []) {
       const rec = row as Record<string, unknown>;
       const actionId = asString(rec.action_id);
       let summary = actionSummaryById.get(actionId) ?? "";
       let agentKey: AiAgentKey | null = null;
-      if (!summary) {
+      const actionMeta = actionDetailsById.get(actionId);
+      if (!summary && actionMeta) {
         const { data: actionRow } = await db
           .from(ACTIONS_TABLE)
           .select("summary, agent_id")
@@ -283,8 +343,26 @@ export async function loadForteAiMarketingDashboardServer(): Promise<{
       } else {
         const action = recentActions.find((a) => a.id === actionId);
         agentKey = action?.agentKey ?? null;
+        if (!agentKey && actionMeta) {
+          const { data: actionRow } = await db
+            .from(ACTIONS_TABLE)
+            .select("agent_id")
+            .eq("id", actionId)
+            .maybeSingle();
+          if (actionRow) {
+            const aid = asString((actionRow as Record<string, unknown>).agent_id);
+            agentKey = agentKeyById.get(aid) ?? null;
+          }
+        }
       }
-      pendingApprovals.push(mapApproval(rec, summary, agentKey));
+
+      let linkedPostImageUrl: string | null = null;
+      if (actionMeta?.actionType === "send_social_post") {
+        const postId = asString(actionMeta.details.postId).trim();
+        if (postId) linkedPostImageUrl = postImageById.get(postId) ?? null;
+      }
+
+      pendingApprovals.push(mapApproval(rec, summary, agentKey, linkedPostImageUrl));
     }
 
     const summary = await loadMarketingSummary(db);

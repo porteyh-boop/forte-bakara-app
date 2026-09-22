@@ -310,7 +310,16 @@ export default function MasterForteAiView() {
                       key={row.id}
                       className="rounded-lg border border-forte-border p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
                     >
-                      <div className="min-w-0">
+                      {row.linkedPostImageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={row.linkedPostImageUrl}
+                          alt=""
+                          loading="lazy"
+                          className="w-full sm:w-24 h-32 sm:h-24 shrink-0 rounded-lg object-cover border border-forte-border/60"
+                        />
+                      ) : null}
+                      <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold text-forte-text">
                           {row.summary || row.approvalKind}
                         </p>

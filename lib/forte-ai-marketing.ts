@@ -160,6 +160,8 @@ export type AiApprovalDto = {
   decisionNote: string;
   summary: string;
   agentKey: AiAgentKey | null;
+  /** תמונת פוסט שיווק (send_social_post) לתצוגה לפני אישור */
+  linkedPostImageUrl: string | null;
   createdAt: string;
   updatedAt: string;
 };

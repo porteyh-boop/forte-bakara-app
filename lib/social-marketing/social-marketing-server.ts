@@ -59,6 +59,11 @@ function parseMetaPayload(row: Record<string, unknown>): SocialMarketingPostMeta
     generatedBy: asString(rec.generatedBy).trim() || undefined,
     visualPrompt: asString(rec.visualPrompt).trim() || undefined,
     generatedAt: asString(rec.generatedAt).trim() || undefined,
+    imageGenerated:
+      rec.imageGenerated === true ? true : rec.imageGenerated === false ? false : undefined,
+    imageProvider: asString(rec.imageProvider).trim() || undefined,
+    imageModel: asString(rec.imageModel).trim() || undefined,
+    imageStoragePath: asString(rec.imageStoragePath).trim() || undefined,
   };
 }
 
@@ -350,7 +355,17 @@ export async function applyJudahDecisionToSocialPostServer(
   return applySocialPostJudahDecisionInternal(sb, postId, decision);
 }
 
-function draftToRow(draft: OpenAiMarketingPostDraft, generatedAt: string): Record<string, unknown> {
+export type AiMarketingPersistDraft = OpenAiMarketingPostDraft & {
+  imagePublicUrl: string;
+  imageStoragePath: string;
+  imageProvider: string;
+  imageModel: string;
+};
+
+function draftToRow(
+  draft: AiMarketingPersistDraft,
+  generatedAt: string
+): Record<string, unknown> {
   return {
     topic: draft.topic.trim(),
     target_audience: draft.target_audience.trim(),
@@ -359,7 +374,7 @@ function draftToRow(draft: OpenAiMarketingPostDraft, generatedAt: string): Recor
     body_instagram: draft.body_instagram.trim(),
     publish_date: draft.publish_date.trim(),
     publish_time: `${draft.publish_time.trim().slice(0, 5)}:00`,
-    image_url: null,
+    image_url: draft.imagePublicUrl.trim(),
     status: "pending_approval",
     approved_at: null,
     approved_by: null,
@@ -367,15 +382,24 @@ function draftToRow(draft: OpenAiMarketingPostDraft, generatedAt: string): Recor
       generatedBy: "marketing_agent_v1",
       visualPrompt: draft.visual_prompt.trim(),
       generatedAt,
+      imageGenerated: true,
+      imageProvider: draft.imageProvider,
+      imageModel: draft.imageModel,
+      imageStoragePath: draft.imageStoragePath,
     },
     updated_at: generatedAt,
   };
 }
 
 export async function persistAiMarketingBatchServer(
-  drafts: OpenAiMarketingPostDraft[]
+  drafts: AiMarketingPersistDraft[]
 ): Promise<{ posts: SocialMarketingPostDto[]; error: SocialMarketingServerError | null }> {
   if (drafts.length !== 3) return { posts: [], error: "invalid_input" };
+  for (const draft of drafts) {
+    if (!draft.imagePublicUrl.trim() || !draft.imageStoragePath.trim()) {
+      return { posts: [], error: "invalid_input" };
+    }
+  }
   if (!isSupabaseServiceConfigured()) {
     return { posts: [], error: "supabase_service_unconfigured" };
   }
@@ -416,6 +440,15 @@ export async function persistAiMarketingBatchServer(
     }
     return { posts: [], error: "save_failed" };
   }
+}
+
+export async function cleanupOrphanMarketingImagesServer(
+  storagePaths: string[]
+): Promise<void> {
+  const { removeMarketingSocialImagesServer } = await import(
+    "@/lib/social-marketing/social-marketing-image-storage"
+  );
+  await removeMarketingSocialImagesServer(storagePaths);
 }
 
 export async function runSocialMarketingPostActionServer(

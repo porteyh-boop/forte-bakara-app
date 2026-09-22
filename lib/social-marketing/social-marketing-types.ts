@@ -39,6 +39,10 @@ export type SocialMarketingPostMetaPayload = {
   generatedBy?: string;
   visualPrompt?: string;
   generatedAt?: string;
+  imageGenerated?: boolean;
+  imageProvider?: string;
+  imageModel?: string;
+  imageStoragePath?: string;
 };
 
 export type SocialMarketingPostDto = {

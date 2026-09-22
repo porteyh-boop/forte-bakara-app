@@ -7,8 +7,18 @@ import {
   releaseMarketingGenerateLock,
 } from "@/lib/social-marketing/social-marketing-generate-lock";
 import {
+  generateMarketingImagePngServer,
+  marketingImageModelLabel,
+  marketingImageProviderLabel,
+} from "@/lib/llm/openai-marketing-image";
+import {
+  uploadMarketingSocialImageServer,
+} from "@/lib/social-marketing/social-marketing-image-storage";
+import {
+  cleanupOrphanMarketingImagesServer,
   listSocialMarketingPostsServer,
   persistAiMarketingBatchServer,
+  type AiMarketingPersistDraft,
 } from "@/lib/social-marketing/social-marketing-server";
 
 export type MarketingAgentGenerateError =
@@ -17,6 +27,8 @@ export type MarketingAgentGenerateError =
   | "marketing_agent_missing"
   | "llm_failed"
   | "invalid_llm_response"
+  | "image_generation_failed"
+  | "image_upload_failed"
   | "supabase_service_unconfigured"
   | "save_failed";
 
@@ -186,8 +198,55 @@ export async function generateMarketingPostsBatchServer(options?: {
       return { posts: [], error: "invalid_llm_response" };
     }
 
-    const saved = await persistAiMarketingBatchServer(llm.posts);
+    const uploadedPaths: string[] = [];
+    const persistDrafts: AiMarketingPersistDraft[] = [];
+    try {
+      for (const draft of llm.posts) {
+        const generated = await generateMarketingImagePngServer({
+          visualPromptHe: draft.visual_prompt,
+        });
+        if (generated.error === "openai_not_configured") {
+          return { posts: [], error: "openai_not_configured" };
+        }
+        if (generated.error || !generated.pngBuffer) {
+          throw new Error("image_generation_failed");
+        }
+
+        const uploaded = await uploadMarketingSocialImageServer({
+          pngBuffer: generated.pngBuffer,
+        });
+        if (uploaded.error || !uploaded.publicUrl) {
+          throw new Error(
+            uploaded.error === "supabase_service_unconfigured"
+              ? "supabase_unreachable"
+              : "image_upload_failed"
+          );
+        }
+
+        uploadedPaths.push(uploaded.storagePath);
+        persistDrafts.push({
+          ...draft,
+          imagePublicUrl: uploaded.publicUrl,
+          imageStoragePath: uploaded.storagePath,
+          imageProvider: marketingImageProviderLabel(),
+          imageModel: marketingImageModelLabel(),
+        });
+      }
+    } catch (err) {
+      await cleanupOrphanMarketingImagesServer(uploadedPaths);
+      const msg = err instanceof Error ? err.message : "";
+      if (msg === "supabase_unreachable") {
+        return { posts: [], error: "supabase_service_unconfigured" };
+      }
+      if (msg === "image_upload_failed") {
+        return { posts: [], error: "image_upload_failed" };
+      }
+      return { posts: [], error: "image_generation_failed" };
+    }
+
+    const saved = await persistAiMarketingBatchServer(persistDrafts);
     if (saved.error || saved.posts.length !== 3) {
+      await cleanupOrphanMarketingImagesServer(uploadedPaths);
       const err = saved.error;
       return {
         posts: [],

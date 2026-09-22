@@ -87,23 +87,43 @@ function canPublishToFacebook(
   return ["approved", "scheduled", "ready_to_publish"].includes(post.status);
 }
 
+function MarketingPostImage({
+  url,
+  className,
+}: {
+  url: string;
+  className?: string;
+}) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={url}
+      alt=""
+      loading="lazy"
+      className={
+        className ??
+        "w-full max-h-72 rounded-xl object-cover border border-forte-border/60 bg-forte-background/40"
+      }
+    />
+  );
+}
+
 function PostPreview({ post }: { post: SocialMarketingPostDto }) {
   const showFb = post.platform === "facebook" || post.platform === "both";
   const showIg = post.platform === "instagram" || post.platform === "both";
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+    <div className="space-y-3">
+      {post.imageUrl ? (
+        <MarketingPostImage url={post.imageUrl} />
+      ) : (
+        <div className="h-24 rounded-xl border border-dashed border-forte-border flex items-center justify-center text-xs text-forte-text-secondary">
+          מקום לתמונה
+        </div>
+      )}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
       {showFb ? (
         <div className="rounded-xl border border-forte-border bg-white p-3 shadow-sm">
           <p className="text-xs font-semibold text-forte-text-secondary mb-2">Facebook</p>
-          {post.imageUrl ? (
-            <div className="mb-2 h-28 rounded-lg bg-forte-background/80 flex items-center justify-center text-xs text-forte-text-secondary">
-              תמונה
-            </div>
-          ) : (
-            <div className="mb-2 h-16 rounded-lg border border-dashed border-forte-border flex items-center justify-center text-xs text-forte-text-secondary">
-              מקום לתמונה
-            </div>
-          )}
           <p className="text-sm font-semibold text-forte-text">{post.topic}</p>
           <p className="text-sm text-forte-text/90 mt-2 whitespace-pre-wrap">
             {post.bodyFacebook || "—"}
@@ -113,15 +133,6 @@ function PostPreview({ post }: { post: SocialMarketingPostDto }) {
       {showIg ? (
         <div className="rounded-xl border border-forte-border bg-white p-3 shadow-sm">
           <p className="text-xs font-semibold text-forte-text-secondary mb-2">Instagram</p>
-          {post.imageUrl ? (
-            <div className="mb-2 h-28 rounded-lg bg-forte-background/80 flex items-center justify-center text-xs text-forte-text-secondary">
-              תמונה
-            </div>
-          ) : (
-            <div className="mb-2 h-16 rounded-lg border border-dashed border-forte-border flex items-center justify-center text-xs text-forte-text-secondary">
-              מקום לתמונה
-            </div>
-          )}
           <p className="text-sm font-semibold text-forte-text">{post.topic}</p>
           <p className="text-sm text-forte-text/90 mt-2 whitespace-pre-wrap">
             {post.bodyInstagram || "—"}
@@ -134,6 +145,7 @@ function PostPreview({ post }: { post: SocialMarketingPostDto }) {
           <p className="text-sm text-forte-text whitespace-pre-wrap">{post.visualPrompt}</p>
         </div>
       ) : null}
+      </div>
     </div>
   );
 }
@@ -367,13 +379,13 @@ export default function MasterForteAiMarketingSection() {
               disabled={busy || aiGenerating}
               onClick={() => void handleGenerateWithAi()}
             >
-              {aiGenerating ? "יוצר פוסטים..." : "צור פוסטים עם AI"}
+              {aiGenerating ? "יוצר תוכן ותמונות..." : "צור פוסטים עם AI"}
             </ForteV2SecondaryButton>
             <ForteV2PrimaryButton onClick={openCreate}>פוסט חדש</ForteV2PrimaryButton>
           </div>
         </div>
         <p className="text-xs text-forte-text-secondary">
-          יצירת AI שומרת 3 הצעות במצב ממתין לאישור. אישור ודחייה — בלבד מ«אישורים הממתינים ליהודה» למטה.
+          יצירת AI שומרת 3 הצעות עם תמונה במצב ממתין לאישור. אישור ודחייה — בלבד מ«אישורים הממתינים ליהודה» למטה.
           פרסום לפייסבוק דורש חיבור תקין + אישור יהודה.
         </p>
       </div>
@@ -392,6 +404,12 @@ export default function MasterForteAiMarketingSection() {
         <ul className="divide-y divide-forte-border/60">
           {posts.map((post) => (
             <li key={post.id} className="py-4 flex flex-col lg:flex-row lg:items-start gap-3">
+              {post.imageUrl ? (
+                <MarketingPostImage
+                  url={post.imageUrl}
+                  className="w-full lg:w-20 lg:h-20 h-36 shrink-0 rounded-lg object-cover border border-forte-border/60"
+                />
+              ) : null}
               <div className="flex-1 min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="font-semibold text-forte-text">{post.topic}</p>

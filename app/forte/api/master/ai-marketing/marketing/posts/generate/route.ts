@@ -16,7 +16,14 @@ function originForbiddenResponse(): NextResponse {
 function errorStatus(error: string | null): number {
   if (error === "generation_in_progress") return 409;
   if (error === "openai_not_configured") return 503;
-  if (error === "invalid_llm_response" || error === "llm_failed") return 502;
+  if (
+    error === "invalid_llm_response" ||
+    error === "llm_failed" ||
+    error === "image_generation_failed" ||
+    error === "image_upload_failed"
+  ) {
+    return 502;
+  }
   if (error === "supabase_service_unconfigured") return 503;
   return 502;
 }
