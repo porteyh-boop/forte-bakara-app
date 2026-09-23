@@ -4,7 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import MasterCodeGate from "@/components/master-v2/MasterCodeGate";
 import MasterShellLayout from "@/components/master-v2/MasterShellLayout";
 import {
+  ForteV2Dialog,
+  ForteV2DialogOverlay,
   ForteV2EmptyState,
+  ForteV2FormInput,
+  ForteV2FormLabel,
   ForteV2PageHeader,
   ForteV2Panel,
   ForteV2PrimaryButton,
@@ -17,6 +21,7 @@ import {
   AI_APPROVAL_STATUS_LABELS,
   type AiAgentDto,
   type AiAgentKey,
+  type AiApprovalDto,
   type ForteAiMarketingDashboardDto,
 } from "@/lib/forte-ai-marketing";
 import {
@@ -34,6 +39,7 @@ import {
   fetchForteAiMarketingDashboard,
   patchForteAiApproval,
 } from "@/lib/forte-ai-marketing-api";
+import { updateSocialMarketingPendingApprovalCopy } from "@/lib/social-marketing/social-marketing-api";
 import { ensureMasterV2SessionsValid } from "@/lib/master-v2-auth";
 import { isMasterAuthenticated, setMasterAuthenticated } from "@/lib/pilot-cloud";
 
@@ -75,6 +81,12 @@ export default function MasterForteAiView() {
   );
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionId, setActionId] = useState<string | null>(null);
+  const [editApproval, setEditApproval] = useState<AiApprovalDto | null>(null);
+  const [editTopic, setEditTopic] = useState("");
+  const [editBodyFacebook, setEditBodyFacebook] = useState("");
+  const [editBodyInstagram, setEditBodyInstagram] = useState("");
+  const [editBusy, setEditBusy] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -119,6 +131,34 @@ export default function MasterForteAiView() {
       Boolean
     ) as AiAgentDto[];
   }, [dashboard]);
+
+  function openPostEdit(row: AiApprovalDto) {
+    if (!row.linkedPostId) return;
+    setEditError(null);
+    setEditApproval(row);
+    setEditTopic(row.linkedPostTopic ?? "");
+    setEditBodyFacebook(row.linkedPostBodyFacebook ?? "");
+    setEditBodyInstagram(row.linkedPostBodyInstagram ?? "");
+  }
+
+  async function savePostEdit() {
+    if (!editApproval?.linkedPostId) return;
+    setEditBusy(true);
+    setEditError(null);
+    const result = await updateSocialMarketingPendingApprovalCopy({
+      postId: editApproval.linkedPostId,
+      topic: editTopic.trim(),
+      bodyFacebook: editBodyFacebook.trim(),
+      bodyInstagram: editBodyInstagram.trim(),
+    });
+    setEditBusy(false);
+    if (result.error) {
+      setEditError(result.error);
+      return;
+    }
+    setEditApproval(null);
+    await refresh();
+  }
 
   async function handleApproval(
     approvalId: string,
@@ -321,8 +361,15 @@ export default function MasterForteAiView() {
                       ) : null}
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold text-forte-text">
-                          {row.summary || row.approvalKind}
+                          {row.linkedPostTopic || row.summary || row.approvalKind}
                         </p>
+                        {row.linkedPostBodyFacebook || row.linkedPostBodyInstagram ? (
+                          <p className="text-xs text-forte-text/80 mt-1 line-clamp-2 whitespace-pre-wrap">
+                            {(row.linkedPostBodyFacebook ??
+                              row.linkedPostBodyInstagram ??
+                              "").slice(0, 160)}
+                          </p>
+                        ) : null}
                         <p className="text-xs text-forte-text-secondary mt-1">
                           {formatAgentDisplayName(row.agentKey)} ·{" "}
                           {AI_APPROVAL_STATUS_LABELS[row.status]} ·{" "}
@@ -330,6 +377,15 @@ export default function MasterForteAiView() {
                         </p>
                       </div>
                       <div className="flex flex-wrap gap-2 shrink-0">
+                        {row.linkedPostId ? (
+                          <ForteV2SecondaryButton
+                            size="sm"
+                            disabled={Boolean(actionId) || editBusy}
+                            onClick={() => openPostEdit(row)}
+                          >
+                            ערוך פוסט
+                          </ForteV2SecondaryButton>
+                        ) : null}
                         <ForteV2PrimaryButton
                           size="sm"
                           disabled={actionId === row.id}
@@ -350,6 +406,67 @@ export default function MasterForteAiView() {
                 </ul>
               )}
             </ForteV2TableCard>
+
+            {editApproval?.linkedPostId ? (
+              <ForteV2DialogOverlay onClose={() => !editBusy && setEditApproval(null)}>
+                <ForteV2Dialog
+                  title="עריכת פוסט לפני אישור"
+                  onClose={() => !editBusy && setEditApproval(null)}
+                  size="xl"
+                >
+                  <div className="space-y-4 text-sm">
+                    <p className="text-forte-text-secondary">
+                      שמירה אינה אישור ואינה פרסום. התמונה הקיימת נשארת ללא שינוי.
+                    </p>
+                    {editError ? (
+                      <ForteV2StatusBanner tone="error">{editError}</ForteV2StatusBanner>
+                    ) : null}
+                    {editApproval.linkedPostImageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={editApproval.linkedPostImageUrl}
+                        alt=""
+                        className="w-full max-h-56 rounded-xl object-cover border border-forte-border/60"
+                      />
+                    ) : null}
+                    <label className="block space-y-1">
+                      <ForteV2FormLabel>נושא</ForteV2FormLabel>
+                      <ForteV2FormInput
+                        value={editTopic}
+                        onChange={(e) => setEditTopic(e.target.value)}
+                      />
+                    </label>
+                    <label className="block space-y-1">
+                      <ForteV2FormLabel>תוכן Facebook</ForteV2FormLabel>
+                      <textarea
+                        className="fv2-input w-full min-h-[100px]"
+                        value={editBodyFacebook}
+                        onChange={(e) => setEditBodyFacebook(e.target.value)}
+                      />
+                    </label>
+                    <label className="block space-y-1">
+                      <ForteV2FormLabel>תוכן Instagram</ForteV2FormLabel>
+                      <textarea
+                        className="fv2-input w-full min-h-[100px]"
+                        value={editBodyInstagram}
+                        onChange={(e) => setEditBodyInstagram(e.target.value)}
+                      />
+                    </label>
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <ForteV2SecondaryButton
+                        disabled={editBusy}
+                        onClick={() => setEditApproval(null)}
+                      >
+                        ביטול
+                      </ForteV2SecondaryButton>
+                      <ForteV2PrimaryButton disabled={editBusy} onClick={() => void savePostEdit()}>
+                        {editBusy ? "שומר..." : "שמור שינויים"}
+                      </ForteV2PrimaryButton>
+                    </div>
+                  </div>
+                </ForteV2Dialog>
+              </ForteV2DialogOverlay>
+            ) : null}
           </>
         ) : null}
       </div>

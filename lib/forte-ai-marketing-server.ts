@@ -121,11 +121,19 @@ function mapAction(
   };
 }
 
+type LinkedSocialPostForApproval = {
+  id: string;
+  topic: string;
+  bodyFacebook: string;
+  bodyInstagram: string;
+  imageUrl: string | null;
+};
+
 function mapApproval(
   row: Record<string, unknown>,
   actionSummary: string,
   agentKey: AiAgentKey | null,
-  linkedPostImageUrl: string | null = null
+  linkedPost: LinkedSocialPostForApproval | null = null
 ): AiApprovalDto {
   return {
     id: asString(row.id),
@@ -136,7 +144,11 @@ function mapApproval(
     decisionNote: asString(row.decision_note),
     summary: actionSummary,
     agentKey,
-    linkedPostImageUrl,
+    linkedPostImageUrl: linkedPost?.imageUrl ?? null,
+    linkedPostId: linkedPost?.id ?? null,
+    linkedPostTopic: linkedPost?.topic ?? null,
+    linkedPostBodyFacebook: linkedPost?.bodyFacebook ?? null,
+    linkedPostBodyInstagram: linkedPost?.bodyInstagram ?? null,
     createdAt: asString(row.created_at),
     updatedAt: asString(row.updated_at),
   };
@@ -308,17 +320,23 @@ export async function loadForteAiMarketingDashboardServer(): Promise<{
       ),
     ];
 
-    const postImageById = new Map<string, string>();
+    const linkedPostById = new Map<string, LinkedSocialPostForApproval>();
     if (linkedPostIds.length > 0) {
       const { data: postRows } = await db
         .from("social_marketing_posts")
-        .select("id, image_url")
+        .select("id, topic, body_facebook, body_instagram, image_url")
         .in("id", linkedPostIds);
       for (const row of postRows ?? []) {
         const rec = row as Record<string, unknown>;
         const pid = asString(rec.id);
-        const url = asString(rec.image_url).trim();
-        if (pid && url) postImageById.set(pid, url);
+        if (!pid) continue;
+        linkedPostById.set(pid, {
+          id: pid,
+          topic: asString(rec.topic),
+          bodyFacebook: asString(rec.body_facebook),
+          bodyInstagram: asString(rec.body_instagram),
+          imageUrl: asString(rec.image_url).trim() || null,
+        });
       }
     }
 
@@ -356,13 +374,13 @@ export async function loadForteAiMarketingDashboardServer(): Promise<{
         }
       }
 
-      let linkedPostImageUrl: string | null = null;
+      let linkedPost: LinkedSocialPostForApproval | null = null;
       if (actionMeta?.actionType === "send_social_post") {
         const postId = asString(actionMeta.details.postId).trim();
-        if (postId) linkedPostImageUrl = postImageById.get(postId) ?? null;
+        if (postId) linkedPost = linkedPostById.get(postId) ?? null;
       }
 
-      pendingApprovals.push(mapApproval(rec, summary, agentKey, linkedPostImageUrl));
+      pendingApprovals.push(mapApproval(rec, summary, agentKey, linkedPost));
     }
 
     const summary = await loadMarketingSummary(db);

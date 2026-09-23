@@ -7,6 +7,7 @@ import {
 import {
   deleteSocialMarketingPostServer,
   runSocialMarketingPostActionServer,
+  updateSocialMarketingPendingApprovalCopyServer,
   updateSocialMarketingPostServer,
 } from "@/lib/social-marketing/social-marketing-server";
 import { isSupabaseServiceConfigured } from "@/lib/supabase-server";
@@ -49,14 +50,17 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "invalid_json" }, { status: 400 });
   }
 
-  const action =
-    body && typeof body === "object" && "action" in body
-      ? (body as { action?: unknown }).action
-      : null;
+  const bodyRec =
+    body && typeof body === "object" ? (body as Record<string, unknown>) : null;
+  const action = bodyRec && "action" in bodyRec ? bodyRec.action : null;
+  const pendingApprovalCopyEdit =
+    bodyRec?.pendingApprovalCopyEdit === true || bodyRec?.editPendingApprovalCopy === true;
 
   const result = action
     ? await runSocialMarketingPostActionServer(postId, action)
-    : await updateSocialMarketingPostServer(postId, body);
+    : pendingApprovalCopyEdit
+      ? await updateSocialMarketingPendingApprovalCopyServer(postId, bodyRec)
+      : await updateSocialMarketingPostServer(postId, body);
 
   if (result.error || !("post" in result) || !result.post) {
     const err = result.error ?? "save_failed";

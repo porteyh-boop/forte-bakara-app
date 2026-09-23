@@ -13,10 +13,11 @@ export type OpenAiImageFetch = typeof fetch;
 const IMAGES_URL = "https://api.openai.com/v1/images/generations";
 
 const BRAND_GUARDRAILS =
-  "Professional commercial photograph for FORTE elevator consulting brand. " +
-  "Residential buildings, property management, modern clean trustworthy style. " +
+  "Professional commercial photograph for residential building elevator context. " +
+  "Shared residential building / vaad bayit setting, modern clean trustworthy style. " +
   "Realistic, well-lit, suitable for Facebook and Instagram marketing. " +
-  "No logos, no trademarks, no Hebrew or any text in the image, no phone numbers, " +
+  "No brand names, no company logos, no property management companies, no elevator company logos, " +
+  "no trademarks, no Hebrew or any text in the image, no phone numbers, " +
   "no contact details, no accident or danger scenes, no gore.";
 
 export function buildMarketingImagePrompt(visualPromptHe: string): string {

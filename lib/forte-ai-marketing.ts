@@ -162,6 +162,10 @@ export type AiApprovalDto = {
   agentKey: AiAgentKey | null;
   /** תמונת פוסט שיווק (send_social_post) לתצוגה לפני אישור */
   linkedPostImageUrl: string | null;
+  linkedPostId: string | null;
+  linkedPostTopic: string | null;
+  linkedPostBodyFacebook: string | null;
+  linkedPostBodyInstagram: string | null;
   createdAt: string;
   updatedAt: string;
 };

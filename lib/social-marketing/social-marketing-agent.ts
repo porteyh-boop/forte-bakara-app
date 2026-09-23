@@ -14,6 +14,7 @@ import {
 import {
   uploadMarketingSocialImageServer,
 } from "@/lib/social-marketing/social-marketing-image-storage";
+import { marketingDraftPassesContentPolicy } from "@/lib/social-marketing/social-marketing-content-policy";
 import {
   cleanupOrphanMarketingImagesServer,
   listSocialMarketingPostsServer,
@@ -32,17 +33,30 @@ export type MarketingAgentGenerateError =
   | "supabase_service_unconfigured"
   | "save_failed";
 
-const SYSTEM_PROMPT = `אתה כותב תוכן שיווקי מקצועי בעברית עבור FORTE — ליווי מקצועי לוועדי בתים, חברות ניהול ומנהלי נכסים בתחום המעליות.
+const SYSTEM_PROMPT = `אתה כותב תוכן מקצועי בעברית לפוסטים ברשתות חברתיות בנושא מעליות בבניינים משותפים.
 
-כללים:
-- עברית תקינה, ברורה, מקצועית, לא מנופחת.
-- אין להמציא מחירים, תקנים, חוקים, אחוזים, סטטיסטיקות, הבטחות או "עובדות" שלא סופקו.
-- אין הבטחות שיווקיות לא מבוססות.
-- שלוש ההצעות חייבות להיות שונות בנושא או בזווית.
-- התאם את הקהל (ועד בית, חברות ניהול, מנהלי נכסים, בעלי בניינים, יזמים/קבלנים כשמתאים).
-- תוכן Instagram יכול להיות קצר יותר עם hashtags עדינים; Facebook מעט מפורט יותר.
-- visual_prompt: תיאור בעברית ליצירת תמונה עתידית (לא URL).
-- publish_date בפורמט YYYY-MM-DD, publish_time בפורמט HH:MM (שעון ישראל).
+קהל יעד — חובה (רק אלה):
+- ועדי בתים
+- נציגויות בתים משותפים
+- בעלי דירות בבניינים משותפים
+- בעלי נכסים בבניינים משותפים
+
+אסור כרגע:
+- לכתוב לחברות ניהול או לחברת ניהול.
+- להשתמש במילים FORTE, Forte, forte, פורטה — בשום שדה (כולל visual_prompt).
+
+אופי הפוסט:
+- התחל או התמקד בבעיה/כאב אמיתי שמוכר לוועד הבית (תקלות חוזרות, הצעות מחיר לא ברורות, חוזה שירות, חוסר מידע אחרי טכנאי, שדרוג, בדיקת הצעות, מעקב שירות, מסירה, בדיקות מקצועיות וכד').
+- אין להמציא מחירים, תקנים, חוקים, נתונים, אחוזים, חיסכון, הבטחות, אחריות או עובדות מקצועיות.
+- אפשר לסיים בהנעה לפעולה טבעית ומגוונת (לא אותו משפט בכל פוסט), בלי שם מותג.
+
+כללים טכניים:
+- עברית תקינה, ברורה, מקצועית.
+- שלוש ההצעות שונות בנושא או בזווית.
+- target_audience: תיאור קצר של קהל מהרשימה המותרת בלבד.
+- visual_prompt: תיאור בעברית לתמונה (ללא שמות מותג, ללא חברות ניהול, ללא טקסט בתמונה) — לא URL.
+- Instagram יכול להיות קצר יותר עם hashtags עדינים; Facebook מעט מפורט יותר.
+- publish_date YYYY-MM-DD, publish_time HH:MM (שעון ישראל).
 - החזר בדיוק 3 פוסטים במבנה JSON.`;
 
 export type MarketingBatchGenerator = (input: {
@@ -108,6 +122,7 @@ export function validateMarketingPostDrafts(
 
     const combined = `${draft.body_facebook} ${draft.body_instagram} ${draft.topic}`;
     if (!textPassesSafety(combined)) return false;
+    if (!marketingDraftPassesContentPolicy(draft)) return false;
   }
 
   return true;
@@ -115,9 +130,11 @@ export function validateMarketingPostDrafts(
 
 function buildUserPrompt(recent: SocialMarketingPostDto[]): string {
   const lines: string[] = [
-    "צור 3 הצעות פוסט שיווקיות שונות ל-FORTE.",
+    "צור 3 הצעות פוסט שונות לוועדי בתים / נציגויות / בעלי דירות ונכסים בבניינים משותפים.",
     "",
-    "נושאים אפשריים (בחר 3 שונים): תקלות חוזרות, בקרת שירות, חוזי שירות, בדיקת הצעות מחיר, תחזוקה, שדרוג ומודרניזציה, מסירה וקבלה, בדק בית במעליות, חוות דעת מקצועיות, טיפים לוועדים ולחברות ניהול, טעויות נפוצות, הסברים מקצועיים, שירותי FORTE.",
+    "נושאים אפשריים (בחר 3 שונים): תקלות חוזרות במעלית, מעלית מושבתת שוב ושוב, תיקון יקר שלא ברור אם נדרש, הצעת מחיר מחברת המעליות שלא ברורה, חוזה שירות לא ברור, רכיב שממליצים להחליף, קושי להבין מה גרם לתקלה, חוסר מידע אחרי ביקור טכנאי, שדרוג ומודרניזציה, בדיקת הצעות מחיר, מעקב איכות שירות, הכנת מעלית למסירה, בדיקות מקצועיות.",
+    "",
+    "אסור בשום שדה: FORTE, Forte, forte, פורטה, חברות ניהול, חברת ניהול.",
     "",
   ];
 

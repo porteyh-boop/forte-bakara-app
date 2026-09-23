@@ -16,6 +16,10 @@ import {
   logOpenAiMarketingError,
 } from "../lib/llm/openai-marketing-client";
 import { pngBufferFromImagesGenerationsPayload } from "../lib/llm/openai-marketing-image";
+import {
+  marketingDraftPassesContentPolicy,
+  textContainsForbiddenMarketingContent,
+} from "../lib/social-marketing/social-marketing-content-policy";
 
 function read(rel: string): string {
   return fs.readFileSync(path.join(process.cwd(), rel), "utf8");
@@ -56,10 +60,17 @@ assert(
   ]),
   "rejects banned marketing claims"
 );
+assert(textContainsForbiddenMarketingContent("FORTE"), "content policy blocks FORTE");
+assert(!marketingDraftPassesContentPolicy({ ...sample(1), visual_prompt: "לוגו פורטה" }), "blocks פורטה in visual");
 
 assert(actionTypeRequiresApproval("send_social_post"), "send_social_post requires approval");
 
 const agentSrc = read("lib/social-marketing/social-marketing-agent.ts");
+assert(agentSrc.includes("marketingDraftPassesContentPolicy"), "agent uses content policy validation");
+assert(
+  agentSrc.includes("לא לכתוב לחברות ניהול") || agentSrc.includes("לחברות ניהול או לחברת ניהול"),
+  "system prompt forbids management companies audience"
+);
 const serverSrc = read("lib/social-marketing/social-marketing-server.ts");
 const patchSrc = read("lib/forte-ai-marketing-server.ts");
 const openaiSrc = read("lib/llm/openai-marketing-client.ts");

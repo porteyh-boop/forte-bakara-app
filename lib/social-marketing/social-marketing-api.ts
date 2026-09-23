@@ -123,6 +123,37 @@ export async function createSocialMarketingPost(
   }
 }
 
+export async function updateSocialMarketingPendingApprovalCopy(input: {
+  postId: string;
+  topic: string;
+  bodyFacebook: string;
+  bodyInstagram: string;
+}): Promise<{ post: SocialMarketingPostDto | null; error: string | null }> {
+  try {
+    const response = await masterApiFetch(
+      `${BASE}/${encodeURIComponent(input.postId)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          pendingApprovalCopyEdit: true,
+          topic: input.topic,
+          bodyFacebook: input.bodyFacebook,
+          bodyInstagram: input.bodyInstagram,
+        }),
+      }
+    );
+    const payload = await parseMasterApiJson<{ post?: SocialMarketingPostDto; error?: string }>(
+      response
+    );
+    if (!response.ok || !payload?.post) {
+      return { post: null, error: hebrewError(payload?.error ?? "save_failed") };
+    }
+    return { post: payload.post, error: null };
+  } catch {
+    return { post: null, error: "העדכון נכשל." };
+  }
+}
+
 export async function updateSocialMarketingPost(
   postId: string,
   input: SocialMarketingPostInput

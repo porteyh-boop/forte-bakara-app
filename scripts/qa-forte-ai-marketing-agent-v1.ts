@@ -31,6 +31,7 @@ function assert(condition: boolean, label: string): void {
 const migration = read("supabase/migrations/051_social_marketing_posts.sql");
 const server = read("lib/social-marketing/social-marketing-server.ts");
 const view = read("components/master-v2/MasterForteAiMarketingSection.tsx");
+const aiView = read("components/master-v2/MasterForteAiView.tsx");
 const display = read("lib/forte-ai-display-he.ts");
 
 assert(migration.includes("social_marketing_posts"), "migration creates posts table");
@@ -49,6 +50,9 @@ assert(view.includes("bodyInstagram"), "instagram body field");
 assert(view.includes("תצוגה מקדימה"), "preview for pending posts");
 assert(view.includes("צור פוסטים עם AI"), "AI generate button");
 assert(!view.includes('runAction(previewPost, "approve")'), "approve only via Judah dashboard");
+assert(aiView.includes("ערוך פוסט"), "Judah can edit post before approval");
+assert(server.includes("updateSocialMarketingPendingApprovalCopyServer"), "pending approval copy edit");
+assert(server.includes("approved_content_version = Number(row.content_version)"), "approval pins content version");
 
 assert(!isApprovedRow({ approved_at: "", approved_by: "יהודה" }), "empty approved_at blocked");
 assert(isApprovedRow({ approved_at: new Date().toISOString(), approved_by: SOCIAL_MARKETING_APPROVER }), "full approval ok");

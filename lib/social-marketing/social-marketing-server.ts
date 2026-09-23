@@ -275,6 +275,79 @@ export async function updateSocialMarketingPostServer(
   return { post: mapPost(data as Record<string, unknown>), error: null };
 }
 
+/** Judah edits copy before approval — no OpenAI, no image change, stays pending_approval. */
+export async function updateSocialMarketingPendingApprovalCopyServer(
+  postIdRaw: string,
+  body: unknown
+): Promise<{ post: SocialMarketingPostDto | null; error: SocialMarketingServerError | null }> {
+  const postId = asString(postIdRaw).trim();
+  if (!postId || !body || typeof body !== "object") {
+    return { post: null, error: "invalid_input" };
+  }
+  const raw = body as Record<string, unknown>;
+  const topic = asString(raw.topic).trim();
+  const bodyFacebook = asString(raw.bodyFacebook ?? raw.body_facebook).trim();
+  const bodyInstagram = asString(raw.bodyInstagram ?? raw.body_instagram).trim();
+  if (!topic) return { post: null, error: "invalid_input" };
+
+  if (!isSupabaseServiceConfigured()) {
+    return { post: null, error: "supabase_service_unconfigured" };
+  }
+  const sb = getSupabaseServiceClient();
+  if (!sb) return { post: null, error: "supabase_service_unconfigured" };
+
+  const existing = await loadRow(sb, postId);
+  if (!existing) return { post: null, error: "not_found" };
+
+  const status = asString(existing.status);
+  if (status !== "pending_approval") {
+    return { post: null, error: "invalid_status" };
+  }
+
+  const platform = asString(existing.platform);
+  if (platform === "facebook" && !bodyFacebook) {
+    return { post: null, error: "invalid_input" };
+  }
+  if (platform === "instagram" && !bodyInstagram) {
+    return { post: null, error: "invalid_input" };
+  }
+  if (platform === "both" && (!bodyFacebook || !bodyInstagram)) {
+    return { post: null, error: "invalid_input" };
+  }
+
+  const patch: Record<string, unknown> = {
+    topic,
+    body_facebook: bodyFacebook,
+    body_instagram: bodyInstagram,
+    updated_at: new Date().toISOString(),
+  };
+
+  const contentPatch = {
+    topic,
+    target_audience: asString(existing.target_audience),
+    platform,
+    body_facebook: bodyFacebook,
+    body_instagram: bodyInstagram,
+    publish_date: asString(existing.publish_date),
+    publish_time: asString(existing.publish_time),
+    image_url: asString(existing.image_url),
+  };
+  if (contentFieldChanged(existing, contentPatch)) {
+    patch.content_version = (Number(existing.content_version) || 1) + 1;
+  }
+  patch.status = "pending_approval";
+
+  const { data, error } = await sb
+    .from(POSTS_TABLE)
+    .update(patch)
+    .eq("id", postId)
+    .select("*")
+    .maybeSingle();
+
+  if (error || !data) return { post: null, error: "save_failed" };
+  return { post: mapPost(data as Record<string, unknown>), error: null };
+}
+
 async function loadRow(
   sb: NonNullable<ReturnType<typeof getSupabaseServiceClient>>,
   postId: string
