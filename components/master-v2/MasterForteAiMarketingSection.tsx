@@ -32,6 +32,8 @@ import {
   selectFacebookPage,
   startFacebookConnectUrl,
 } from "@/lib/social-marketing/meta-facebook-api";
+import { SocialPostPublishStatusPanel } from "@/components/master-v2/SocialPostPublishStatusPanel";
+import { canPublishToFacebookNetwork } from "@/lib/social-marketing/social-marketing-publish-status";
 import {
   SOCIAL_PLATFORMS,
   SOCIAL_PLATFORM_LABELS,
@@ -82,9 +84,14 @@ function canPublishToFacebook(
   fb: FacebookConnectionStatusDto | null
 ): boolean {
   if (!fb?.connected || fb.tokenValid === false) return false;
-  if (post.facebookPostId) return false;
-  if (post.platform === "instagram") return false;
-  return ["approved", "scheduled", "ready_to_publish"].includes(post.status);
+  return canPublishToFacebookNetwork(post);
+}
+
+function facebookPublishButtonLabel(post: SocialMarketingPostDto): string {
+  if (post.facebookPublishStatus === "failed" || post.publishErrorCode) {
+    return "נסה לפרסם שוב";
+  }
+  return "פרסם לפייסבוק";
 }
 
 function MarketingPostImage({
@@ -232,6 +239,9 @@ export default function MasterForteAiMarketingSection() {
       facebookPostUrl: editing?.facebookPostUrl ?? null,
       publishedToFacebookAt: editing?.publishedToFacebookAt ?? null,
       publishErrorCode: editing?.publishErrorCode ?? null,
+      publishErrorMessage: editing?.publishErrorMessage ?? null,
+      facebookPublishStatus: editing?.facebookPublishStatus ?? null,
+      instagramPublishStatus: editing?.instagramPublishStatus ?? null,
       createdAt: editing?.createdAt ?? "",
       updatedAt: editing?.updatedAt ?? "",
     };
@@ -424,16 +434,15 @@ export default function MasterForteAiMarketingSection() {
                     ? ` · ${post.publishDate}${post.publishTime ? ` ${post.publishTime}` : ""}`
                     : ""}
                 </p>
-                {post.facebookPostUrl ? (
-                  <a
-                    className="text-xs text-forte-primary underline mt-1 inline-block"
-                    href={post.facebookPostUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    צפייה בפוסט בפייסבוק
-                  </a>
-                ) : null}
+                <SocialPostPublishStatusPanel
+                  post={post}
+                  retryDisabled={busy}
+                  onRetryFacebook={
+                    canPublishToFacebook(post, fbStatus)
+                      ? () => void runAction(post, "publish_facebook")
+                      : undefined
+                  }
+                />
               </div>
               <div className="flex flex-wrap gap-2 shrink-0">
                 <ForteV2SecondaryButton disabled={busy} onClick={() => openEdit(post)}>
@@ -473,7 +482,7 @@ export default function MasterForteAiMarketingSection() {
                     disabled={busy}
                     onClick={() => void runAction(post, "publish_facebook")}
                   >
-                    פרסם לפייסבוק
+                    {facebookPublishButtonLabel(post)}
                   </ForteV2PrimaryButton>
                 ) : null}
                 <ForteV2SecondaryButton disabled={busy} onClick={() => void handleDuplicate(post)}>

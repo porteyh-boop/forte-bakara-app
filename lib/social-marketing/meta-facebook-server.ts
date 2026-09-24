@@ -16,7 +16,15 @@ import {
   type MetaGraphFetch,
 } from "@/lib/social-marketing/meta-facebook-graph";
 import { recordAiActionServer } from "@/lib/forte-ai-marketing-server";
-import { SOCIAL_MARKETING_APPROVER } from "@/lib/social-marketing/social-marketing-types";
+import {
+  mergeSocialPostMetaPayload,
+  overallStatusAfterFacebookFailure,
+  overallStatusAfterFacebookSuccess,
+} from "@/lib/social-marketing/social-marketing-publish-status";
+import {
+  SOCIAL_MARKETING_APPROVER,
+  type SocialPlatformId,
+} from "@/lib/social-marketing/social-marketing-types";
 import {
   getSupabaseServiceClient,
   isSupabaseServiceConfigured,
@@ -394,7 +402,7 @@ export async function publishSocialPostToFacebookServer(
   }
 
   const status = asString(row.status);
-  if (!["approved", "scheduled", "ready_to_publish"].includes(status)) {
+  if (!["approved", "scheduled", "ready_to_publish", "failed"].includes(status)) {
     await sb.from(POSTS_TABLE).update({ publishing_started_at: null }).eq("id", postId);
     return { post: null, error: "invalid_status" };
   }
@@ -447,17 +455,27 @@ export async function publishSocialPostToFacebookServer(
 
     const permalink = buildFacebookPostPermalink(published.id);
     const now = new Date().toISOString();
+    const platform = asString(row.platform) as SocialPlatformId;
+    const nextStatus = overallStatusAfterFacebookSuccess(
+      platform === "instagram" || platform === "facebook" || platform === "both"
+        ? platform
+        : "facebook"
+    );
     const { data: updated, error } = await sb
       .from(POSTS_TABLE)
       .update({
-        status: "published",
+        status: nextStatus,
+        facebook_publish_status: "published",
         facebook_post_id: published.id,
         facebook_post_url: permalink,
         published_to_facebook_at: now,
         publishing_started_at: null,
         publish_error_code: null,
+        publish_error_message: null,
         updated_at: now,
-        meta_payload: { facebook: { id: published.id, pageId } },
+        meta_payload: mergeSocialPostMetaPayload(row.meta_payload, {
+          facebook: { id: published.id, pageId, publishedAt: now },
+        }),
       })
       .eq("id", postId)
       .select("*")
@@ -476,19 +494,35 @@ export async function publishSocialPostToFacebookServer(
   } catch (err) {
     clearTimeout(timer);
     const isAbort = err instanceof Error && err.name === "AbortError";
-    const patch = isAbort
-      ? { status: "publish_uncertain", publish_error_code: "publish_timeout" }
-      : {
-          status: "failed",
-          publish_error_code:
-            err instanceof MetaGraphApiError ? "meta_api_error" : "meta_api_error",
-        };
+    const platform = asString(row.platform) as SocialPlatformId;
+    const safePlatform: SocialPlatformId =
+      platform === "instagram" || platform === "facebook" || platform === "both"
+        ? platform
+        : "facebook";
+    const errorCode = isAbort ? "publish_timeout" : "meta_api_error";
+    const errorMessage =
+      err instanceof MetaGraphApiError
+        ? err.message.slice(0, 500)
+        : isAbort
+          ? "publish_timeout"
+          : "meta_api_error";
+    const workflowStatus = isAbort
+      ? "publish_uncertain"
+      : overallStatusAfterFacebookFailure(safePlatform);
     await sb
       .from(POSTS_TABLE)
       .update({
-        ...patch,
+        status: workflowStatus,
+        facebook_publish_status: "failed",
+        publish_error_code: errorCode,
+        publish_error_message: errorMessage,
         publishing_started_at: null,
         updated_at: new Date().toISOString(),
+        meta_payload: mergeSocialPostMetaPayload(row.meta_payload, {
+          facebook: {
+            lastError: { code: errorCode, message: errorMessage, at: new Date().toISOString() },
+          },
+        }),
       })
       .eq("id", postId);
     return { post: null, error: isAbort ? "publish_timeout" : "meta_api_error" };

@@ -66,6 +66,9 @@ export type SocialMarketingPostDto = {
   facebookPostUrl: string | null;
   publishedToFacebookAt: string | null;
   publishErrorCode: string | null;
+  publishErrorMessage: string | null;
+  facebookPublishStatus: string | null;
+  instagramPublishStatus: string | null;
   createdAt: string;
   updatedAt: string;
 };

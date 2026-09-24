@@ -13,6 +13,12 @@ import {
 } from "@/lib/social-marketing/social-marketing-types";
 import { publishSocialPostToFacebookServer } from "@/lib/social-marketing/meta-facebook-server";
 import {
+  resolveFacebookPublishStatusFromRow,
+  resolveInstagramPublishStatusFromRow,
+  targetsFacebook,
+  targetsInstagram,
+} from "@/lib/social-marketing/social-marketing-publish-status";
+import {
   getSupabaseServiceClient,
   isSupabaseServiceConfigured,
 } from "@/lib/supabase-server";
@@ -93,8 +99,33 @@ function mapPost(row: Record<string, unknown>): SocialMarketingPostDto {
     facebookPostUrl: asString(row.facebook_post_url) || null,
     publishedToFacebookAt: asString(row.published_to_facebook_at) || null,
     publishErrorCode: asString(row.publish_error_code) || null,
+    publishErrorMessage: asString(row.publish_error_message) || null,
+    facebookPublishStatus:
+      asString(row.facebook_publish_status) ||
+      resolveFacebookPublishStatusFromRow({
+        platform: isPlatform(platformRaw) ? platformRaw : "facebook",
+        facebookPostId: asString(row.facebook_post_id) || null,
+        facebookPublishStatus: null,
+        publishErrorCode: asString(row.publish_error_code) || null,
+      }),
+    instagramPublishStatus:
+      asString(row.instagram_publish_status) ||
+      resolveInstagramPublishStatusFromRow({
+        platform: isPlatform(platformRaw) ? platformRaw : "facebook",
+        instagramPublishStatus: null,
+      }),
     createdAt: asString(row.created_at),
     updatedAt: asString(row.updated_at),
+  };
+}
+
+function defaultNetworkPublishStatuses(platform: SocialPlatformId): {
+  facebook_publish_status: string;
+  instagram_publish_status: string;
+} {
+  return {
+    facebook_publish_status: targetsFacebook(platform) ? "pending" : "not_applicable",
+    instagram_publish_status: targetsInstagram(platform) ? "pending" : "not_applicable",
   };
 }
 
@@ -208,6 +239,7 @@ export async function createSocialMarketingPostServer(body: unknown): Promise<{
 
   const row = {
     ...inputToRow(input),
+    ...defaultNetworkPublishStatuses(input.platform),
     status: "draft",
     approved_at: null,
     approved_by: null,
@@ -448,6 +480,7 @@ function draftToRow(
     publish_date: draft.publish_date.trim(),
     publish_time: `${draft.publish_time.trim().slice(0, 5)}:00`,
     image_url: draft.imagePublicUrl.trim(),
+    ...defaultNetworkPublishStatuses(draft.platform),
     status: "pending_approval",
     approved_at: null,
     approved_by: null,
