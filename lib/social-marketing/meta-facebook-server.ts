@@ -12,9 +12,9 @@ import {
   exchangeForLongLivedUserToken,
   listManagedFacebookPages,
   MetaGraphApiError,
-  publishPageFeedPost,
   type MetaGraphFetch,
 } from "@/lib/social-marketing/meta-facebook-graph";
+import { publishApprovedFacebookPostContent } from "@/lib/social-marketing/meta-facebook-publish";
 import { recordAiActionServer } from "@/lib/forte-ai-marketing-server";
 import {
   mergeSocialPostMetaPayload,
@@ -444,16 +444,18 @@ export async function publishSocialPostToFacebookServer(
   const timer = setTimeout(() => controller.abort(), PUBLISH_TIMEOUT_MS);
 
   try {
-    const published = await publishPageFeedPost({
+    const imageUrl = asString(row.image_url).trim() || null;
+    const published = await publishApprovedFacebookPostContent({
       pageId,
       pageAccessToken: pageToken,
       message,
+      imageUrl,
       fetchImpl,
       signal: controller.signal,
     });
     clearTimeout(timer);
 
-    const permalink = buildFacebookPostPermalink(published.id);
+    const permalink = buildFacebookPostPermalink(published.facebookPostId);
     const now = new Date().toISOString();
     const platform = asString(row.platform) as SocialPlatformId;
     const nextStatus = overallStatusAfterFacebookSuccess(
@@ -466,7 +468,7 @@ export async function publishSocialPostToFacebookServer(
       .update({
         status: nextStatus,
         facebook_publish_status: "published",
-        facebook_post_id: published.id,
+        facebook_post_id: published.facebookPostId,
         facebook_post_url: permalink,
         published_to_facebook_at: now,
         publishing_started_at: null,
@@ -474,7 +476,13 @@ export async function publishSocialPostToFacebookServer(
         publish_error_message: null,
         updated_at: now,
         meta_payload: mergeSocialPostMetaPayload(row.meta_payload, {
-          facebook: { id: published.id, pageId, publishedAt: now },
+          facebook: {
+            id: published.facebookPostId,
+            pageId,
+            publishedAt: now,
+            publishMode: published.mode,
+            imageUrl: imageUrl || undefined,
+          },
         }),
       })
       .eq("id", postId)
@@ -487,7 +495,12 @@ export async function publishSocialPostToFacebookServer(
       agentKey: "marketing",
       actionType: "social_post_published_facebook",
       summary: `פורסם בפייסבוק — ${asString(row.topic)}`,
-      details: { postId, facebookPostId: published.id, pageId },
+      details: {
+        postId,
+        facebookPostId: published.facebookPostId,
+        pageId,
+        publishMode: published.mode,
+      },
     });
 
     return { post: updated as Record<string, unknown>, error: null };

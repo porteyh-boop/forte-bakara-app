@@ -150,6 +150,53 @@ export async function publishPageFeedPost(input: {
   return { id: body.id };
 }
 
+export function facebookGraphPostIdFromPhotoCreateResponse(body: {
+  id?: string;
+  post_id?: string;
+}): string {
+  const postId = typeof body.post_id === "string" ? body.post_id.trim() : "";
+  if (postId) return postId;
+  const photoId = typeof body.id === "string" ? body.id.trim() : "";
+  return photoId;
+}
+
+export async function publishPagePhotoPost(input: {
+  pageId: string;
+  pageAccessToken: string;
+  imageUrl: string;
+  caption: string;
+  fetchImpl?: MetaGraphFetch;
+  signal?: AbortSignal;
+}): Promise<{ graphPostId: string; photoId: string | null; postId: string | null }> {
+  const fetchImpl = input.fetchImpl ?? fetch;
+  const url = `${metaGraphBaseUrl()}/${encodeURIComponent(input.pageId)}/photos`;
+  const res = await fetchImpl(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      url: input.imageUrl.trim(),
+      caption: input.caption.trim(),
+      published: true,
+      access_token: input.pageAccessToken,
+    }),
+    signal: input.signal,
+  });
+  const body = (await readJson(res)) as {
+    id?: string;
+    post_id?: string;
+    error?: MetaGraphErrorBody["error"];
+  };
+  const graphPostId = facebookGraphPostIdFromPhotoCreateResponse(body);
+  if (!res.ok || !graphPostId) {
+    throw new MetaGraphApiError(body.error?.message ?? "photo_publish_failed", body.error?.code ?? null);
+  }
+  return {
+    graphPostId,
+    photoId: body.id?.trim() || null,
+    postId: body.post_id?.trim() || null,
+  };
+}
+
 export async function debugToken(input: {
   inputToken: string;
   fetchImpl?: MetaGraphFetch;

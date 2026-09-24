@@ -59,9 +59,10 @@ export function metaFacebookDialogOAuthUrl(input: {
 
 export function buildFacebookPostPermalink(facebookPostId: string): string {
   const id = facebookPostId.trim();
-  if (!id.includes("_")) {
-    return `https://www.facebook.com/${encodeURIComponent(id)}`;
+  if (!id) return "";
+  if (id.includes("_")) {
+    const [pageId, storyId] = id.split("_", 2);
+    return `https://www.facebook.com/${encodeURIComponent(pageId)}/posts/${encodeURIComponent(storyId)}`;
   }
-  const [pageId, storyId] = id.split("_", 2);
-  return `https://www.facebook.com/${encodeURIComponent(pageId)}/posts/${encodeURIComponent(storyId)}`;
+  return `https://www.facebook.com/photo/?fbid=${encodeURIComponent(id)}`;
 }
