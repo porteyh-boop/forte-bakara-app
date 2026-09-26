@@ -8,6 +8,7 @@ export const META_FACEBOOK_OAUTH_SCOPES = [
   "pages_read_engagement",
   "instagram_basic",
   "instagram_content_publish",
+  "business_management",
 ] as const;
 
 /** Scopes that were present before Instagram Content Publishing (for re-auth messaging). */

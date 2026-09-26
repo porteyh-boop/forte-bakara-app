@@ -34,6 +34,7 @@ function assert(condition: boolean, label: string): void {
 
 assert(META_FACEBOOK_OAUTH_SCOPES.includes("instagram_content_publish"), "oauth includes instagram_content_publish");
 assert(META_FACEBOOK_OAUTH_SCOPES.includes("instagram_basic"), "oauth includes instagram_basic");
+assert(META_FACEBOOK_OAUTH_SCOPES.includes("business_management"), "oauth includes business_management");
 
 assert(
   !canPublishToInstagramNetwork({
