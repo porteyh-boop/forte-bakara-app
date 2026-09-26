@@ -33,6 +33,19 @@ export function getMetaFacebookAppSecret(): string | null {
   return secret || null;
 }
 
+export function getMetaFacebookLoginConfigId(): string | null {
+  const configId = process.env.META_FACEBOOK_LOGIN_CONFIG_ID?.trim();
+  return configId || null;
+}
+
+export function isMetaFacebookAppConfigured(): boolean {
+  return Boolean(getMetaFacebookAppId() && getMetaFacebookAppSecret());
+}
+
+export function isMetaFacebookLoginConfigured(): boolean {
+  return isMetaFacebookAppConfigured() && Boolean(getMetaFacebookLoginConfigId());
+}
+
 export function getPublicSiteUrl(): string {
   const base = process.env.NEXT_PUBLIC_SITE_URL?.trim() || DEFAULT_SITE;
   return base.replace(/\/$/, "");
@@ -42,8 +55,9 @@ export function getMetaFacebookOAuthRedirectUri(): string {
   return `${getPublicSiteUrl()}/forte/api/master/ai-marketing/marketing/facebook/callback`;
 }
 
+/** App credentials (Graph API, publish). OAuth also requires login config id. */
 export function isMetaFacebookConfigured(): boolean {
-  return Boolean(getMetaFacebookAppId() && getMetaFacebookAppSecret());
+  return isMetaFacebookAppConfigured();
 }
 
 export function metaGraphBaseUrl(): string {
@@ -55,9 +69,12 @@ export function metaFacebookDialogOAuthUrl(input: {
   redirectUri: string;
 }): string {
   const appId = getMetaFacebookAppId();
+  const configId = getMetaFacebookLoginConfigId();
   if (!appId) throw new Error("meta_app_not_configured");
+  if (!configId) throw new Error("meta_login_config_not_configured");
   const params = new URLSearchParams({
     client_id: appId,
+    config_id: configId,
     redirect_uri: input.redirectUri,
     state: input.state,
     response_type: "code",

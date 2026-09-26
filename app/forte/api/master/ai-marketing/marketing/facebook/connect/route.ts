@@ -19,7 +19,11 @@ export async function GET(request: NextRequest) {
 
   const result = await beginFacebookOAuthServer(masterToken);
   if (result.error || !result.redirectUrl) {
-    const status = result.error === "meta_app_not_configured" ? 503 : 502;
+    const status =
+      result.error === "meta_app_not_configured" ||
+      result.error === "meta_login_config_not_configured"
+        ? 503
+        : 502;
     return NextResponse.json({ error: result.error ?? "oauth_failed" }, { status });
   }
 

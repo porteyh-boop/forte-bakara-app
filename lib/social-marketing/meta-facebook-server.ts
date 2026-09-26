@@ -2,7 +2,9 @@ import { randomBytes, timingSafeEqual } from "crypto";
 import {
   buildFacebookPostPermalink,
   getMetaFacebookOAuthRedirectUri,
+  isMetaFacebookAppConfigured,
   isMetaFacebookConfigured,
+  isMetaFacebookLoginConfigured,
   metaFacebookDialogOAuthUrl,
 } from "@/lib/social-marketing/meta-facebook-config";
 import { decryptSecret, encryptSecret, hashOpaque } from "@/lib/social-marketing/meta-facebook-crypto";
@@ -41,6 +43,7 @@ const PUBLISH_TIMEOUT_MS = 25_000;
 export type MetaFacebookServerError =
   | "supabase_service_unconfigured"
   | "meta_app_not_configured"
+  | "meta_login_config_not_configured"
   | "invalid_state"
   | "oauth_failed"
   | "not_connected"
@@ -109,8 +112,11 @@ export async function beginFacebookOAuthServer(masterSessionToken: string): Prom
   redirectUrl: string;
   error: MetaFacebookServerError | null;
 }> {
-  if (!isMetaFacebookConfigured()) {
+  if (!isMetaFacebookAppConfigured()) {
     return { state: "", redirectUrl: "", error: "meta_app_not_configured" };
+  }
+  if (!isMetaFacebookLoginConfigured()) {
+    return { state: "", redirectUrl: "", error: "meta_login_config_not_configured" };
   }
   if (!isSupabaseServiceConfigured()) {
     return { state: "", redirectUrl: "", error: "supabase_service_unconfigured" };
@@ -148,7 +154,7 @@ export async function completeFacebookOAuthCallbackServer(input: {
   masterSessionToken: string;
   fetchImpl?: MetaGraphFetch;
 }): Promise<{ ok: boolean; error: MetaFacebookServerError | null }> {
-  if (!isMetaFacebookConfigured()) return { ok: false, error: "meta_app_not_configured" };
+  if (!isMetaFacebookAppConfigured()) return { ok: false, error: "meta_app_not_configured" };
   if (!isSupabaseServiceConfigured()) return { ok: false, error: "supabase_service_unconfigured" };
   const sb = getSupabaseServiceClient();
   if (!sb) return { ok: false, error: "supabase_service_unconfigured" };

@@ -107,6 +107,11 @@ const marketing = read("components/master-v2/MasterForteAiMarketingSection.tsx")
 assert(marketing.includes("publish_both"), "UI publish both action");
 assert(marketing.includes("publish_instagram"), "UI instagram publish");
 
+const metaConfig = read("lib/social-marketing/meta-facebook-config.ts");
+assert(metaConfig.includes("META_FACEBOOK_LOGIN_CONFIG_ID"), "login config id env");
+assert(metaConfig.includes("config_id"), "oauth url uses config_id");
+assert(metaConfig.includes("meta_login_config_not_configured"), "missing config id error");
+
 void (async () => {
   const discoveryFetch: MetaGraphFetch = async (input) => {
     const url = String(input);

@@ -14,6 +14,9 @@ function hebrewMetaError(code: string): string {
   if (code === "meta_app_not_configured") {
     return "חיבור פייסבוק אינו מוגדר בשרת. פנו למנהל המערכת.";
   }
+  if (code === "meta_login_config_not_configured") {
+    return "חיבור Meta OAuth אינו מוגדר: חסר META_FACEBOOK_LOGIN_CONFIG_ID בשרת. פנו למנהל המערכת.";
+  }
   if (code === "not_connected") return "יש לחבר דף פייסבוק לפני פרסום.";
   if (code === "token_invalid") return "חיבור הפייסבוק פג תוקף. התחברו מחדש.";
   if (code === "approval_required") return "לא ניתן לפרסם לפני אישור יהודה.";

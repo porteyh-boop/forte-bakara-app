@@ -27,7 +27,12 @@ function loadEnvFile(rel: string): void {
 
 loadEnvFile(".env.local");
 
-import { buildFacebookPostPermalink, getMetaFacebookOAuthRedirectUri } from "../lib/social-marketing/meta-facebook-config";
+import {
+  buildFacebookPostPermalink,
+  getMetaFacebookOAuthRedirectUri,
+  metaFacebookDialogOAuthUrl,
+  META_FACEBOOK_OAUTH_SCOPES,
+} from "../lib/social-marketing/meta-facebook-config";
 import { encryptSecret, hashOpaque } from "../lib/social-marketing/meta-facebook-crypto";
 import {
   publishPageFeedPost,
@@ -59,6 +64,29 @@ assert(
   ),
   "oauth redirect path"
 );
+
+process.env.META_FACEBOOK_APP_ID = process.env.META_FACEBOOK_APP_ID ?? "qa-app-id";
+process.env.META_FACEBOOK_LOGIN_CONFIG_ID = process.env.META_FACEBOOK_LOGIN_CONFIG_ID ?? "qa-config-id";
+const oauthUrl = metaFacebookDialogOAuthUrl({
+  state: "qa-state",
+  redirectUri: getMetaFacebookOAuthRedirectUri(),
+});
+assert(oauthUrl.includes("config_id=qa-config-id"), "oauth url includes config_id");
+assert(oauthUrl.includes("scope="), "oauth url includes scope");
+assert(
+  META_FACEBOOK_OAUTH_SCOPES.every((s) => oauthUrl.includes(s)),
+  "oauth url includes all configured scopes"
+);
+
+delete process.env.META_FACEBOOK_LOGIN_CONFIG_ID;
+let configMissing = false;
+try {
+  metaFacebookDialogOAuthUrl({ state: "x", redirectUri: "https://example.com/cb" });
+} catch (err) {
+  configMissing = err instanceof Error && err.message === "meta_login_config_not_configured";
+}
+assert(configMissing, "oauth rejects missing META_FACEBOOK_LOGIN_CONFIG_ID");
+process.env.META_FACEBOOK_LOGIN_CONFIG_ID = "qa-config-id";
 
 const enc = encryptSecret("page-token-sample");
 assert(enc.includes("."), "token encryption produces payload");
