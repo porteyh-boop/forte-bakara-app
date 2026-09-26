@@ -92,6 +92,82 @@ export type FacebookManagedPage = {
   tasks: string[];
 };
 
+export type MeAccountsDiagnosticPageDto = {
+  id: string;
+  name: string;
+  tasks: string[];
+  instagramBusinessAccountId: string | null;
+  hasPageAccessToken: boolean;
+  forteWouldShow: boolean;
+};
+
+export async function fetchMeAccountsDiagnostic(input: {
+  userAccessToken: string;
+  fetchImpl?: MetaGraphFetch;
+}): Promise<{
+  graphOk: boolean;
+  graphError: { message: string; code: number | null } | null;
+  rawCount: number;
+  hasNextPage: boolean;
+  pages: MeAccountsDiagnosticPageDto[];
+}> {
+  const fetchImpl = input.fetchImpl ?? fetch;
+  const params = new URLSearchParams({
+    fields: "id,name,access_token,tasks,instagram_business_account",
+    access_token: input.userAccessToken,
+  });
+  const res = await fetchImpl(`${metaGraphBaseUrl()}/me/accounts?${params.toString()}`);
+  const body = (await readJson(res)) as {
+    data?: Array<{
+      id?: string;
+      name?: string;
+      access_token?: string;
+      tasks?: string[];
+      instagram_business_account?: { id?: string };
+    }>;
+    paging?: { next?: string };
+    error?: MetaGraphErrorBody["error"];
+  };
+  if (!res.ok) {
+    return {
+      graphOk: false,
+      graphError: {
+        message: body.error?.message ?? "pages_list_failed",
+        code: body.error?.code ?? null,
+      },
+      rawCount: 0,
+      hasNextPage: false,
+      pages: [],
+    };
+  }
+  const rows = body.data ?? [];
+  const pages: MeAccountsDiagnosticPageDto[] = rows
+    .filter((p) => p.id)
+    .map((p) => {
+      const id = String(p.id);
+      const hasPageAccessToken = Boolean(asString(p.access_token).trim());
+      return {
+        id,
+        name: String(p.name ?? ""),
+        tasks: Array.isArray(p.tasks) ? p.tasks.map(String) : [],
+        instagramBusinessAccountId: asString(p.instagram_business_account?.id).trim() || null,
+        hasPageAccessToken,
+        forteWouldShow: Boolean(id && hasPageAccessToken),
+      };
+    });
+  return {
+    graphOk: true,
+    graphError: null,
+    rawCount: rows.length,
+    hasNextPage: Boolean(body.paging?.next?.trim()),
+    pages,
+  };
+}
+
+function asString(value: unknown): string {
+  return typeof value === "string" ? value : value == null ? "" : String(value);
+}
+
 export async function listManagedFacebookPages(input: {
   userAccessToken: string;
   fetchImpl?: MetaGraphFetch;

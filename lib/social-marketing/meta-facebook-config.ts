@@ -38,6 +38,11 @@ export function getMetaFacebookLoginConfigId(): string | null {
   return configId || null;
 }
 
+/** Temporary diagnostic for GET /me/accounts — enable only while debugging Page picker. */
+export function isMetaFacebookMeAccountsDebugEnabled(): boolean {
+  return process.env.META_FACEBOOK_ME_ACCOUNTS_DEBUG?.trim() === "1";
+}
+
 export function isMetaFacebookAppConfigured(): boolean {
   return Boolean(getMetaFacebookAppId() && getMetaFacebookAppSecret());
 }

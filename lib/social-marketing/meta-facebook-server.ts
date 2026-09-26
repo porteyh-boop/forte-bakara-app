@@ -12,6 +12,7 @@ import {
   debugToken,
   exchangeCodeForUserAccessToken,
   exchangeForLongLivedUserToken,
+  fetchMeAccountsDiagnostic,
   listManagedFacebookPages,
   MetaGraphApiError,
   type MetaGraphFetch,
@@ -241,6 +242,26 @@ export async function listSelectableFacebookPagesServer(
     };
   } catch {
     return { pages: [], error: "meta_api_error" };
+  }
+}
+
+export async function getFacebookPagesMeAccountsDiagnosticServer(
+  masterSessionToken: string,
+  fetchImpl?: MetaGraphFetch
+): Promise<{
+  diagnostic: Awaited<ReturnType<typeof fetchMeAccountsDiagnostic>> | null;
+  error: "oauth_failed" | "meta_api_error" | null;
+}> {
+  const token = await loadPendingUserToken(masterSessionToken);
+  if (!token) return { diagnostic: null, error: "oauth_failed" };
+  try {
+    const diagnostic = await fetchMeAccountsDiagnostic({ userAccessToken: token, fetchImpl });
+    if (!diagnostic.graphOk) {
+      return { diagnostic: null, error: "meta_api_error" };
+    }
+    return { diagnostic, error: null };
+  } catch {
+    return { diagnostic: null, error: "meta_api_error" };
   }
 }
 
