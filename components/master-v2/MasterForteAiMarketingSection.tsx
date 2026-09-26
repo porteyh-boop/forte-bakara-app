@@ -33,7 +33,12 @@ import {
   startFacebookConnectUrl,
 } from "@/lib/social-marketing/meta-facebook-api";
 import { SocialPostPublishStatusPanel } from "@/components/master-v2/SocialPostPublishStatusPanel";
-import { canPublishToFacebookNetwork } from "@/lib/social-marketing/social-marketing-publish-status";
+import {
+  canPublishToFacebookNetwork,
+  canPublishToInstagramNetwork,
+  targetsFacebook,
+  targetsInstagram,
+} from "@/lib/social-marketing/social-marketing-publish-status";
 import {
   SOCIAL_PLATFORMS,
   SOCIAL_PLATFORM_LABELS,
@@ -87,11 +92,35 @@ function canPublishToFacebook(
   return canPublishToFacebookNetwork(post);
 }
 
+function canPublishToInstagram(
+  post: SocialMarketingPostDto,
+  fb: FacebookConnectionStatusDto | null
+): boolean {
+  if (!fb?.connected || fb.tokenValid === false || !fb.instagramConnected) return false;
+  return canPublishToInstagramNetwork(post);
+}
+
+function canPublishBoth(
+  post: SocialMarketingPostDto,
+  fb: FacebookConnectionStatusDto | null
+): boolean {
+  const fbReady = targetsFacebook(post.platform) && canPublishToFacebook(post, fb);
+  const igReady = targetsInstagram(post.platform) && canPublishToInstagram(post, fb);
+  return fbReady && igReady;
+}
+
 function facebookPublishButtonLabel(post: SocialMarketingPostDto): string {
   if (post.facebookPublishStatus === "failed" || post.publishErrorCode) {
-    return "נסה לפרסם שוב";
+    return "נסה שוב — פייסבוק";
   }
-  return "פרסם לפייסבוק";
+  return "פרסם בפייסבוק";
+}
+
+function instagramPublishButtonLabel(post: SocialMarketingPostDto): string {
+  if (post.instagramPublishStatus === "failed" || post.instagramPublishError) {
+    return "נסה שוב — אינסטגרם";
+  }
+  return "פרסם באינסטגרם";
 }
 
 function MarketingPostImage({
@@ -242,6 +271,10 @@ export default function MasterForteAiMarketingSection() {
       publishErrorMessage: editing?.publishErrorMessage ?? null,
       facebookPublishStatus: editing?.facebookPublishStatus ?? null,
       instagramPublishStatus: editing?.instagramPublishStatus ?? null,
+      instagramMediaId: editing?.instagramMediaId ?? null,
+      instagramPermalink: editing?.instagramPermalink ?? null,
+      instagramPublishedAt: editing?.instagramPublishedAt ?? null,
+      instagramPublishError: editing?.instagramPublishError ?? null,
       createdAt: editing?.createdAt ?? "",
       updatedAt: editing?.updatedAt ?? "",
     };
@@ -364,7 +397,11 @@ export default function MasterForteAiMarketingSection() {
             <p className="text-sm font-semibold text-forte-text">חיבור פייסבוק</p>
             <p className="text-xs text-forte-text-secondary mt-1">
               {fbStatus?.connected
-                ? `מחובר לדף: ${fbStatus.pageName} (מזהה ${fbStatus.pageId})`
+                ? `מחובר לדף: ${fbStatus.pageName} (מזהה ${fbStatus.pageId})${
+                    fbStatus.instagramConnected
+                      ? ` · Instagram: @${fbStatus.instagramUsername ?? fbStatus.instagramBusinessAccountId}`
+                      : " · Instagram: לא זוהה — בדקו קישור ב-Meta"
+                  }`
                 : "לא מחובר לדף עסקי"}
               {fbStatus?.connected && fbStatus.tokenValid === false
                 ? " · יש להתחבר מחדש"
@@ -396,7 +433,7 @@ export default function MasterForteAiMarketingSection() {
         </div>
         <p className="text-xs text-forte-text-secondary">
           יצירת AI שומרת 3 הצעות עם תמונה במצב ממתין לאישור. אישור ודחייה — בלבד מ«אישורים הממתינים ליהודה» למטה.
-          פרסום לפייסבוק דורש חיבור תקין + אישור יהודה.
+          פרסום לפייסבוק/אינסטגרם דורש חיבור Meta תקין + אישור יהודה. לאינסטגרם חובה תמונה.
         </p>
       </div>
 
@@ -442,6 +479,11 @@ export default function MasterForteAiMarketingSection() {
                       ? () => void runAction(post, "publish_facebook")
                       : undefined
                   }
+                  onRetryInstagram={
+                    canPublishToInstagram(post, fbStatus)
+                      ? () => void runAction(post, "publish_instagram")
+                      : undefined
+                  }
                 />
               </div>
               <div className="flex flex-wrap gap-2 shrink-0">
@@ -483,6 +525,22 @@ export default function MasterForteAiMarketingSection() {
                     onClick={() => void runAction(post, "publish_facebook")}
                   >
                     {facebookPublishButtonLabel(post)}
+                  </ForteV2PrimaryButton>
+                ) : null}
+                {canPublishToInstagram(post, fbStatus) ? (
+                  <ForteV2PrimaryButton
+                    disabled={busy}
+                    onClick={() => void runAction(post, "publish_instagram")}
+                  >
+                    {instagramPublishButtonLabel(post)}
+                  </ForteV2PrimaryButton>
+                ) : null}
+                {canPublishBoth(post, fbStatus) ? (
+                  <ForteV2PrimaryButton
+                    disabled={busy}
+                    onClick={() => void runAction(post, "publish_both")}
+                  >
+                    פרסם בשניהם
                   </ForteV2PrimaryButton>
                 ) : null}
                 <ForteV2SecondaryButton disabled={busy} onClick={() => void handleDuplicate(post)}>

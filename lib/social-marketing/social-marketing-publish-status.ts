@@ -63,11 +63,18 @@ export function resolveFacebookPublishStatusFromRow(row: {
 
 export function resolveInstagramPublishStatusFromRow(row: {
   platform: SocialPlatformId;
+  instagramMediaId?: string | null;
   instagramPublishStatus?: string | null;
+  instagramPublishError?: string | null;
 }): NetworkPublishStatusId {
   const explicit = normalizeNetworkPublishStatus(row.instagramPublishStatus);
-  if (explicit) return explicit;
+  if (explicit === "failed" || explicit === "published" || explicit === "not_applicable") {
+    return explicit;
+  }
   if (!targetsInstagram(row.platform)) return "not_applicable";
+  if (row.instagramMediaId?.trim()) return "published";
+  if (row.instagramPublishError?.trim()) return "failed";
+  if (explicit === "unavailable") return "unavailable";
   return "pending";
 }
 
@@ -83,9 +90,56 @@ export function overallStatusAfterFacebookFailure(platform: SocialPlatformId): "
   return "failed";
 }
 
+/** Global workflow status after successful Instagram Graph publish. */
+export function overallStatusAfterInstagramSuccess(
+  platform: SocialPlatformId,
+  ctx: { facebookPublished: boolean }
+): "published" | "ready_to_publish" {
+  if (platform === "both") {
+    return ctx.facebookPublished ? "published" : "ready_to_publish";
+  }
+  return "published";
+}
+
+/** Global workflow status after Instagram publish failure. */
+export function overallStatusAfterInstagramFailure(
+  platform: SocialPlatformId,
+  ctx: { facebookPublished: boolean }
+): "failed" | "ready_to_publish" {
+  if (platform === "both") return "ready_to_publish";
+  return "failed";
+}
+
+export function canPublishToInstagramNetwork(post: Pick<
+  SocialMarketingPostDto,
+  | "platform"
+  | "status"
+  | "imageUrl"
+  | "bodyInstagram"
+  | "instagramMediaId"
+  | "instagramPublishStatus"
+>): boolean {
+  if (!targetsInstagram(post.platform)) return false;
+  if (post.instagramMediaId?.trim()) return false;
+  const igStatus = resolveInstagramPublishStatusFromRow({
+    platform: post.platform,
+    instagramMediaId: post.instagramMediaId,
+    instagramPublishStatus: post.instagramPublishStatus ?? null,
+  });
+  if (igStatus === "published") return false;
+  if (!post.imageUrl?.trim()) return false;
+  if (!post.bodyInstagram?.trim()) return false;
+  return ["approved", "scheduled", "ready_to_publish", "failed"].includes(post.status);
+}
+
 export function isPostFullyPublishedOnAllTargets(post: Pick<
   SocialMarketingPostDto,
-  "platform" | "facebookPostId" | "facebookPublishStatus" | "instagramPublishStatus"
+  | "platform"
+  | "facebookPostId"
+  | "facebookPublishStatus"
+  | "instagramPublishStatus"
+  | "instagramMediaId"
+  | "instagramPublishError"
 >): boolean {
   const fb = resolveFacebookPublishStatusFromRow({
     platform: post.platform,
@@ -94,7 +148,9 @@ export function isPostFullyPublishedOnAllTargets(post: Pick<
   });
   const ig = resolveInstagramPublishStatusFromRow({
     platform: post.platform,
+    instagramMediaId: post.instagramMediaId ?? null,
     instagramPublishStatus: post.instagramPublishStatus ?? null,
+    instagramPublishError: post.instagramPublishError ?? null,
   });
   if (targetsFacebook(post.platform) && fb !== "published") return false;
   if (targetsInstagram(post.platform) && ig !== "published") return false;
@@ -125,6 +181,19 @@ export function formatActualPublishDateTimeHe(iso: string | null | undefined): s
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(iso));
+}
+
+export function hebrewInstagramPublishErrorMessage(input: {
+  instagramPublishError: string | null;
+}): string {
+  const msg = input.instagramPublishError?.trim();
+  if (msg === "instagram_image_required" || msg?.includes("instagram_image")) {
+    return "נדרשת תמונה לפרסום באינסטגרם.";
+  }
+  if (msg === "publish_timeout") return "זמן הפרסום פג — לא אושר שהפוסט עלה.";
+  if (msg === "meta_api_error") return "אינסטגרם דחה את הבקשה או שהחיבור אינו תקין.";
+  if (msg) return msg.slice(0, 500);
+  return "שגיאה לא ידועה";
 }
 
 export function hebrewPublishErrorMessage(input: {

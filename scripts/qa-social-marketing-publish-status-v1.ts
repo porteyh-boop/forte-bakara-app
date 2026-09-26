@@ -95,7 +95,7 @@ assert(meta.includes("facebook_post_id"), "publish success saves post id");
 assert(meta.includes(".is(\"facebook_post_id\", null)"), "duplicate publish lock");
 assert(meta.includes("overallStatusAfterFacebookSuccess"), "partial publish for both");
 assert(ui.includes("פורסם בפועל"), "UI shows actual publish time");
-assert(ui.includes("נסה לפרסם שוב"), "UI retry on failure");
+assert(ui.includes("נסה שוב (פייסבוק)"), "UI retry on failure");
 assert(marketing.includes("SocialPostPublishStatusPanel"), "marketing list shows publish panel");
 
 console.log(`\n${passed} passed, ${failed} failed`);

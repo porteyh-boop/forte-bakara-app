@@ -12,7 +12,10 @@ import {
   type SocialPostStatusId,
 } from "@/lib/social-marketing/social-marketing-types";
 import { publishSocialPostToFacebookServer } from "@/lib/social-marketing/meta-facebook-server";
+import { publishSocialPostToInstagramServer } from "@/lib/social-marketing/meta-instagram-server";
 import {
+  canPublishToFacebookNetwork,
+  canPublishToInstagramNetwork,
   resolveFacebookPublishStatusFromRow,
   resolveInstagramPublishStatusFromRow,
   targetsFacebook,
@@ -41,7 +44,10 @@ export type SocialMarketingServerError =
   | "facebook_not_applicable"
   | "publish_timeout"
   | "meta_api_error"
-  | "token_invalid";
+  | "token_invalid"
+  | "instagram_not_connected"
+  | "instagram_not_applicable"
+  | "instagram_image_required";
 
 const SOCIAL_POST_APPROVAL_ACTION = "send_social_post";
 
@@ -112,8 +118,14 @@ function mapPost(row: Record<string, unknown>): SocialMarketingPostDto {
       asString(row.instagram_publish_status) ||
       resolveInstagramPublishStatusFromRow({
         platform: isPlatform(platformRaw) ? platformRaw : "facebook",
+        instagramMediaId: asString(row.instagram_media_id) || null,
         instagramPublishStatus: null,
+        instagramPublishError: asString(row.instagram_publish_error) || null,
       }),
+    instagramMediaId: asString(row.instagram_media_id) || null,
+    instagramPermalink: asString(row.instagram_permalink) || null,
+    instagramPublishedAt: asString(row.instagram_published_at) || null,
+    instagramPublishError: asString(row.instagram_publish_error) || null,
     createdAt: asString(row.created_at),
     updatedAt: asString(row.updated_at),
   };
@@ -570,6 +582,8 @@ export async function runSocialMarketingPostActionServer(
     "schedule",
     "mark_ready_to_publish",
     "publish_facebook",
+    "publish_instagram",
+    "publish_both",
     "mark_failed",
   ];
   if (!postId || !allowed.includes(action)) {
@@ -578,10 +592,60 @@ export async function runSocialMarketingPostActionServer(
 
   if (action === "publish_facebook") {
     const published = await publishSocialPostToFacebookServer(postId);
-    if (published.error || !published.post) {
+    if (published.error && published.error !== "already_published") {
       return { post: null, error: (published.error ?? "save_failed") as SocialMarketingServerError };
     }
-    return { post: mapPost(published.post), error: null };
+    if (published.post) return { post: mapPost(published.post), error: null };
+    return { post: null, error: (published.error ?? "save_failed") as SocialMarketingServerError };
+  }
+
+  if (action === "publish_instagram") {
+    const published = await publishSocialPostToInstagramServer(postId);
+    if (published.error && published.error !== "already_published") {
+      return { post: null, error: (published.error ?? "save_failed") as SocialMarketingServerError };
+    }
+    if (published.post) return { post: mapPost(published.post), error: null };
+    return { post: null, error: (published.error ?? "save_failed") as SocialMarketingServerError };
+  }
+
+  if (action === "publish_both") {
+    if (!isSupabaseServiceConfigured()) {
+      return { post: null, error: "supabase_service_unconfigured" };
+    }
+    const sb = getSupabaseServiceClient();
+    if (!sb) return { post: null, error: "supabase_service_unconfigured" };
+    const row = await loadRow(sb, postId);
+    if (!row) return { post: null, error: "not_found" };
+    const dto = mapPost(row);
+
+    let lastPost: Record<string, unknown> | null = null;
+    const errors: SocialMarketingServerError[] = [];
+
+    if (canPublishToFacebookNetwork(dto)) {
+      const fb = await publishSocialPostToFacebookServer(postId);
+      if (fb.post) lastPost = fb.post;
+      if (fb.error && fb.error !== "already_published" && fb.error !== "facebook_not_applicable") {
+        errors.push(fb.error as SocialMarketingServerError);
+      }
+    }
+
+    const refreshed = lastPost ?? (await loadRow(sb, postId));
+    const dtoAfterFb = refreshed ? mapPost(refreshed) : dto;
+
+    if (canPublishToInstagramNetwork(dtoAfterFb)) {
+      const ig = await publishSocialPostToInstagramServer(postId);
+      if (ig.post) lastPost = ig.post;
+      if (ig.error && ig.error !== "already_published" && ig.error !== "instagram_not_applicable") {
+        errors.push(ig.error as SocialMarketingServerError);
+      }
+    }
+
+    const finalRow = lastPost ?? (await loadRow(sb, postId));
+    if (!finalRow) return { post: null, error: errors[0] ?? "not_found" };
+    return {
+      post: mapPost(finalRow),
+      error: lastPost ? null : errors[0] ?? null,
+    };
   }
 
   if (!isSupabaseServiceConfigured()) {

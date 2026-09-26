@@ -6,6 +6,15 @@ export const META_FACEBOOK_OAUTH_SCOPES = [
   "pages_show_list",
   "pages_manage_posts",
   "pages_read_engagement",
+  "instagram_basic",
+  "instagram_content_publish",
+] as const;
+
+/** Scopes that were present before Instagram Content Publishing (for re-auth messaging). */
+export const META_FACEBOOK_OAUTH_SCOPES_LEGACY = [
+  "pages_show_list",
+  "pages_manage_posts",
+  "pages_read_engagement",
 ] as const;
 
 export function getMetaGraphApiVersion(): string {

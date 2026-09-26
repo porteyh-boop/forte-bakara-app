@@ -69,6 +69,10 @@ export type SocialMarketingPostDto = {
   publishErrorMessage: string | null;
   facebookPublishStatus: string | null;
   instagramPublishStatus: string | null;
+  instagramMediaId: string | null;
+  instagramPermalink: string | null;
+  instagramPublishedAt: string | null;
+  instagramPublishError: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -91,4 +95,6 @@ export type SocialMarketingPostAction =
   | "schedule"
   | "mark_ready_to_publish"
   | "publish_facebook"
+  | "publish_instagram"
+  | "publish_both"
   | "mark_failed";

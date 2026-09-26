@@ -41,7 +41,12 @@ function hebrewError(code: string): string {
   if (code === "not_connected") return "יש לחבר דף פייסבוק לפני פרסום.";
   if (code === "approval_stale") return "התוכן השתנה מאז האישור. יש לאשר מחדש.";
   if (code === "publish_in_progress") return "הפרסום כבר בתהליך.";
-  if (code === "already_published") return "הפוסט כבר פורסם בפייסבוק.";
+  if (code === "already_published") return "הפוסט כבר פורסם בערוץ זה.";
+  if (code === "instagram_not_connected") {
+    return "חשבון Instagram Business לא מקושר לדף הפייסבוק. בדקו חיבור Meta או התחברו מחדש.";
+  }
+  if (code === "instagram_image_required") return "נדרשת תמונה לפרסום באינסטגרם.";
+  if (code === "instagram_not_applicable") return "פרסום Instagram אינו רלוונטי לפוסט זה.";
   if (code === "publish_timeout") {
     return "זמן הפרסום פג. בדקו בפייסבוק — לא נשלחה בקשה נוספת אוטומטית.";
   }

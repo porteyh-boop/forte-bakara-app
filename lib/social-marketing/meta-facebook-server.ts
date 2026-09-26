@@ -15,12 +15,14 @@ import {
   type MetaGraphFetch,
 } from "@/lib/social-marketing/meta-facebook-graph";
 import { publishApprovedFacebookPostContent } from "@/lib/social-marketing/meta-facebook-publish";
-import { recordAiActionServer } from "@/lib/forte-ai-marketing-server";
+import { fetchInstagramBusinessAccountForPage } from "@/lib/social-marketing/meta-instagram-graph";
 import {
-  mergeSocialPostMetaPayload,
   overallStatusAfterFacebookFailure,
   overallStatusAfterFacebookSuccess,
+  targetsFacebook,
 } from "@/lib/social-marketing/social-marketing-publish-status";
+import { recordAiActionServer } from "@/lib/forte-ai-marketing-server";
+import { mergeSocialPostMetaPayload } from "@/lib/social-marketing/social-marketing-publish-status";
 import {
   SOCIAL_MARKETING_APPROVER,
   type SocialPlatformId,
@@ -65,6 +67,9 @@ export type FacebookConnectionStatusDto = {
   tokenValid: boolean | null;
   connectedAt: string | null;
   pendingPageSelection: boolean;
+  instagramBusinessAccountId: string | null;
+  instagramUsername: string | null;
+  instagramConnected: boolean;
 };
 
 export type FacebookPageOptionDto = {
@@ -276,6 +281,24 @@ export async function selectFacebookPageServer(input: {
 
   if (error) return { status: null, error: "save_failed" };
 
+  try {
+    const ig = await fetchInstagramBusinessAccountForPage({
+      pageId: match.id,
+      pageAccessToken: match.accessToken,
+      fetchImpl: input.fetchImpl,
+    });
+    await sb
+      .from(CONNECTION_TABLE)
+      .update({
+        instagram_business_account_id: ig?.id ?? null,
+        instagram_username: ig?.username ?? null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("singleton_key", "default");
+  } catch {
+    /* IG discovery is best-effort; publish will surface errors */
+  }
+
   await sb.from(OAUTH_TABLE).delete().eq("master_session_hash", hashOpaque(input.masterSessionToken));
 
   return getFacebookConnectionStatusServer(input.masterSessionToken, input.fetchImpl);
@@ -290,7 +313,7 @@ export async function disconnectFacebookServer(): Promise<{ error: MetaFacebookS
   return { error: null };
 }
 
-async function loadConnectionRow(): Promise<Record<string, unknown> | null> {
+export async function loadFacebookConnectionRow(): Promise<Record<string, unknown> | null> {
   if (!isSupabaseServiceConfigured()) return null;
   const sb = getSupabaseServiceClient();
   if (!sb) return null;
@@ -307,7 +330,7 @@ export async function getFacebookConnectionStatusServer(
   fetchImpl?: MetaGraphFetch
 ): Promise<{ status: FacebookConnectionStatusDto; error: null }> {
   const configured = isMetaFacebookConfigured();
-  const row = await loadConnectionRow();
+  let row = await loadFacebookConnectionRow();
   const pendingPageSelection = masterSessionToken
     ? await hasPendingFacebookPageSelection(masterSessionToken)
     : false;
@@ -322,18 +345,51 @@ export async function getFacebookConnectionStatusServer(
         tokenValid: null,
         connectedAt: null,
         pendingPageSelection,
+        instagramBusinessAccountId: null,
+        instagramUsername: null,
+        instagramConnected: false,
       },
       error: null,
     };
   }
 
   let tokenValid: boolean | null = null;
+  let pageToken: string | null = null;
   try {
-    const token = decryptSecret(asString(row.encrypted_page_access_token));
-    const debug = await debugToken({ inputToken: token, fetchImpl });
+    pageToken = decryptSecret(asString(row.encrypted_page_access_token));
+    const debug = await debugToken({ inputToken: pageToken, fetchImpl });
     tokenValid = debug.isValid;
   } catch {
     tokenValid = false;
+  }
+
+  let igId = asString(row.instagram_business_account_id).trim() || null;
+  let igUsername = asString(row.instagram_username).trim() || null;
+  if (tokenValid && pageToken && !igId) {
+    try {
+      const ig = await fetchInstagramBusinessAccountForPage({
+        pageId: asString(row.page_id),
+        pageAccessToken: pageToken,
+        fetchImpl,
+      });
+      if (ig && isSupabaseServiceConfigured()) {
+        const sb = getSupabaseServiceClient();
+        if (sb) {
+          await sb
+            .from(CONNECTION_TABLE)
+            .update({
+              instagram_business_account_id: ig.id,
+              instagram_username: ig.username,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("singleton_key", "default");
+          igId = ig.id;
+          igUsername = ig.username;
+        }
+      }
+    } catch {
+      /* keep null */
+    }
   }
 
   return {
@@ -345,6 +401,9 @@ export async function getFacebookConnectionStatusServer(
       tokenValid,
       connectedAt: asString(row.connected_at) || null,
       pendingPageSelection: false,
+      instagramBusinessAccountId: igId,
+      instagramUsername: igUsername,
+      instagramConnected: Boolean(igId),
     },
     error: null,
   };
@@ -374,7 +433,7 @@ export async function publishSocialPostToFacebookServer(
   const sb = getSupabaseServiceClient();
   if (!sb) return { post: null, error: "supabase_service_unconfigured" };
 
-  const connection = await loadConnectionRow();
+  const connection = await loadFacebookConnectionRow();
   if (!connection) return { post: null, error: "not_connected" };
 
   const { data: locked } = await sb
@@ -389,14 +448,15 @@ export async function publishSocialPostToFacebookServer(
   if (!locked) {
     const { data: existing } = await sb.from(POSTS_TABLE).select("facebook_post_id, publishing_started_at").eq("id", postId).maybeSingle();
     if (existing && asString((existing as Record<string, unknown>).facebook_post_id)) {
-      return { post: null, error: "already_published" };
+      const { data: full } = await sb.from(POSTS_TABLE).select("*").eq("id", postId).maybeSingle();
+      return { post: (full as Record<string, unknown>) ?? null, error: "already_published" };
     }
     return { post: null, error: "publish_in_progress" };
   }
 
   const row = locked as Record<string, unknown>;
-  const platform = asString(row.platform);
-  if (platform === "instagram") {
+  const platform = asString(row.platform) as SocialPlatformId;
+  if (!targetsFacebook(platform)) {
     await sb.from(POSTS_TABLE).update({ publishing_started_at: null }).eq("id", postId);
     return { post: null, error: "facebook_not_applicable" };
   }
