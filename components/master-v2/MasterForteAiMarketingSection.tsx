@@ -43,9 +43,12 @@ import {
   SOCIAL_PLATFORMS,
   SOCIAL_PLATFORM_LABELS,
   SOCIAL_POST_STATUS_LABELS,
+  SOCIAL_POST_IMAGE_MODE_LABELS,
+  SOCIAL_POST_IMAGE_MODES,
   type SocialMarketingPostDto,
   type SocialMarketingPostInput,
   type SocialPlatformId,
+  type SocialPostImageModeId,
 } from "@/lib/social-marketing/social-marketing-types";
 
 const emptyInput = (): SocialMarketingPostInput => ({
@@ -57,6 +60,7 @@ const emptyInput = (): SocialMarketingPostInput => ({
   publishDate: "",
   publishTime: "",
   imageUrl: "",
+  postImageMode: "with_image",
 });
 
 function postToInput(post: SocialMarketingPostDto): SocialMarketingPostInput {
@@ -69,7 +73,40 @@ function postToInput(post: SocialMarketingPostDto): SocialMarketingPostInput {
     publishDate: post.publishDate ?? "",
     publishTime: post.publishTime ?? "",
     imageUrl: post.imageUrl ?? "",
+    postImageMode: post.postImageMode,
   };
+}
+
+function PostImageModeChoice({
+  value,
+  onChange,
+  disabled,
+  namePrefix,
+}: {
+  value: SocialPostImageModeId;
+  onChange: (mode: SocialPostImageModeId) => void;
+  disabled?: boolean;
+  namePrefix: string;
+}) {
+  return (
+    <fieldset className="space-y-2" disabled={disabled}>
+      <legend className="text-sm font-semibold text-forte-text">סוג הפוסט</legend>
+      <div className="flex flex-wrap gap-4">
+        {SOCIAL_POST_IMAGE_MODES.map((mode) => (
+          <label key={mode} className="flex items-center gap-2 cursor-pointer text-sm text-forte-text">
+            <input
+              type="radio"
+              name={`${namePrefix}-postImageMode`}
+              checked={value === mode}
+              onChange={() => onChange(mode)}
+              className="accent-forte-primary"
+            />
+            {SOCIAL_POST_IMAGE_MODE_LABELS[mode]}
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
 }
 
 function statusTone(
@@ -147,15 +184,18 @@ function MarketingPostImage({
 function PostPreview({ post }: { post: SocialMarketingPostDto }) {
   const showFb = post.platform === "facebook" || post.platform === "both";
   const showIg = post.platform === "instagram" || post.platform === "both";
+  const showImageArea = post.postImageMode !== "without_image";
   return (
     <div className="space-y-3">
-      {post.imageUrl ? (
-        <MarketingPostImage url={post.imageUrl} />
-      ) : (
-        <div className="h-24 rounded-xl border border-dashed border-forte-border flex items-center justify-center text-xs text-forte-text-secondary">
-          מקום לתמונה
-        </div>
-      )}
+      {showImageArea ? (
+        post.imageUrl ? (
+          <MarketingPostImage url={post.imageUrl} />
+        ) : (
+          <div className="h-24 rounded-xl border border-dashed border-forte-border flex items-center justify-center text-xs text-forte-text-secondary">
+            מקום לתמונה
+          </div>
+        )
+      ) : null}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
       {showFb ? (
         <div className="rounded-xl border border-forte-border bg-white p-3 shadow-sm">
@@ -204,6 +244,8 @@ export default function MasterForteAiMarketingSection() {
   const [previewPost, setPreviewPost] = useState<SocialMarketingPostDto | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SocialMarketingPostDto | null>(null);
   const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiGenerateImageMode, setAiGenerateImageMode] =
+    useState<SocialPostImageModeId>("with_image");
 
   const refreshFb = useCallback(async () => {
     const result = await fetchFacebookConnectionStatus();
@@ -256,7 +298,8 @@ export default function MasterForteAiMarketingSection() {
       bodyInstagram: form.bodyInstagram,
       publishDate: form.publishDate || null,
       publishTime: form.publishTime || null,
-      imageUrl: form.imageUrl || null,
+      imageUrl: form.postImageMode === "without_image" ? null : form.imageUrl || null,
+      postImageMode: form.postImageMode,
       visualPrompt: editing?.visualPrompt ?? null,
       generatedBy: editing?.generatedBy ?? null,
       status: editing?.status ?? "draft",
@@ -367,7 +410,7 @@ export default function MasterForteAiMarketingSection() {
     if (busy || aiGenerating) return;
     setAiGenerating(true);
     setError(null);
-    const result = await generateSocialMarketingPostsWithAi();
+    const result = await generateSocialMarketingPostsWithAi({ imageMode: aiGenerateImageMode });
     setAiGenerating(false);
     if (result.error) {
       setError(result.error);
@@ -422,17 +465,30 @@ export default function MasterForteAiMarketingSection() {
                 ניתוק
               </ForteV2SecondaryButton>
             ) : null}
-            <ForteV2SecondaryButton
-              disabled={busy || aiGenerating}
-              onClick={() => void handleGenerateWithAi()}
-            >
-              {aiGenerating ? "יוצר תוכן ותמונות..." : "צור פוסטים עם AI"}
-            </ForteV2SecondaryButton>
             <ForteV2PrimaryButton onClick={openCreate}>פוסט חדש</ForteV2PrimaryButton>
           </div>
         </div>
+        <PostImageModeChoice
+          namePrefix="ai-batch"
+          value={aiGenerateImageMode}
+          onChange={setAiGenerateImageMode}
+          disabled={busy || aiGenerating}
+        />
+        <div className="flex flex-wrap gap-2 pt-1">
+          <ForteV2SecondaryButton
+            disabled={busy || aiGenerating}
+            onClick={() => void handleGenerateWithAi()}
+          >
+            {aiGenerating
+              ? aiGenerateImageMode === "without_image"
+                ? "יוצר תוכן..."
+                : "יוצר תוכן ותמונות..."
+              : "צור פוסטים עם AI"}
+          </ForteV2SecondaryButton>
+        </div>
         <p className="text-xs text-forte-text-secondary">
-          יצירת AI שומרת 3 הצעות עם תמונה במצב ממתין לאישור. אישור ודחייה — בלבד מ«אישורים הממתינים ליהודה» למטה.
+          יצירת AI שומרת 3 הצעות במצב ממתין לאישור ({SOCIAL_POST_IMAGE_MODE_LABELS[aiGenerateImageMode]}).
+          אישור ודחייה — בלבד מ«אישורים הממתינים ליהודה» למטה.
           פרסום לפייסבוק/אינסטגרם דורש חיבור Meta תקין + אישור יהודה. לאינסטגרם חובה תמונה.
         </p>
       </div>
@@ -564,6 +620,18 @@ export default function MasterForteAiMarketingSection() {
           >
             <div className="space-y-4 text-sm">
               {formError ? <ForteV2StatusBanner tone="error">{formError}</ForteV2StatusBanner> : null}
+              <PostImageModeChoice
+                namePrefix="manual-post"
+                value={form.postImageMode}
+                onChange={(postImageMode) =>
+                  setForm((f) => ({
+                    ...f,
+                    postImageMode,
+                    imageUrl: postImageMode === "without_image" ? "" : f.imageUrl,
+                  }))
+                }
+                disabled={busy}
+              />
               <label className="block space-y-1">
                 <ForteV2FormLabel>נושא</ForteV2FormLabel>
                 <ForteV2FormInput
@@ -635,14 +703,16 @@ export default function MasterForteAiMarketingSection() {
                   />
                 </label>
               </div>
-              <label className="block space-y-1">
-                <ForteV2FormLabel>קישור לתמונה (אופציונלי)</ForteV2FormLabel>
-                <ForteV2FormInput
-                  value={form.imageUrl}
-                  onChange={(e) => setForm((f) => ({ ...f, imageUrl: e.target.value }))}
-                  placeholder="יועלה בהמשך — ניתן להדביק קישור זמני"
-                />
-              </label>
+              {form.postImageMode === "with_image" ? (
+                <label className="block space-y-1">
+                  <ForteV2FormLabel>קישור לתמונה (אופציונלי)</ForteV2FormLabel>
+                  <ForteV2FormInput
+                    value={form.imageUrl}
+                    onChange={(e) => setForm((f) => ({ ...f, imageUrl: e.target.value }))}
+                    placeholder="יועלה בהמשך — ניתן להדביק קישור זמני"
+                  />
+                </label>
+              ) : null}
               {previewFromForm ? (
                 <div>
                   <p className="text-sm font-semibold text-forte-text mb-2">תצוגה מקדימה</p>

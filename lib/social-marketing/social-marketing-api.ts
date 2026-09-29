@@ -7,6 +7,7 @@ import type {
   SocialMarketingPostAction,
   SocialMarketingPostDto,
   SocialMarketingPostInput,
+  SocialPostImageModeId,
 } from "@/lib/social-marketing/social-marketing-types";
 
 const BASE = "/forte/api/master/ai-marketing/marketing/posts";
@@ -58,14 +59,17 @@ function hebrewError(code: string): string {
   return "שגיאה. נסו שוב.";
 }
 
-export async function generateSocialMarketingPostsWithAi(): Promise<{
+export async function generateSocialMarketingPostsWithAi(options?: {
+  imageMode?: SocialPostImageModeId;
+}): Promise<{
   posts: SocialMarketingPostDto[];
   error: string | null;
 }> {
+  const imageMode = options?.imageMode ?? "with_image";
   try {
     const response = await masterApiFetch(`${BASE}/generate`, {
       method: "POST",
-      body: JSON.stringify({}),
+      body: JSON.stringify({ imageMode }),
     });
     const payload = await parseMasterApiJson<{
       posts?: SocialMarketingPostDto[];

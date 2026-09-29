@@ -3,8 +3,10 @@ import type { OpenAiMarketingPostDraft } from "@/lib/llm/openai-marketing-schema
 import {
   SOCIAL_MARKETING_APPROVER,
   SOCIAL_PLATFORMS,
+  SOCIAL_POST_IMAGE_MODES,
   SOCIAL_POST_STATUSES,
   type SocialMarketingPostAction,
+  type SocialPostImageModeId,
   type SocialMarketingPostDto,
   type SocialMarketingPostInput,
   type SocialMarketingPostMetaPayload,
@@ -63,6 +65,21 @@ function isStatus(value: string): value is SocialPostStatusId {
   return (SOCIAL_POST_STATUSES as readonly string[]).includes(value);
 }
 
+function isPostImageMode(value: string): value is SocialPostImageModeId {
+  return (SOCIAL_POST_IMAGE_MODES as readonly string[]).includes(value);
+}
+
+function parsePostImageMode(row: Record<string, unknown>): SocialPostImageModeId {
+  const column = asString(row.post_image_mode).trim();
+  if (isPostImageMode(column)) return column;
+  const meta = row.meta_payload;
+  if (meta && typeof meta === "object") {
+    const fromMeta = asString((meta as Record<string, unknown>).postImageMode).trim();
+    if (isPostImageMode(fromMeta)) return fromMeta;
+  }
+  return "with_image";
+}
+
 function parseMetaPayload(row: Record<string, unknown>): SocialMarketingPostMetaPayload {
   const raw = row.meta_payload;
   if (!raw || typeof raw !== "object") return {};
@@ -76,6 +93,9 @@ function parseMetaPayload(row: Record<string, unknown>): SocialMarketingPostMeta
     imageProvider: asString(rec.imageProvider).trim() || undefined,
     imageModel: asString(rec.imageModel).trim() || undefined,
     imageStoragePath: asString(rec.imageStoragePath).trim() || undefined,
+    postImageMode: isPostImageMode(asString(rec.postImageMode).trim())
+      ? (asString(rec.postImageMode).trim() as SocialPostImageModeId)
+      : undefined,
   };
 }
 
@@ -93,6 +113,7 @@ function mapPost(row: Record<string, unknown>): SocialMarketingPostDto {
     publishDate: asString(row.publish_date) || null,
     publishTime: asString(row.publish_time).slice(0, 5) || null,
     imageUrl: asString(row.image_url) || null,
+    postImageMode: parsePostImageMode(row),
     visualPrompt: meta.visualPrompt ?? null,
     generatedBy: meta.generatedBy ?? null,
     status: isStatus(statusRaw) ? statusRaw : "draft",
@@ -154,6 +175,7 @@ const CONTENT_FIELDS = [
   "publish_date",
   "publish_time",
   "image_url",
+  "post_image_mode",
 ] as const;
 
 function contentFieldChanged(
@@ -190,10 +212,17 @@ function parseInput(body: unknown): SocialMarketingPostInput | null {
     publishDate: asString(raw.publishDate ?? raw.publish_date).trim(),
     publishTime: asString(raw.publishTime ?? raw.publish_time).trim(),
     imageUrl: asString(raw.imageUrl ?? raw.image_url).trim(),
+    postImageMode: parsePostImageModeFromBody(raw),
   };
 }
 
+function parsePostImageModeFromBody(raw: Record<string, unknown>): SocialPostImageModeId {
+  const value = asString(raw.postImageMode ?? raw.post_image_mode).trim();
+  return isPostImageMode(value) ? value : "with_image";
+}
+
 function inputToRow(input: SocialMarketingPostInput): Record<string, unknown> {
+  const withoutImage = input.postImageMode === "without_image";
   return {
     topic: input.topic,
     target_audience: input.targetAudience,
@@ -202,7 +231,8 @@ function inputToRow(input: SocialMarketingPostInput): Record<string, unknown> {
     body_instagram: input.bodyInstagram,
     publish_date: input.publishDate || null,
     publish_time: input.publishTime ? `${input.publishTime.slice(0, 5)}:00` : null,
-    image_url: input.imageUrl || null,
+    post_image_mode: input.postImageMode,
+    image_url: withoutImage ? null : input.imageUrl || null,
     updated_at: new Date().toISOString(),
   };
 }
@@ -473,16 +503,18 @@ export async function applyJudahDecisionToSocialPostServer(
 }
 
 export type AiMarketingPersistDraft = OpenAiMarketingPostDraft & {
-  imagePublicUrl: string;
-  imageStoragePath: string;
-  imageProvider: string;
-  imageModel: string;
+  postImageMode: SocialPostImageModeId;
+  imagePublicUrl?: string;
+  imageStoragePath?: string;
+  imageProvider?: string;
+  imageModel?: string;
 };
 
 function draftToRow(
   draft: AiMarketingPersistDraft,
   generatedAt: string
 ): Record<string, unknown> {
+  const withoutImage = draft.postImageMode === "without_image";
   return {
     topic: draft.topic.trim(),
     target_audience: draft.target_audience.trim(),
@@ -491,20 +523,29 @@ function draftToRow(
     body_instagram: draft.body_instagram.trim(),
     publish_date: draft.publish_date.trim(),
     publish_time: `${draft.publish_time.trim().slice(0, 5)}:00`,
-    image_url: draft.imagePublicUrl.trim(),
+    post_image_mode: draft.postImageMode,
+    image_url: withoutImage ? null : asString(draft.imagePublicUrl).trim(),
     ...defaultNetworkPublishStatuses(draft.platform),
     status: "pending_approval",
     approved_at: null,
     approved_by: null,
-    meta_payload: {
-      generatedBy: "marketing_agent_v1",
-      visualPrompt: draft.visual_prompt.trim(),
-      generatedAt,
-      imageGenerated: true,
-      imageProvider: draft.imageProvider,
-      imageModel: draft.imageModel,
-      imageStoragePath: draft.imageStoragePath,
-    },
+    meta_payload: withoutImage
+      ? {
+          generatedBy: "marketing_agent_v1",
+          generatedAt,
+          imageGenerated: false,
+          postImageMode: "without_image",
+        }
+      : {
+          generatedBy: "marketing_agent_v1",
+          visualPrompt: draft.visual_prompt.trim(),
+          generatedAt,
+          imageGenerated: true,
+          imageProvider: draft.imageProvider,
+          imageModel: draft.imageModel,
+          imageStoragePath: draft.imageStoragePath,
+          postImageMode: "with_image",
+        },
     updated_at: generatedAt,
   };
 }
@@ -514,7 +555,8 @@ export async function persistAiMarketingBatchServer(
 ): Promise<{ posts: SocialMarketingPostDto[]; error: SocialMarketingServerError | null }> {
   if (drafts.length !== 3) return { posts: [], error: "invalid_input" };
   for (const draft of drafts) {
-    if (!draft.imagePublicUrl.trim() || !draft.imageStoragePath.trim()) {
+    if (draft.postImageMode === "without_image") continue;
+    if (!asString(draft.imagePublicUrl).trim() || !asString(draft.imageStoragePath).trim()) {
       return { posts: [], error: "invalid_input" };
     }
   }
@@ -738,6 +780,8 @@ export async function duplicateSocialMarketingPostServer(postIdRaw: string): Pro
     publish_date: row.publish_date ?? null,
     publish_time: row.publish_time ?? null,
     image_url: asString(row.image_url) || null,
+    post_image_mode: parsePostImageMode(row),
+    meta_payload: row.meta_payload ?? {},
     status: "draft",
     approved_at: null,
     approved_by: null,

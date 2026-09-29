@@ -35,6 +35,14 @@ export const SOCIAL_PLATFORM_LABELS: Record<SocialPlatformId, string> = {
 
 export const SOCIAL_MARKETING_APPROVER = "יהודה";
 
+export const SOCIAL_POST_IMAGE_MODES = ["with_image", "without_image"] as const;
+export type SocialPostImageModeId = (typeof SOCIAL_POST_IMAGE_MODES)[number];
+
+export const SOCIAL_POST_IMAGE_MODE_LABELS: Record<SocialPostImageModeId, string> = {
+  with_image: "עם תמונה",
+  without_image: "ללא תמונה",
+};
+
 export type SocialMarketingPostMetaPayload = {
   generatedBy?: string;
   visualPrompt?: string;
@@ -43,6 +51,7 @@ export type SocialMarketingPostMetaPayload = {
   imageProvider?: string;
   imageModel?: string;
   imageStoragePath?: string;
+  postImageMode?: SocialPostImageModeId;
 };
 
 export type SocialMarketingPostDto = {
@@ -55,6 +64,7 @@ export type SocialMarketingPostDto = {
   publishDate: string | null;
   publishTime: string | null;
   imageUrl: string | null;
+  postImageMode: SocialPostImageModeId;
   visualPrompt: string | null;
   generatedBy: string | null;
   status: SocialPostStatusId;
@@ -86,6 +96,7 @@ export type SocialMarketingPostInput = {
   publishDate: string;
   publishTime: string;
   imageUrl: string;
+  postImageMode: SocialPostImageModeId;
 };
 
 export type SocialMarketingPostAction =

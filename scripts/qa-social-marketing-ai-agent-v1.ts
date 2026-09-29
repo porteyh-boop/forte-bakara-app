@@ -50,6 +50,20 @@ const sample = (i: number): OpenAiMarketingPostDraft => ({
 });
 
 assert(validateMarketingPostDrafts([sample(1), sample(2), sample(3)]), "validates 3 distinct posts");
+const textOnly = (i: number): OpenAiMarketingPostDraft => ({
+  ...sample(i),
+  visual_prompt: "",
+});
+assert(
+  validateMarketingPostDrafts([textOnly(1), textOnly(2), textOnly(3)], {
+    imageMode: "without_image",
+  }),
+  "without_image accepts empty visual_prompt"
+);
+assert(
+  !validateMarketingPostDrafts([textOnly(1), textOnly(2), textOnly(3)]),
+  "with_image still requires visual_prompt"
+);
 assert(!validateMarketingPostDrafts([sample(1), sample(1), sample(3)]), "rejects duplicate topics");
 assert(!validateMarketingPostDrafts([sample(1), sample(2)]), "rejects count != 3");
 assert(
@@ -92,8 +106,17 @@ assert(patchSrc.includes("send_social_post") && patchSrc.includes("applyJudahDec
 assert(serverSrc.includes("approval_via_dashboard"), "blocks parallel approve in post API");
 assert(serverSrc.includes("persistAiMarketingBatchServer"), "batch persist helper");
 assert(serverSrc.includes("imageGenerated: true"), "meta marks image generated");
-assert(serverSrc.includes("image_url: draft.imagePublicUrl"), "stable image_url on AI posts");
+assert(serverSrc.includes("post_image_mode"), "post_image_mode persisted on rows");
+assert(serverSrc.includes("imageGenerated: false"), "without_image meta skips image flag");
+assert(serverSrc.includes("image_url: draft.imagePublicUrl") || serverSrc.includes("imagePublicUrl"), "stable image_url on AI posts with image");
 assert(agentSrc.includes("generateMarketingImagePngServer"), "agent generates images before persist");
+assert(agentSrc.includes('imageMode === "without_image"'), "agent skips image pipeline for text-only");
+assert(generateRoute.includes("without_image"), "generate route accepts without_image");
+assert(ui.includes("PostImageModeChoice"), "UI post image mode choice");
+assert(
+  ui.includes("SOCIAL_POST_IMAGE_MODE_LABELS") || ui.includes("without_image"),
+  "UI labels without_image via mode constants"
+);
 assert(agentSrc.includes("cleanupOrphanMarketingImagesServer"), "orphan cleanup on failure");
 assert(imageSrc.includes("/v1/images/generations"), "OpenAI Images API server-side");
 assert(!/"response_format"/.test(imageSrc), "images request has no response_format");

@@ -1,7 +1,10 @@
 import { requestMarketingPostsBatchFromOpenAi } from "@/lib/llm/openai-marketing-client";
 import type { OpenAiMarketingPostDraft } from "@/lib/llm/openai-marketing-schema";
 import { isOpenAiConfigured } from "@/lib/llm/openai-config";
-import type { SocialMarketingPostDto } from "@/lib/social-marketing/social-marketing-types";
+import type {
+  SocialMarketingPostDto,
+  SocialPostImageModeId,
+} from "@/lib/social-marketing/social-marketing-types";
 import {
   acquireMarketingGenerateLock,
   releaseMarketingGenerateLock,
@@ -95,10 +98,14 @@ function textPassesSafety(text: string): boolean {
   return true;
 }
 
+export type MarketingPostImageMode = SocialPostImageModeId;
+
 export function validateMarketingPostDrafts(
-  drafts: OpenAiMarketingPostDraft[]
+  drafts: OpenAiMarketingPostDraft[],
+  options?: { imageMode?: MarketingPostImageMode }
 ): boolean {
   if (drafts.length !== 3) return false;
+  const imageMode = options?.imageMode ?? "with_image";
 
   const topics = new Set<string>();
   for (const draft of drafts) {
@@ -109,7 +116,7 @@ export function validateMarketingPostDrafts(
     topics.add(norm);
 
     if (!draft.target_audience?.trim()) return false;
-    if (!draft.visual_prompt?.trim()) return false;
+    if (imageMode === "with_image" && !draft.visual_prompt?.trim()) return false;
     if (!isValidDate(draft.publish_date?.trim())) return false;
     if (!isValidTime(draft.publish_time?.trim())) return false;
 
@@ -128,7 +135,10 @@ export function validateMarketingPostDrafts(
   return true;
 }
 
-function buildUserPrompt(recent: SocialMarketingPostDto[]): string {
+function buildUserPrompt(
+  recent: SocialMarketingPostDto[],
+  imageMode: MarketingPostImageMode
+): string {
   const lines: string[] = [
     "צור 3 הצעות פוסט שונות לוועדי בתים / נציגויות / בעלי דירות ונכסים בבניינים משותפים.",
     "",
@@ -137,6 +147,13 @@ function buildUserPrompt(recent: SocialMarketingPostDto[]): string {
     "אסור בשום שדה: FORTE, Forte, forte, פורטה, חברות ניהול, חברת ניהול.",
     "",
   ];
+
+  if (imageMode === "without_image") {
+    lines.push(
+      "סוג הפוסט: ללא תמונה — אל תיצור תמונה. השאר visual_prompt כמחרוזת ריקה בכל פוסט.",
+      ""
+    );
+  }
 
   if (recent.length > 0) {
     lines.push("פוסטים קודמים — אל תחזור על הנושאים והניסוחים:");
@@ -164,6 +181,7 @@ const defaultGenerator: MarketingBatchGenerator = async ({ systemPrompt, userPro
 
 export async function generateMarketingPostsBatchServer(options?: {
   generator?: MarketingBatchGenerator;
+  imageMode?: MarketingPostImageMode;
 }): Promise<{
   posts: SocialMarketingPostDto[];
   error: MarketingAgentGenerateError | null;
@@ -191,13 +209,14 @@ export async function generateMarketingPostsBatchServer(options?: {
   }
 
   let outcome: "completed" | "failed" = "failed";
+  const imageMode = options?.imageMode ?? "with_image";
   try {
     const listed = await listSocialMarketingPostsServer();
     if (listed.error) {
       return { posts: [], error: "supabase_service_unconfigured" };
     }
 
-    const userPrompt = buildUserPrompt(listed.posts);
+    const userPrompt = buildUserPrompt(listed.posts, imageMode);
     const generator = options?.generator ?? defaultGenerator;
     const llm = await generator({ systemPrompt: SYSTEM_PROMPT, userPrompt });
 
@@ -211,43 +230,53 @@ export async function generateMarketingPostsBatchServer(options?: {
       };
     }
 
-    if (!validateMarketingPostDrafts(llm.posts)) {
+    if (!validateMarketingPostDrafts(llm.posts, { imageMode })) {
       return { posts: [], error: "invalid_llm_response" };
     }
 
     const uploadedPaths: string[] = [];
     const persistDrafts: AiMarketingPersistDraft[] = [];
     try {
-      for (const draft of llm.posts) {
-        const generated = await generateMarketingImagePngServer({
-          visualPromptHe: draft.visual_prompt,
-        });
-        if (generated.error === "openai_not_configured") {
-          return { posts: [], error: "openai_not_configured" };
+      if (imageMode === "without_image") {
+        for (const draft of llm.posts) {
+          persistDrafts.push({
+            ...draft,
+            postImageMode: "without_image",
+          });
         }
-        if (generated.error || !generated.pngBuffer) {
-          throw new Error("image_generation_failed");
-        }
+      } else {
+        for (const draft of llm.posts) {
+          const generated = await generateMarketingImagePngServer({
+            visualPromptHe: draft.visual_prompt,
+          });
+          if (generated.error === "openai_not_configured") {
+            return { posts: [], error: "openai_not_configured" };
+          }
+          if (generated.error || !generated.pngBuffer) {
+            throw new Error("image_generation_failed");
+          }
 
-        const uploaded = await uploadMarketingSocialImageServer({
-          pngBuffer: generated.pngBuffer,
-        });
-        if (uploaded.error || !uploaded.publicUrl) {
-          throw new Error(
-            uploaded.error === "supabase_service_unconfigured"
-              ? "supabase_unreachable"
-              : "image_upload_failed"
-          );
-        }
+          const uploaded = await uploadMarketingSocialImageServer({
+            pngBuffer: generated.pngBuffer,
+          });
+          if (uploaded.error || !uploaded.publicUrl) {
+            throw new Error(
+              uploaded.error === "supabase_service_unconfigured"
+                ? "supabase_unreachable"
+                : "image_upload_failed"
+            );
+          }
 
-        uploadedPaths.push(uploaded.storagePath);
-        persistDrafts.push({
-          ...draft,
-          imagePublicUrl: uploaded.publicUrl,
-          imageStoragePath: uploaded.storagePath,
-          imageProvider: marketingImageProviderLabel(),
-          imageModel: marketingImageModelLabel(),
-        });
+          uploadedPaths.push(uploaded.storagePath);
+          persistDrafts.push({
+            ...draft,
+            postImageMode: "with_image",
+            imagePublicUrl: uploaded.publicUrl,
+            imageStoragePath: uploaded.storagePath,
+            imageProvider: marketingImageProviderLabel(),
+            imageModel: marketingImageModelLabel(),
+          });
+        }
       }
     } catch (err) {
       await cleanupOrphanMarketingImagesServer(uploadedPaths);

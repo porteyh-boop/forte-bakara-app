@@ -36,7 +36,16 @@ export async function POST(request: NextRequest) {
     return serviceUnavailableResponse("supabase_service_unconfigured");
   }
 
-  const result = await generateMarketingPostsBatchServer();
+  let imageMode: "with_image" | "without_image" = "with_image";
+  try {
+    const body = (await request.json()) as Record<string, unknown> | null;
+    const raw = body?.imageMode ?? body?.postImageMode;
+    if (raw === "without_image") imageMode = "without_image";
+  } catch {
+    /* empty body → default with_image */
+  }
+
+  const result = await generateMarketingPostsBatchServer({ imageMode });
   if (result.error) {
     return NextResponse.json(
       { posts: [], error: result.error },
