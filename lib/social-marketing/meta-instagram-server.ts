@@ -1,6 +1,7 @@
 import { decryptSecret } from "@/lib/social-marketing/meta-facebook-crypto";
 import { MetaGraphApiError, type MetaGraphFetch } from "@/lib/social-marketing/meta-facebook-graph";
-import { loadFacebookConnectionRow } from "@/lib/social-marketing/meta-facebook-server";
+import { loadPrimaryInstagramConnectionRowServer } from "@/lib/social-marketing/social-facebook-pages-server";
+import { normalizePublishTargets } from "@/lib/social-marketing/social-publish-targets";
 import { publishApprovedInstagramPostContent } from "@/lib/social-marketing/meta-instagram-publish";
 import { recordAiActionServer } from "@/lib/forte-ai-marketing-server";
 import {
@@ -67,7 +68,13 @@ export async function publishSocialPostToInstagramServer(
   const sb = getSupabaseServiceClient();
   if (!sb) return { post: null, error: "supabase_service_unconfigured" };
 
-  const connection = await loadFacebookConnectionRow();
+  const { data: postPeek } = await sb.from(POSTS_TABLE).select("publish_targets").eq("id", postId).maybeSingle();
+  const targets = normalizePublishTargets((postPeek as Record<string, unknown> | null)?.publish_targets);
+  if (!targets.instagram) {
+    return { post: null, error: "instagram_not_applicable" };
+  }
+
+  const connection = await loadPrimaryInstagramConnectionRowServer();
   if (!connection) return { post: null, error: "not_connected" };
 
   const igUserId = asString(connection.instagram_business_account_id).trim();

@@ -22,6 +22,10 @@ function originForbiddenResponse(): NextResponse {
   return NextResponse.json({ error: "origin_not_allowed" }, { status: 403 });
 }
 
+function asString(value: unknown): string {
+  return typeof value === "string" ? value : value == null ? "" : String(value);
+}
+
 function errorStatus(error: string | null): number {
   if (error === "not_found") return 404;
   if (error === "invalid_input" || error === "invalid_status") return 400;
@@ -56,8 +60,17 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   const pendingApprovalCopyEdit =
     bodyRec?.pendingApprovalCopyEdit === true || bodyRec?.editPendingApprovalCopy === true;
 
+  const facebookConnectionId =
+    bodyRec && "facebookConnectionId" in bodyRec
+      ? asString(bodyRec.facebookConnectionId)
+      : bodyRec && "facebook_connection_id" in bodyRec
+        ? asString(bodyRec.facebook_connection_id)
+        : "";
+
   const result = action
-    ? await runSocialMarketingPostActionServer(postId, action)
+    ? await runSocialMarketingPostActionServer(postId, action, {
+        facebookConnectionId: facebookConnectionId.trim() || undefined,
+      })
     : pendingApprovalCopyEdit
       ? await updateSocialMarketingPendingApprovalCopyServer(postId, bodyRec)
       : await updateSocialMarketingPostServer(postId, body);

@@ -26,12 +26,12 @@ import {
 } from "@/lib/social-marketing/social-marketing-api";
 import type { FacebookConnectionStatusDto } from "@/lib/social-marketing/meta-facebook-server";
 import {
-  disconnectFacebookPage,
   fetchFacebookConnectionStatus,
   listFacebookPagesForSelection,
   selectFacebookPage,
   startFacebookConnectUrl,
 } from "@/lib/social-marketing/meta-facebook-api";
+import { FacebookConnectedPagesManager } from "@/components/master-v2/FacebookConnectedPagesManager";
 import { SocialPostPublishStatusPanel } from "@/components/master-v2/SocialPostPublishStatusPanel";
 import {
   canPublishToFacebookNetwork,
@@ -50,6 +50,20 @@ import {
   type SocialPlatformId,
   type SocialPostImageModeId,
 } from "@/lib/social-marketing/social-marketing-types";
+import type { SocialPublishTargets } from "@/lib/social-marketing/social-publish-targets";
+
+function defaultPublishTargets(
+  fb: FacebookConnectionStatusDto | null,
+  platform: SocialPlatformId
+): SocialPublishTargets {
+  const ids = (fb?.pages ?? [])
+    .filter((p) => p.connectionStatus === "connected")
+    .map((p) => p.id);
+  return {
+    facebookConnectionIds: targetsFacebook(platform) ? ids : [],
+    instagram: targetsInstagram(platform) && Boolean(fb?.instagramConnected),
+  };
+}
 
 const emptyInput = (): SocialMarketingPostInput => ({
   topic: "",
@@ -74,7 +88,70 @@ function postToInput(post: SocialMarketingPostDto): SocialMarketingPostInput {
     publishTime: post.publishTime ?? "",
     imageUrl: post.imageUrl ?? "",
     postImageMode: post.postImageMode,
+    publishTargets: post.publishTargets,
   };
+}
+
+function PostPublishTargetsChoice({
+  fbStatus,
+  platform,
+  value,
+  onChange,
+  disabled,
+}: {
+  fbStatus: FacebookConnectionStatusDto | null;
+  platform: SocialPlatformId;
+  value: SocialPublishTargets;
+  onChange: (next: SocialPublishTargets) => void;
+  disabled?: boolean;
+}) {
+  const pages = (fbStatus?.pages ?? []).filter((p) => p.connectionStatus === "connected");
+  const showIg = targetsInstagram(platform) && fbStatus?.instagramConnected;
+  if (pages.length === 0 && !showIg) {
+    return (
+      <p className="text-xs text-forte-text-secondary">חברו דפי Facebook כדי לבחור יעדי פרסום.</p>
+    );
+  }
+  return (
+    <fieldset className="space-y-2" disabled={disabled}>
+      <legend className="text-sm font-semibold text-forte-text">יעדי פרסום</legend>
+      <div className="space-y-2">
+        {pages.map((page) => {
+          const checked = value.facebookConnectionIds.includes(page.id);
+          return (
+            <label
+              key={page.id}
+              className="flex items-center gap-2 cursor-pointer text-sm text-forte-text"
+            >
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={() => {
+                  const next = checked
+                    ? value.facebookConnectionIds.filter((id) => id !== page.id)
+                    : [...value.facebookConnectionIds, page.id];
+                  onChange({ ...value, facebookConnectionIds: next });
+                }}
+                className="accent-forte-primary"
+              />
+              Facebook – {page.displayLabel}
+            </label>
+          );
+        })}
+        {showIg ? (
+          <label className="flex items-center gap-2 cursor-pointer text-sm text-forte-text">
+            <input
+              type="checkbox"
+              checked={value.instagram}
+              onChange={() => onChange({ ...value, instagram: !value.instagram })}
+              className="accent-forte-primary"
+            />
+            Instagram
+          </label>
+        ) : null}
+      </div>
+    </fieldset>
+  );
 }
 
 function PostImageModeChoice({
@@ -318,14 +395,24 @@ export default function MasterForteAiMarketingSection() {
       instagramPermalink: editing?.instagramPermalink ?? null,
       instagramPublishedAt: editing?.instagramPublishedAt ?? null,
       instagramPublishError: editing?.instagramPublishError ?? null,
+      publishTargets:
+        form.publishTargets ?? defaultPublishTargets(fbStatus, form.platform),
+      facebookPublications: editing?.facebookPublications ?? [],
+      instagramTargetSelected:
+        form.publishTargets?.instagram ??
+        defaultPublishTargets(fbStatus, form.platform).instagram,
       createdAt: editing?.createdAt ?? "",
       updatedAt: editing?.updatedAt ?? "",
     };
-  }, [form, editing]);
+  }, [form, editing, fbStatus]);
 
   function openCreate() {
     setEditing(null);
-    setForm(emptyInput());
+    const base = emptyInput();
+    setForm({
+      ...base,
+      publishTargets: defaultPublishTargets(fbStatus, base.platform),
+    });
     setFormError(null);
     setEditorOpen(true);
   }
@@ -351,9 +438,14 @@ export default function MasterForteAiMarketingSection() {
     if (busy) return;
     setBusy(true);
     setFormError(null);
+    const payload: SocialMarketingPostInput = {
+      ...form,
+      publishTargets:
+        form.publishTargets ?? defaultPublishTargets(fbStatus, form.platform),
+    };
     const result = editing
-      ? await updateSocialMarketingPost(editing.id, form)
-      : await createSocialMarketingPost(form);
+      ? await updateSocialMarketingPost(editing.id, payload)
+      : await createSocialMarketingPost(payload);
     setBusy(false);
     if (result.error || !result.post) {
       setFormError(result.error ?? "השמירה נכשלה.");
@@ -364,10 +456,14 @@ export default function MasterForteAiMarketingSection() {
     setEditorOpen(false);
   }
 
-  async function runAction(post: SocialMarketingPostDto, action: Parameters<typeof runSocialMarketingPostAction>[1]) {
+  async function runAction(
+    post: SocialMarketingPostDto,
+    action: Parameters<typeof runSocialMarketingPostAction>[1],
+    options?: { facebookConnectionId?: string }
+  ) {
     if (busy) return;
     setBusy(true);
-    const result = await runSocialMarketingPostAction(post.id, action);
+    const result = await runSocialMarketingPostAction(post.id, action, options);
     setBusy(false);
     if (result.error || !result.post) {
       setError(result.error);
@@ -436,35 +532,23 @@ export default function MasterForteAiMarketingSection() {
     <ForteV2TableCard title="שיווק — רשתות חברתיות">
       <div className="rounded-xl border border-forte-border bg-forte-background/50 p-3 mb-4 space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <p className="text-sm font-semibold text-forte-text">חיבור פייסבוק</p>
-            <p className="text-xs text-forte-text-secondary mt-1">
-              {fbStatus?.connected
-                ? `מחובר לדף: ${fbStatus.pageName} (מזהה ${fbStatus.pageId})${
-                    fbStatus.instagramConnected
-                      ? ` · Instagram: @${fbStatus.instagramUsername ?? fbStatus.instagramBusinessAccountId}`
-                      : " · Instagram: לא זוהה — בדקו קישור ב-Meta"
-                  }`
-                : "לא מחובר לדף עסקי"}
-              {fbStatus?.connected && fbStatus.tokenValid === false
-                ? " · יש להתחבר מחדש"
-                : fbStatus?.connected && fbStatus.tokenValid
-                  ? " · חיבור תקין"
-                  : ""}
-            </p>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-forte-text">חיבור רשתות חברתיות (Meta)</p>
+            {fbStatus?.pages && fbStatus.pages.length > 0 ? (
+              <FacebookConnectedPagesManager
+                fbStatus={fbStatus}
+                busy={busy}
+                onStatusChange={setFbStatus}
+                onError={setError}
+              />
+            ) : (
+              <p className="text-xs text-forte-text-secondary mt-1">לא מחובר לדפי Facebook</p>
+            )}
           </div>
           <div className="flex flex-wrap gap-2">
             <ForteV2SecondaryButton onClick={() => void connectFacebook()}>
-              חיבור לפייסבוק
+              {fbStatus?.connected ? "חיבור דף נוסף" : "חיבור לפייסבוק"}
             </ForteV2SecondaryButton>
-            {fbStatus?.connected ? (
-              <ForteV2SecondaryButton
-                disabled={busy}
-                onClick={() => void disconnectFacebookPage().then(() => refreshFb())}
-              >
-                ניתוק
-              </ForteV2SecondaryButton>
-            ) : null}
             <ForteV2PrimaryButton onClick={openCreate}>פוסט חדש</ForteV2PrimaryButton>
           </div>
         </div>
@@ -530,10 +614,8 @@ export default function MasterForteAiMarketingSection() {
                 <SocialPostPublishStatusPanel
                   post={post}
                   retryDisabled={busy}
-                  onRetryFacebook={
-                    canPublishToFacebook(post, fbStatus)
-                      ? () => void runAction(post, "publish_facebook")
-                      : undefined
+                  onRetryFacebookPage={(connectionId) =>
+                    void runAction(post, "publish_facebook_page", { facebookConnectionId: connectionId })
                   }
                   onRetryInstagram={
                     canPublishToInstagram(post, fbStatus)
@@ -632,6 +714,13 @@ export default function MasterForteAiMarketingSection() {
                 }
                 disabled={busy}
               />
+              <PostPublishTargetsChoice
+                fbStatus={fbStatus}
+                platform={form.platform}
+                value={form.publishTargets ?? defaultPublishTargets(fbStatus, form.platform)}
+                onChange={(publishTargets) => setForm((f) => ({ ...f, publishTargets }))}
+                disabled={busy}
+              />
               <label className="block space-y-1">
                 <ForteV2FormLabel>נושא</ForteV2FormLabel>
                 <ForteV2FormInput
@@ -651,12 +740,14 @@ export default function MasterForteAiMarketingSection() {
                 <select
                   className="fv2-input w-full"
                   value={form.platform}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    const platform = e.target.value as SocialPlatformId;
                     setForm((f) => ({
                       ...f,
-                      platform: e.target.value as SocialPlatformId,
-                    }))
-                  }
+                      platform,
+                      publishTargets: defaultPublishTargets(fbStatus, platform),
+                    }));
+                  }}
                 >
                   {SOCIAL_PLATFORMS.map((p) => (
                     <option key={p} value={p}>

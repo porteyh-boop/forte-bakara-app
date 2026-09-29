@@ -118,8 +118,10 @@ export function canPublishToInstagramNetwork(post: Pick<
   | "bodyInstagram"
   | "instagramMediaId"
   | "instagramPublishStatus"
+  | "instagramTargetSelected"
 >): boolean {
   if (!targetsInstagram(post.platform)) return false;
+  if (post.instagramTargetSelected === false) return false;
   if (post.instagramMediaId?.trim()) return false;
   const igStatus = resolveInstagramPublishStatusFromRow({
     platform: post.platform,
@@ -159,9 +161,26 @@ export function isPostFullyPublishedOnAllTargets(post: Pick<
 
 export function canPublishToFacebookNetwork(post: Pick<
   SocialMarketingPostDto,
-  "platform" | "status" | "facebookPostId" | "facebookPublishStatus"
+  | "platform"
+  | "status"
+  | "facebookPostId"
+  | "facebookPublishStatus"
+  | "facebookPublications"
+  | "publishTargets"
 >): boolean {
   if (!targetsFacebook(post.platform)) return false;
+  if (!["approved", "scheduled", "ready_to_publish", "failed"].includes(post.status)) {
+    return false;
+  }
+  const pubs = post.facebookPublications ?? [];
+  if (pubs.length > 0) {
+    const selected = new Set(post.publishTargets?.facebookConnectionIds ?? []);
+    return pubs.some(
+      (p) =>
+        selected.has(p.connectionId) &&
+        (p.publishStatus === "pending" || p.publishStatus === "failed")
+    );
+  }
   if (post.facebookPostId?.trim()) return false;
   const fbStatus = resolveFacebookPublishStatusFromRow({
     platform: post.platform,
@@ -169,7 +188,21 @@ export function canPublishToFacebookNetwork(post: Pick<
     facebookPublishStatus: post.facebookPublishStatus ?? null,
   });
   if (fbStatus === "published") return false;
-  return ["approved", "scheduled", "ready_to_publish", "failed"].includes(post.status);
+  return true;
+}
+
+export function canRetryFacebookPublication(
+  pub: Pick<
+    SocialMarketingPostDto["facebookPublications"][number],
+    "publishStatus" | "connectionId"
+  >,
+  post: Pick<SocialMarketingPostDto, "publishTargets" | "status">
+): boolean {
+  if (!["approved", "scheduled", "ready_to_publish", "failed"].includes(post.status)) {
+    return false;
+  }
+  if (pub.publishStatus !== "failed") return false;
+  return (post.publishTargets?.facebookConnectionIds ?? []).includes(pub.connectionId);
 }
 
 export function formatActualPublishDateTimeHe(iso: string | null | undefined): string {

@@ -33,6 +33,11 @@ function hebrewMetaError(code: string): string {
   }
   if (code === "oauth_failed") return "החיבור לפייסבוק נכשל. נסו שוב.";
   if (code === "invalid_state") return "ההתחברות לפייסבוק פגה. התחילו מחדש.";
+  if (code === "invalid_input") return "נתונים לא תקינים — בדקו את שם התצוגה.";
+  if (code === "no_instagram_on_page") {
+    return "לדף זה אין חשבון Instagram Business מקושר ב-Meta.";
+  }
+  if (code === "not_found") return "החיבור לדף לא נמצא.";
   return "שגיאה בחיבור פייסבוק.";
 }
 
@@ -97,9 +102,37 @@ export async function selectFacebookPage(pageId: string): Promise<{
   }
 }
 
-export async function disconnectFacebookPage(): Promise<{ error: string | null }> {
+export async function patchFacebookConnection(
+  connectionId: string,
+  body: { displayLabel?: string; setPrimaryForInstagram?: boolean }
+): Promise<{ status: FacebookConnectionStatusDto | null; error: string | null }> {
   try {
-    const response = await masterApiFetch(`${BASE}/disconnect`, { method: "DELETE" });
+    const response = await masterApiFetch(
+      `${BASE}/connections/${encodeURIComponent(connectionId)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      }
+    );
+    const payload = await parseMasterApiJson<{
+      status?: FacebookConnectionStatusDto;
+      error?: string;
+    }>(response);
+    if (!response.ok) {
+      return { status: null, error: hebrewMetaError(parseMasterApiError(payload, response.status)) };
+    }
+    return { status: payload?.status ?? null, error: null };
+  } catch {
+    return { status: null, error: "עדכון החיבור נכשל." };
+  }
+}
+
+export async function disconnectFacebookPage(connectionId?: string): Promise<{ error: string | null }> {
+  try {
+    const qs = connectionId?.trim()
+      ? `?connectionId=${encodeURIComponent(connectionId.trim())}`
+      : "";
+    const response = await masterApiFetch(`${BASE}/disconnect${qs}`, { method: "DELETE" });
     const payload = await parseMasterApiJson<{ error?: string }>(response);
     if (!response.ok) {
       return { error: hebrewMetaError(parseMasterApiError(payload, response.status)) };

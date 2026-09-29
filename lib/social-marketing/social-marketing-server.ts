@@ -7,12 +7,25 @@ import {
   SOCIAL_POST_STATUSES,
   type SocialMarketingPostAction,
   type SocialPostImageModeId,
+  type SocialMarketingFacebookPublicationDto,
   type SocialMarketingPostDto,
   type SocialMarketingPostInput,
   type SocialMarketingPostMetaPayload,
   type SocialPlatformId,
   type SocialPostStatusId,
 } from "@/lib/social-marketing/social-marketing-types";
+import {
+  applyPublishTargetsToPostRowServer,
+  ensurePostHasDefaultPublishTargetsServer,
+  loadFacebookPublicationsForPostIdsServer,
+  resolveDefaultPublishTargetsForPostServer,
+} from "@/lib/social-marketing/social-facebook-pages-server";
+import {
+  normalizePublishTargets,
+  parsePublishTargetsFromBody,
+  publishTargetsToJson,
+  type SocialPublishTargets,
+} from "@/lib/social-marketing/social-publish-targets";
 import { publishSocialPostToFacebookServer } from "@/lib/social-marketing/meta-facebook-server";
 import { publishSocialPostToInstagramServer } from "@/lib/social-marketing/meta-instagram-server";
 import {
@@ -99,10 +112,14 @@ function parseMetaPayload(row: Record<string, unknown>): SocialMarketingPostMeta
   };
 }
 
-function mapPost(row: Record<string, unknown>): SocialMarketingPostDto {
+function mapPost(
+  row: Record<string, unknown>,
+  facebookPublications: SocialMarketingFacebookPublicationDto[] = []
+): SocialMarketingPostDto {
   const meta = parseMetaPayload(row);
   const platformRaw = asString(row.platform);
   const statusRaw = asString(row.status);
+  const publishTargets = normalizePublishTargets(row.publish_targets);
   return {
     id: asString(row.id),
     topic: asString(row.topic),
@@ -147,9 +164,18 @@ function mapPost(row: Record<string, unknown>): SocialMarketingPostDto {
     instagramPermalink: asString(row.instagram_permalink) || null,
     instagramPublishedAt: asString(row.instagram_published_at) || null,
     instagramPublishError: asString(row.instagram_publish_error) || null,
+    publishTargets,
+    facebookPublications,
+    instagramTargetSelected: publishTargets.instagram,
     createdAt: asString(row.created_at),
     updatedAt: asString(row.updated_at),
   };
+}
+
+async function hydratePostDto(row: Record<string, unknown>): Promise<SocialMarketingPostDto> {
+  const postId = asString(row.id);
+  const pubMap = await loadFacebookPublicationsForPostIdsServer([postId]);
+  return mapPost(row, pubMap.get(postId) ?? []);
 }
 
 function defaultNetworkPublishStatuses(platform: SocialPlatformId): {
@@ -176,6 +202,7 @@ const CONTENT_FIELDS = [
   "publish_time",
   "image_url",
   "post_image_mode",
+  "publish_targets",
 ] as const;
 
 function contentFieldChanged(
@@ -186,6 +213,11 @@ function contentFieldChanged(
     if (key in patch && asString(patch[key]) !== asString(row[key])) {
       return true;
     }
+  }
+  if ("publish_targets" in patch) {
+    const before = JSON.stringify(normalizePublishTargets(row.publish_targets));
+    const after = JSON.stringify(normalizePublishTargets(patch.publish_targets));
+    if (before !== after) return true;
   }
   return false;
 }
@@ -213,6 +245,7 @@ function parseInput(body: unknown): SocialMarketingPostInput | null {
     publishTime: asString(raw.publishTime ?? raw.publish_time).trim(),
     imageUrl: asString(raw.imageUrl ?? raw.image_url).trim(),
     postImageMode: parsePostImageModeFromBody(raw),
+    publishTargets: parsePublishTargetsFromBody(raw) ?? undefined,
   };
 }
 
@@ -259,8 +292,12 @@ export async function listSocialMarketingPostsServer(): Promise<{
     .order("updated_at", { ascending: false });
 
   if (error) return { posts: [], error: "save_failed" };
+  const rows = (data ?? []) as Record<string, unknown>[];
+  const pubMap = await loadFacebookPublicationsForPostIdsServer(
+    rows.map((r) => asString(r.id)).filter(Boolean)
+  );
   return {
-    posts: (data ?? []).map((r) => mapPost(r as Record<string, unknown>)),
+    posts: rows.map((r) => mapPost(r, pubMap.get(asString(r.id)) ?? [])),
     error: null,
   };
 }
@@ -279,8 +316,12 @@ export async function createSocialMarketingPostServer(body: unknown): Promise<{
   const sb = getSupabaseServiceClient();
   if (!sb) return { post: null, error: "supabase_service_unconfigured" };
 
+  const defaultTargets = await resolveDefaultPublishTargetsForPostServer(input.platform);
+  const targets: SocialPublishTargets = input.publishTargets ?? defaultTargets;
+
   const row = {
     ...inputToRow(input),
+    publish_targets: publishTargetsToJson(targets),
     ...defaultNetworkPublishStatuses(input.platform),
     status: "draft",
     approved_at: null,
@@ -290,7 +331,13 @@ export async function createSocialMarketingPostServer(body: unknown): Promise<{
   const { data, error } = await sb.from(POSTS_TABLE).insert(row).select("*").maybeSingle();
   if (error || !data) return { post: null, error: "save_failed" };
 
-  const post = mapPost(data as Record<string, unknown>);
+  await applyPublishTargetsToPostRowServer(
+    asString((data as Record<string, unknown>).id),
+    targets,
+    input.platform
+  );
+
+  const post = await hydratePostDto(data as Record<string, unknown>);
   await recordAiActionServer({
     agentKey: "marketing",
     actionType: "social_post_draft_created",
@@ -327,6 +374,9 @@ export async function updateSocialMarketingPostServer(
   if (!existing) return { post: null, error: "not_found" };
 
   const patch = inputToRow(input);
+  if (input.publishTargets) {
+    patch.publish_targets = publishTargetsToJson(input.publishTargets);
+  }
   const status = asString((existing as Record<string, unknown>).status);
   if (contentFieldChanged(existing as Record<string, unknown>, patch)) {
     patch.content_version = (Number((existing as Record<string, unknown>).content_version) || 1) + 1;
@@ -346,7 +396,15 @@ export async function updateSocialMarketingPostServer(
     .maybeSingle();
 
   if (error || !data) return { post: null, error: "save_failed" };
-  return { post: mapPost(data as Record<string, unknown>), error: null };
+  if (input.publishTargets) {
+    const platform = asString((data as Record<string, unknown>).platform) as SocialPlatformId;
+    await applyPublishTargetsToPostRowServer(
+      postId,
+      input.publishTargets,
+      isPlatform(platform) ? platform : "facebook"
+    );
+  }
+  return { post: await hydratePostDto(data as Record<string, unknown>), error: null };
 }
 
 /** Judah edits copy before approval — no OpenAI, no image change, stays pending_approval. */
@@ -419,7 +477,7 @@ export async function updateSocialMarketingPendingApprovalCopyServer(
     .maybeSingle();
 
   if (error || !data) return { post: null, error: "save_failed" };
-  return { post: mapPost(data as Record<string, unknown>), error: null };
+  return { post: await hydratePostDto(data as Record<string, unknown>), error: null };
 }
 
 async function loadRow(
@@ -484,7 +542,7 @@ async function applySocialPostJudahDecisionInternal(
     .maybeSingle();
 
   if (error || !data) return { post: null, error: "save_failed" };
-  return { post: mapPost(data as Record<string, unknown>), error: null };
+  return { post: await hydratePostDto(data as Record<string, unknown>), error: null };
 }
 
 /** Sync social post when יהודה approves/rejects from dashboard (send_social_post). */
@@ -578,7 +636,17 @@ export async function persistAiMarketingBatchServer(
         .select("*")
         .maybeSingle();
       if (error || !data) throw new Error("insert_failed");
-      const post = mapPost(data as Record<string, unknown>);
+      const row = data as Record<string, unknown>;
+      const platform = asString(row.platform) as SocialPlatformId;
+      const targets = await resolveDefaultPublishTargetsForPostServer(
+        isPlatform(platform) ? platform : "facebook"
+      );
+      await applyPublishTargetsToPostRowServer(
+        asString(row.id),
+        targets,
+        isPlatform(platform) ? platform : "facebook"
+      );
+      const post = await hydratePostDto(row);
       insertedIds.push(post.id);
       savedPosts.push(post);
     }
@@ -613,7 +681,8 @@ export async function cleanupOrphanMarketingImagesServer(
 
 export async function runSocialMarketingPostActionServer(
   postIdRaw: string,
-  actionRaw: unknown
+  actionRaw: unknown,
+  options?: { facebookConnectionId?: string }
 ): Promise<{ post: SocialMarketingPostDto | null; error: SocialMarketingServerError | null }> {
   const postId = asString(postIdRaw).trim();
   const action = asString(actionRaw).trim() as SocialMarketingPostAction;
@@ -624,6 +693,7 @@ export async function runSocialMarketingPostActionServer(
     "schedule",
     "mark_ready_to_publish",
     "publish_facebook",
+    "publish_facebook_page",
     "publish_instagram",
     "publish_both",
     "mark_failed",
@@ -632,12 +702,22 @@ export async function runSocialMarketingPostActionServer(
     return { post: null, error: "invalid_input" };
   }
 
-  if (action === "publish_facebook") {
-    const published = await publishSocialPostToFacebookServer(postId);
+  const fbOnlyConnectionId =
+    action === "publish_facebook_page"
+      ? asString(options?.facebookConnectionId).trim()
+      : asString(options?.facebookConnectionId).trim() || undefined;
+
+  if (action === "publish_facebook" || action === "publish_facebook_page") {
+    if (action === "publish_facebook_page" && !fbOnlyConnectionId) {
+      return { post: null, error: "invalid_input" };
+    }
+    const published = await publishSocialPostToFacebookServer(postId, undefined, {
+      onlyConnectionId: fbOnlyConnectionId,
+    });
     if (published.error && published.error !== "already_published") {
       return { post: null, error: (published.error ?? "save_failed") as SocialMarketingServerError };
     }
-    if (published.post) return { post: mapPost(published.post), error: null };
+    if (published.post) return { post: await hydratePostDto(published.post), error: null };
     return { post: null, error: (published.error ?? "save_failed") as SocialMarketingServerError };
   }
 
@@ -646,7 +726,7 @@ export async function runSocialMarketingPostActionServer(
     if (published.error && published.error !== "already_published") {
       return { post: null, error: (published.error ?? "save_failed") as SocialMarketingServerError };
     }
-    if (published.post) return { post: mapPost(published.post), error: null };
+    if (published.post) return { post: await hydratePostDto(published.post), error: null };
     return { post: null, error: (published.error ?? "save_failed") as SocialMarketingServerError };
   }
 
@@ -658,7 +738,7 @@ export async function runSocialMarketingPostActionServer(
     if (!sb) return { post: null, error: "supabase_service_unconfigured" };
     const row = await loadRow(sb, postId);
     if (!row) return { post: null, error: "not_found" };
-    const dto = mapPost(row);
+    const dto = await hydratePostDto(row);
 
     let lastPost: Record<string, unknown> | null = null;
     const errors: SocialMarketingServerError[] = [];
@@ -672,7 +752,7 @@ export async function runSocialMarketingPostActionServer(
     }
 
     const refreshed = lastPost ?? (await loadRow(sb, postId));
-    const dtoAfterFb = refreshed ? mapPost(refreshed) : dto;
+    const dtoAfterFb = refreshed ? await hydratePostDto(refreshed) : dto;
 
     if (canPublishToInstagramNetwork(dtoAfterFb)) {
       const ig = await publishSocialPostToInstagramServer(postId);
@@ -685,7 +765,7 @@ export async function runSocialMarketingPostActionServer(
     const finalRow = lastPost ?? (await loadRow(sb, postId));
     if (!finalRow) return { post: null, error: errors[0] ?? "not_found" };
     return {
-      post: mapPost(finalRow),
+      post: await hydratePostDto(finalRow),
       error: lastPost ? null : errors[0] ?? null,
     };
   }
@@ -740,7 +820,7 @@ export async function runSocialMarketingPostActionServer(
 
   if (error || !data) return { post: null, error: "save_failed" };
 
-  const post = mapPost(data as Record<string, unknown>);
+  const post = await hydratePostDto(data as Record<string, unknown>);
 
   if (action === "submit_for_approval") {
     await registerSocialPostPendingApprovalServer(post.id, post.topic);
@@ -787,9 +867,25 @@ export async function duplicateSocialMarketingPostServer(postIdRaw: string): Pro
     approved_by: null,
   };
 
-  const { data, error } = await sb.from(POSTS_TABLE).insert(copy).select("*").maybeSingle();
+  const platform = asString(row.platform) as SocialPlatformId;
+  const defaultTargets = await resolveDefaultPublishTargetsForPostServer(
+    isPlatform(platform) ? platform : "facebook"
+  );
+  const dupTargets = normalizePublishTargets(row.publish_targets);
+  const targets = dupTargets.facebookConnectionIds.length > 0 ? dupTargets : defaultTargets;
+
+  const { data, error } = await sb
+    .from(POSTS_TABLE)
+    .insert({ ...copy, publish_targets: publishTargetsToJson(targets) })
+    .select("*")
+    .maybeSingle();
   if (error || !data) return { post: null, error: "save_failed" };
-  return { post: mapPost(data as Record<string, unknown>), error: null };
+  await applyPublishTargetsToPostRowServer(
+    asString((data as Record<string, unknown>).id),
+    targets,
+    isPlatform(platform) ? platform : "facebook"
+  );
+  return { post: await hydratePostDto(data as Record<string, unknown>), error: null };
 }
 
 export async function deleteSocialMarketingPostServer(postIdRaw: string): Promise<{

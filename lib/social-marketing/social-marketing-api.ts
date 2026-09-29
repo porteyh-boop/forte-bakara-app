@@ -186,12 +186,18 @@ export async function updateSocialMarketingPost(
 
 export async function runSocialMarketingPostAction(
   postId: string,
-  action: SocialMarketingPostAction
+  action: SocialMarketingPostAction,
+  options?: { facebookConnectionId?: string }
 ): Promise<{ post: SocialMarketingPostDto | null; error: string | null }> {
   try {
     const response = await masterApiFetch(`${BASE}/${encodeURIComponent(postId)}`, {
       method: "PATCH",
-      body: JSON.stringify({ action }),
+      body: JSON.stringify({
+        action,
+        ...(options?.facebookConnectionId
+          ? { facebookConnectionId: options.facebookConnectionId }
+          : {}),
+      }),
     });
     const payload = await parseMasterApiJson<{ post?: SocialMarketingPostDto; error?: string }>(
       response

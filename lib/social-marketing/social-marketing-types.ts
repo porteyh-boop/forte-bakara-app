@@ -1,3 +1,5 @@
+import type { SocialPublishTargets } from "@/lib/social-marketing/social-publish-targets";
+
 export const SOCIAL_PLATFORMS = ["facebook", "instagram", "both"] as const;
 export type SocialPlatformId = (typeof SOCIAL_PLATFORMS)[number];
 
@@ -54,6 +56,20 @@ export type SocialMarketingPostMetaPayload = {
   postImageMode?: SocialPostImageModeId;
 };
 
+export type SocialMarketingFacebookPublicationDto = {
+  id: string;
+  connectionId: string;
+  pageId: string;
+  displayLabel: string;
+  publishStatus: string;
+  facebookPostId: string | null;
+  facebookPostUrl: string | null;
+  publishMode: string | null;
+  publishErrorCode: string | null;
+  publishErrorMessage: string | null;
+  publishedAt: string | null;
+};
+
 export type SocialMarketingPostDto = {
   id: string;
   topic: string;
@@ -83,6 +99,9 @@ export type SocialMarketingPostDto = {
   instagramPermalink: string | null;
   instagramPublishedAt: string | null;
   instagramPublishError: string | null;
+  publishTargets: SocialPublishTargets;
+  facebookPublications: SocialMarketingFacebookPublicationDto[];
+  instagramTargetSelected: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -97,6 +116,7 @@ export type SocialMarketingPostInput = {
   publishTime: string;
   imageUrl: string;
   postImageMode: SocialPostImageModeId;
+  publishTargets?: SocialPublishTargets;
 };
 
 export type SocialMarketingPostAction =
@@ -108,4 +128,5 @@ export type SocialMarketingPostAction =
   | "publish_facebook"
   | "publish_instagram"
   | "publish_both"
+  | "publish_facebook_page"
   | "mark_failed";

@@ -12,7 +12,8 @@ export async function DELETE(request: NextRequest) {
   const authError = requireMasterApiSession(request);
   if (authError) return authError;
 
-  const result = await disconnectFacebookServer();
+  const connectionId = request.nextUrl.searchParams.get("connectionId") ?? undefined;
+  const result = await disconnectFacebookServer(connectionId ?? undefined);
   if (result.error) {
     return NextResponse.json({ error: result.error }, { status: 502 });
   }
