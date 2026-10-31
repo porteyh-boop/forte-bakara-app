@@ -8,6 +8,7 @@ import { BRAND_EDITOR_NAME, BRAND_FORTE } from "@/lib/brand";
 import {
   buildMasterProjectV2Path,
   MASTER_BUSINESS_PATH,
+  MASTER_COLLECTION_FORECAST_PATH,
   MASTER_FORTE_AI_PATH,
   MASTER_SALES_PATH,
   type ProjectV2TabId,
@@ -180,6 +181,13 @@ export default function MasterSidebar({
       section: "main",
     },
     { id: "business", label: "עסקי", icon: "💼", href: MASTER_BUSINESS_PATH, section: "main" },
+    {
+      id: "collection-forecast",
+      label: "תחזית גבייה",
+      icon: "📅",
+      href: MASTER_COLLECTION_FORECAST_PATH,
+      section: "main",
+    },
   ];
 
   const projectItems: SidebarItem[] = useMemo(() => {

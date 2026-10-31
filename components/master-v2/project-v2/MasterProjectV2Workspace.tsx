@@ -318,8 +318,14 @@ export function ForteV2TableCard({
   );
 }
 
-export function ForteV2DataTable({ children }: { children: ReactNode }) {
-  return <table className="fv2-data-table">{children}</table>;
+export function ForteV2DataTable({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return <table className={`fv2-data-table ${className ?? ""}`.trim()}>{children}</table>;
 }
 
 /* ── Panels & sections ── */

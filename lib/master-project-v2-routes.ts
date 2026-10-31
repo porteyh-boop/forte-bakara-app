@@ -2,6 +2,7 @@ export const MASTER_PROJECTS_V2_LIST_PATH = "/master?ui=v2";
 export const MASTER_SALES_PATH = "/master/sales";
 export const MASTER_FORTE_AI_PATH = "/master/ai";
 export const MASTER_BUSINESS_PATH = "/master/business";
+export const MASTER_COLLECTION_FORECAST_PATH = "/master/business/forecast";
 export const MASTER_PROJECT_V2_NEW_PATH = "/master/project-v2/new";
 
 export function buildMasterProjectV2Path(
