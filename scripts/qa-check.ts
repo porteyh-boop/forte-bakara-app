@@ -5213,13 +5213,13 @@ assert(
 );
 assert(
   getTabsForProjectType("home_inspection").join(",") ===
-    "details,execution,finances,documents,contacts" &&
+    "details,execution,finances,documents,faults,contacts" &&
     isTabAllowedForProjectType("home_inspection", "contacts") &&
-    !isTabAllowedForProjectType("home_inspection", "faults"),
-  "Project Type: בדק בית — רק פרטים, אנשי קשר, מסמכים"
+    isTabAllowedForProjectType("home_inspection", "faults"),
+  "Project Type: בדק בית — פרטים, ביצוע, כספים, מסמכים, תקלות, אנשי קשר"
 );
 assert(
-  resolveAllowedProjectV2Tab("home_inspection", "faults") === "details" &&
+  resolveAllowedProjectV2Tab("home_inspection", "faults") === "faults" &&
     resolveAllowedProjectV2Tab("standard", "faults") === "faults" &&
     resolveAllowedProjectV2Tab("home_inspection", "documents") === "documents" &&
     resolveAllowedProjectV2Tab("standard", "reports") === "details" &&

@@ -55,7 +55,7 @@ export const PROJECT_TYPE_CONFIG: Record<ProjectTypeId, ProjectTypeConfigEntry> 
   },
   home_inspection: {
     label: PROJECT_TYPE_LABELS.home_inspection,
-    tabs: ["details", "execution", "finances", "documents", "contacts"],
+    tabs: ["details", "execution", "finances", "documents", "faults", "contacts"],
     showTypeInList: true,
   },
 };
